@@ -48,6 +48,17 @@ const getOrderDetails = async () => {
     }
 };
 
+const updateOrderStatus = async (order_id, new_status) => {
+    try {
+        const result = await dbCmds.updateOrderStatus(order_id, new_status);
+        return result;
+    } catch (error) {
+        error.httpCode = error.httpCode || appConstants.HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR;
+        throw error;
+    }
+};
+
 module.exports = {
-    getOrderDetails
+    getOrderDetails,
+    updateOrderStatus
 }

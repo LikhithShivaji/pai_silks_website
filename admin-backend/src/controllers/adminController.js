@@ -206,3 +206,31 @@ exports.getOrderDetails = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.updateProduct = async (req, res) => {
+  try {
+    const productData = req.body;
+    const result = await productManager.updateProduct(productData);
+    res.status(200).json({
+      success: true,
+      message: "Product updated successfully",
+    });
+  } catch (error) {
+    console.error("Error in updateProduct Controller:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { order_id, status } = req.body;
+    const result = await orderManager.updateOrderStatus(order_id, status);
+    res.status(200).json({
+      success: true,
+      message: "Order status updated successfully",
+    });
+  } catch (error) {
+    console.error("Error in updateOrderStatus Controller:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

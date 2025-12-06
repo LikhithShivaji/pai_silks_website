@@ -142,6 +142,41 @@ class Cmds {
             throw error;
         }
     }
+
+    async updateProduct(productData) {
+        try {
+            await pool.query(sqlqueries.product.updateProduct, [
+                productData.name,
+                productData.description || null,
+                productData.category || null,
+                productData.collection || null,
+                productData.material || null,
+                productData.product_code || null,
+                productData.product_wash_care || null,
+                productData.regular_price,
+                productData.selling_price || null,
+                productData.saree_length || null,
+                productData.id
+            ]);
+        } catch (err) {
+            console.error("Error in updateProduct:", err);
+            throw err;
+        }
+    }   
+
+    async updateOrderStatus(order_id, new_status) {
+        try {
+            const result = await pool.query(sqlqueries.orders.updateOrderStatus, [new_status, order_id]);
+            if (result.affectedRows === 0) {
+                throw new Error(`No order found with id: ${order_id}`);
+            }
+            return true;
+        } catch (error) {
+            console.error("Error in updateOrderStatus:", error);
+            throw error;
+        }
+    }
+
 }
 
 module.exports = new Cmds();
