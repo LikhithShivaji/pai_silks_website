@@ -111,7 +111,7 @@ getProductsByCategory: `
       ORDER BY w.added_at DESC;
     `,
 
-    removeFromWishlist: `
+    removeWishlist: `
       DELETE FROM wishlist 
       WHERE user_id = ? AND product_id = ?;
     `,
@@ -131,8 +131,85 @@ getProductsByCategory: `
   addToCart: `
     INSERT INTO cart (user_id, product_id, quantity, added_at)
     VALUES (?, ?, 1, NOW());
-  `
+  `,
+
+ getCart: `
+    SELECT 
+    c.cart_id, 
+    c.quantity, 
+    p.id AS product_id,
+    p.name,
+    p.selling_price AS price,   -- IMPORTANT
+    p.regular_price,
+    p.category
+  FROM cart c
+  JOIN product p ON c.product_id = p.id
+  WHERE c.user_id = ?
+  ORDER BY c.added_at DESC;
+  `,
+
+  updateCartQuantity: `
+      UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?;
+    `,
+
+  removeFromCart: `
+      DELETE FROM cart WHERE user_id = ? AND product_id = ?;
+    `,
+
+  clearCart: `
+    DELETE FROM cart WHERE user_id = ?;
+    `
+
+  
 },
+
+    order: {
+
+    createOrder: `
+    INSERT INTO orders 
+    (user_id, total_amount, shipping_address, payment_method, payment_status, status, order_date)
+    VALUES (?, ?, ?, ?, ?, ?, NOW());
+  `,
+
+  addOrderItem: `
+    INSERT INTO order_items 
+    (order_id, product_id, quantity, price)
+    VALUES (?, ?, ?, ?);
+  `,
+
+    getOrderById: `
+      SELECT * FROM orders 
+      WHERE order_id = ?;
+  `,
+
+  getOrderItems: `
+      SELECT oi.order_item_id, oi.product_id, oi.quantity, oi.price, p.name, p.selling_price
+      FROM order_items oi
+      JOIN product p ON oi.product_id = p.id
+      WHERE oi.order_id = ?;
+
+   `,
+ 
+  getOrdersByUser: `
+    SELECT * FROM orders WHERE user_id = ? ORDER BY order_date DESC;
+  `,
+  getOrdersByUser: `
+      SELECT order_id, user_id, total_amount, shipping_address,
+             payment_method, payment_status, status, order_date
+      FROM orders
+      WHERE user_id = ?
+      ORDER BY order_date DESC;
+    `
+
+},
+
+    stock: {
+  reduceStock: `
+    UPDATE product_stock SET stock_qty = stock_qty - ? 
+    WHERE product_id = ? AND stock_qty >= ?;
+  `,
+  getStock: `SELECT stock_qty FROM product_stock WHERE product_id = ?;`
+}
 
 
   

@@ -98,36 +98,178 @@ const removeWishlist = async (user_id, product_id) => {
 
 // Check wishlist (for heart icon)
 const checkWishlist = async (user_id, product_id) => {
-  return await dbCmds.checkWishlist(user_id, product_id);
+  try {
+    return await dbCmds.checkWishlist(user_id, product_id);
+  } catch (err) {
+    console.error("Error in checkWishlist:", err);
+    throw err;
+  }
 };
 
 // Wishlist count
 const wishlistCount = async (user_id) => {
-  return await dbCmds.wishlistCount(user_id);
+  try {
+    const result = await dbCmds.wishlistCount(user_id);
+    return result;
+  } catch (err) {
+    console.error("Error in wishlistCount:", err);
+    throw err;
+  }
 };
 
 // ====== MOVE WISHLIST ITEM TO CART ======
 const moveWishlistToCart = async (user_id, product_id) => {
-  // Check if already in cart
-  const inCart = await dbCmds.checkCart(user_id, product_id);
-  if (inCart.length > 0) {
-    // Remove from wishlist anyway
-    await dbCmds.removeFromWishlist(user_id, product_id);
-    throw new Error("Product already in cart");
+  try {
+
+     // 1️⃣ Check if product exists in wishlist
+    const inWishlist = await dbCmds.checkWishlist(user_id, product_id);
+    if (inWishlist.length === 0) {
+      throw new Error("Product not in wishlist");
+    }
+
+    // Check if already in cart
+    const inCart = await dbCmds.checkCart(user_id, product_id);
+    if (inCart.length > 0) {
+      throw new Error("Product already in cart");
+    }
+
+    // Add to cart
+    await dbCmds.addToCart(user_id, product_id);
+
+    // Remove from wishlist
+    await dbCmds.removeWishlist(user_id, product_id);
+
+    return true;
+  } catch (err) {
+    console.error("Error in moveWishlistToCart:", err);
+    throw err;
   }
+};
 
-  // Add to cart
-  await dbCmds.addToCart(user_id, product_id);
+const getCart = async (user_id) => {
+  try {
+    const cartItems = await dbCmds.getCart(user_id);
+    return cartItems; // return whatever dbCmds returns
+  } catch (err) {
+    console.error("Error in getCart:", err);
+    throw err;
+  }
+};
 
-  // Remove from wishlist
-  await dbCmds.removeFromWishlist(user_id, product_id);
+const updateCartQuantity = async (user_id, product_id, quantity) => {
+  try {
+    const result = await dbCmds.updateCartQuantity(user_id, product_id, quantity);
+    return result;
+  } catch (err) {
+    console.error("Error in updateCartQuantity:", err);
+    throw err;
+  }
+};
 
-  return true;
+// ====== REMOVE ITEM FROM CART ======
+const removeFromCart = async (user_id, product_id) => {
+  try {
+    const result = await dbCmds.removeFromCart(user_id, product_id);
+    return result;
+  } catch (err) {
+    console.error("Error in removeFromCart:", err);
+    throw err;
+  }
+};
+
+// ====== ADD ITEM TO CART ======
+const addToCart = async (user_id, product_id) => {
+  try {
+    const result = await dbCmds.addToCart(user_id, product_id);
+    return result; // { success: true, message: "Product added to cart" }
+  } catch (err) {
+    console.error("Error in addToCart:", err);
+    throw err;
+  }
 };
 
 
+// Create order
+const createOrder = async (user_id, total_amount, shipping_address, payment_method, payment_status, status) => {
+  try {
+    const order_id = await dbCmds.createOrder(
+      user_id,
+      total_amount,
+      shipping_address,
+      payment_method,
+      payment_status,
+      status
+    );
+    return order_id;
+  } catch (err) {
+    console.error("Error in createOrder:", err);
+    throw err;
+  }
+};
+
+// Add item to order
+const addOrderItem = async (order_id, product_id, quantity, price) => {
+  try {
+    return await dbCmds.addOrderItem(order_id, product_id, quantity, price);
+  } catch (err) {
+    console.error("Error in addOrderItem:", err);
+    throw err;
+  }
+};
+
+// Reduce stock
+const reduceStock = async (product_id, quantity) => {
+  try {
+    return await dbCmds.reduceStock(product_id, quantity);
+  } catch (err) {
+    console.error("Error in reduceStock:", err);
+    throw err;
+  }
+};
+
+// Clear user's cart
+const clearCart = async (user_id) => {
+  try {
+    return await dbCmds.clearCart(user_id);
+  } catch (err) {
+    console.error("Error in clearCart:", err);
+    throw err;
+  }
+};
+
+const getStock = async (product_id) => {
+  return await dbCmds.getStock(product_id);
+};
 
 
+const getOrderById = async (order_id) => {
+  try {
+    return await dbCmds.getOrderById(order_id);
+  } catch (err) {
+    console.error("Error in getOrderById:", err);
+    throw err;
+  }
+};
+
+const getOrderItems = async (order_id) => {
+  try {
+    return await dbCmds.getOrderItems(order_id);
+  } catch (err) {
+    console.error("Error in getOrderItems:", err);
+    throw err;
+  }
+};
+
+const getOrdersByUser = async (user_id) => {
+    try {
+      return await dbCmds.getOrdersByUser(user_id);
+    } catch (err) {
+      console.error("Error in getOrdersByUser:", err);
+      throw err;
+    }
+  }
+
+  
 
 module.exports = {
   getAllCollections,
@@ -140,5 +282,17 @@ module.exports = {
   removeWishlist,
   wishlistCount,
   moveWishlistToCart, // <-- add here
-  checkWishlist
+  checkWishlist,
+  getCart,
+  updateCartQuantity,
+  removeFromCart,
+  addToCart,
+  createOrder,
+  addOrderItem,
+  reduceStock,
+  clearCart,
+  getStock,
+  getOrderById,
+  getOrderItems,
+  getOrdersByUser
 };

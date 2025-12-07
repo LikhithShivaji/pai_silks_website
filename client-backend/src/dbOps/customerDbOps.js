@@ -174,56 +174,203 @@ async getWishlist(user_id) {
   }
 }
 
-
-
-// Check if product exists in wishlist
-async checkWishlist(user_id, product_id) {
-  const [rows] = await pool.query(sqlqueries.wishlist.checkWishlist, [
-    user_id,
-    product_id,
-  ]);
-  return rows;
+// Remove a product from wishlist
+async removeWishlist(user_id, product_id) {
+  try {
+    const [rows] = await pool.query(sqlqueries.wishlist.removeWishlist, [
+      user_id,
+      product_id,
+    ]);
+    return rows;
+  } catch (err) {
+    console.error("Error in removeWishlist:", err);
+    throw err;
+  }
 }
+
+
 
 // Wishlist count
 async wishlistCount(user_id) {
-  const [rows] = await pool.query(sqlqueries.wishlist.wishlistCount, [
-    user_id,
-  ]);
-  return rows[0];
+    try {
+      const [rows] = await pool.query(sqlqueries.wishlist.wishlistCount, [
+        user_id,
+      ]);
+      return rows[0];
+    } catch (err) {
+      console.error("Error in wishlistCount:", err);
+      throw err;
+    }
+  }
+
+async getCart(user_id) {
+  try {
+    const [rows] = await pool.query(sqlqueries.cart.getCart, [user_id]);
+    return rows; // Return empty array if none
+  } catch (err) {
+    console.error("Error in getCart:", err);
+    throw err;
+  }
 }
 
 // Check if product exists in cart
 async checkCart(user_id, product_id) {
-  const [rows] = await pool.query(sqlqueries.cart.checkCart, [
-    user_id,
-    product_id,
-  ]);
-  return rows;
-}
+    try {
+      const [rows] = await pool.query(sqlqueries.cart.checkCart, [
+        user_id,
+        product_id,
+      ]);
+      return rows;
+    } catch (err) {
+      console.error("Error in checkCart:", err);
+      throw err;
+    }
+
+  }
+  
 
 // Add product to cart
-async addToCart(user_id, product_id) {
-  const [rows] = await pool.query(sqlqueries.cart.addToCart, [
-    user_id,
-    product_id,
-  ]);
-  return rows;
-}
+   async addToCart(user_id, product_id) {
+    try {
+      await pool.query(sqlqueries.cart.addToCart, [user_id, product_id]);
+      return {
+        success: true,
+        message: "Product added to cart",
+      };
+    } catch (err) {
+      console.error("Error in addToCart:", err);
+      throw err;
+    }
+  }
 
-// Remove a product from wishlist
-async removeFromWishlist(user_id, product_id) {
+
+
+
+//Update cart
+ async updateCartQuantity(user_id, product_id, quantity) {
+    try {
+      const [result] = await pool.query(sqlqueries.cart.updateCartQuantity, [
+        quantity,
+        user_id,
+        product_id
+      ]);
+      return result.affectedRows === 0
+        ? { success: false, message: "Cart item not found" }
+        : { success: true, message: "Quantity updated successfully" };
+    } catch (err) {
+      console.error("Error in updateCartQuantity:", err);
+      throw err;
+    }
+  }
+
+  // Remove product from cart
+  async removeFromCart(user_id, product_id) {
+    try {
+      const [result] = await pool.query(sqlqueries.cart.removeFromCart, [
+        user_id,
+        product_id
+      ]);
+      return result.affectedRows === 0
+        ? { success: false, message: "Cart item not found" }
+        : { success: true, message: "Cart item removed successfully" };
+    } catch (err) {
+      console.error("Error in removeFromCart:", err);
+      throw err;
+    }
+  }
+
+
+// ==========================
+// ORDER DB OPERATIONS
+// ==========================
+
+  // Create Order
+  async createOrder(user_id, total_amount, shipping_address, payment_method, payment_status, status) {
+    const [result] = await pool.query(sqlqueries.order.createOrder, [
+      user_id,
+      total_amount,
+      shipping_address,
+      payment_method,
+      payment_status,
+      status
+    ]);
+    return result.insertId; // return order_id
+  }
+
+  // Add Order Items
+  async addOrderItem(order_id, product_id, quantity, price) {
+    await pool.query(sqlqueries.order.addOrderItem, [
+      order_id,
+      product_id,
+      quantity,
+      price
+    ]);
+  }
+
+
+
+  // Reduce stock
+  async reduceStock(product_id, quantity) {
+    const [result] = await pool.query(sqlqueries.stock.reduceStock, [
+      quantity,
+      product_id,
+      quantity
+    ]);
+    if (result.affectedRows === 0) {
+      throw new Error(`Insufficient  stock for product_id ${product_id}`);
+    }
+  }
+
+  // Clear cart
+  async clearCart(user_id) {
+    await pool.query(sqlqueries.cart.clearCart, [user_id]);
+  }
+
+  
+  async getStock(product_id) {
+  const [rows] = await pool.query(sqlqueries.stock.getStock, [product_id]);
+  return rows[0]?.stock_qty || 0;
+}
+  
+// 📌 Get order details
+async getOrderById(order_id) {
   try {
-    const [rows] = await pool.query(
-      sqlqueries.wishlist.removeFromWishlist,
-      [user_id, product_id]
-    );
-    return rows;
+    const [rows] = await pool.query(sqlqueries.order.getOrderById, [order_id]);
+    return rows.length ? rows[0] : null;
   } catch (err) {
-    console.error("Error in removeFromWishlist:", err);
+    console.error("Error in getOrderById:", err);
     throw err;
   }
 }
+
+// 📌 Get items inside an order
+async getOrderItems(order_id) {
+  try {
+    const [rows] = await pool.query(sqlqueries.order.getOrderItems, [order_id]);
+    return rows;
+  } catch (err) {
+    console.error("Error in getOrderItems:", err);
+    throw err;
+  }
+}
+
+async getOrdersByUser(user_id) {
+    try {
+      const [rows] = await pool.query(
+        sqlqueries.order.getOrdersByUser,
+        [user_id]
+      );
+      return rows;
+    } catch (err) {
+      console.error("Error in getOrdersByUser:", err);
+      throw err;
+    }
+  }
+
+
+
+
+
 
 }
 

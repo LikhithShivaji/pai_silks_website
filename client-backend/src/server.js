@@ -20,8 +20,7 @@ app.use(cookieParser());
 //app.use(authMiddleware);
 
 // Routes
-//app.use('/api', adminRoutes); // Prefix routes with /api
-
+//app.use('/api', adminRoutes); // Prefix routes with /api;
 
 // New customer routes
 app.use('/api', customerRoutes);
