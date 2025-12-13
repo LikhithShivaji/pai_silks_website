@@ -16,8 +16,17 @@ const getAllProductDetails = async () => {
     return await dbCmds.getAllProductDetails();
 };
 
+const updateProduct = async (productData) => {
+    // validate mandatory fields
+    if (!productData.id || !productData.name || !productData.regular_price) {
+        throw new Error("Product id, name and regular price are required");
+    }
+    return await dbCmds.updateProduct(productData);
+};
+
 module.exports = {
     createProduct,
     getCategoryWiseCount,
-    getAllProductDetails
+    getAllProductDetails,
+    updateProduct
 };

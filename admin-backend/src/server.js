@@ -2,8 +2,17 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const adminRoutes = require('./routes/adminRoutes');
 const controllers = require('./controllers/adminController')
+const cors = require('cors');
 
 const app = express();
+
+app.use(
+  cors({
+    origin: true, // Allow any origin (you can replace this with a specific origin)
+    credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+  })
+);
+
 app.use(express.json());
 app.use(cookieParser());
 

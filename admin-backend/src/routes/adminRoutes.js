@@ -15,4 +15,10 @@ router.get('/get-category-count', adminController.getCategoryWiseCount);
 
 router.get('/get-all-product-details', adminController.getAllProductDetails);
 
+router.get('/get-order-detils',adminController.getOrderDetails);
+
+router.put('/update-product', adminController.updateProduct);
+
+router.put('/update-order-status', adminController.updateOrderStatus);
+
 module.exports = router;
