@@ -1,10 +1,8 @@
 "use client"
 
-// import { ColumnDef } from "@tanstack/react-table"
-
-// Columns definition for DataTable
-
 import { MoreHorizontal } from "lucide-react"
+import { ArrowUpDown } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 
 import { Button } from "../ui/button"
 
@@ -19,24 +17,141 @@ import {
 
 export const columns = [
   {
-    accessorKey: "status",
-    header: "Status",
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ), 
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+  },
+
+  {
+  id: "products",
+  header: ({ column }) => (
+    <div className="flex justify-center">
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Product Name
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    </div>
+  ),
+  cell: ({ row }) => {
+    const products = row.original.product;
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return <div className="text-center">—</div>;
+    }
+
+    return (
+      <div className="text-center">
+        {products
+          .map(p => p.name || "Unnamed Product")
+          .join(", ")}
+      </div>
+    );
+  },
+},
+
+
+  {
+    accessorKey: "orderId",
+    header: ({ column }) => {
+      return (
+        <div className="flex justify-center">
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Order ID
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+        </div>
+      )
+    },
   },
   {
-    accessorKey: "email",
-    header: "Email",
+    accessorKey: "date",
+    header: ({ column }) => {
+      return (
+        <div className="flex justify-center">
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Date
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+        </div>
+      )
+    },
   },
+  {
+    accessorKey: "customerName",
+    header: ({ column }) => {
+      return (
+        <div className="flex justify-center">
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Customer Name
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+        </div>
+      )
+    },
+  },
+
+  {
+    accessorKey: "contactNumber",
+    header: ({ column }) => {
+      return (
+        <div className="flex justify-center">
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Contact Number
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+        </div>
+      )
+    },
+  },
+
+  {
+    accessorKey: "status",
+    header: () => <div className="text-center">Status</div>,
+  },
+
   {
     accessorKey: "amount",
-    header: () => <div className="text-right">Amount</div>,
+    header: () => <div className="">Amount</div>,
     cell: ({ row }) => {
       const amount = parseFloat(row.getValue("amount"))
-      const formatted = new Intl.NumberFormat("en-US", {
+      const formatted = new Intl.NumberFormat("en-IN", {
         style: "currency",
-        currency: "USD",
+        currency: "INR",
       }).format(amount)
  
-      return <div className="text-right font-medium">{formatted}</div>
+      return <div className=" font-medium">{formatted}</div>
     },
   },
   {
@@ -55,7 +170,7 @@ export const columns = [
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
             <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(payment.id)}
+              onClick={() => {alert("Payment ID copied to the Clipboard");event.stopPropagation();navigator.clipboard.writeText(payment.id)}}
             >
               Copy payment ID
             </DropdownMenuItem>
@@ -68,3 +183,4 @@ export const columns = [
     },
   },
 ]
+

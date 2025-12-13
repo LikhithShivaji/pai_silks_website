@@ -1,8 +1,8 @@
 "use client";
-import * as React from "react";
+import * as React from "react"
 
 import { Button } from "../ui/button";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/input"
 
 import {
   // ColumnDef,
@@ -28,49 +28,36 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu"
 
 export function DataTable({ columns, data, displayOrderPage }) {
   const [sorting, setSorting] = React.useState([]);
   const [columnFilters, setColumnFilters] = React.useState([]);
   const [columnVisibility, setColumnVisibility] = React.useState([]);
-  const [rowSelection, setRowSelection] = React.useState({});
-  const [globalFilter, setGlobalFilter] = React.useState("");
+  const [rowSelection, setRowSelection] = React.useState({})
 
   const table = useReactTable({
     data,
     columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    onSortingChange: setSorting,
+    getSortedRowModel: getSortedRowModel(),
+    onColumnFiltersChange: setColumnFilters,
+    getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       rowSelection,
-      globalFilter,
-    },
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-
-    globalFilterFn: (row, columnId, filterValue) => {
-      const search = filterValue.toLowerCase();
-
-      const phone = String(row.original.contactNumber ?? "").toLowerCase();
-      const orderId = String(row.original.orderId ?? "").toLowerCase();
-
-      return phone.includes(search) || orderId.includes(search);
     },
   });
 
   return (
     <div>
       <div className="flex items-center py-4">
-        <Input
-          placeholder="Search by phone number or order ID..."
-          value={globalFilter}
-          onChange={(event) => setGlobalFilter(event.target.value)}
-          className="max-w-sm"
-        />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="ml-auto">
@@ -80,7 +67,9 @@ export function DataTable({ columns, data, displayOrderPage }) {
           <DropdownMenuContent align="end">
             {table
               .getAllColumns()
-              .filter((column) => column.getCanHide())
+              .filter(
+                (column) => column.getCanHide()
+              )
               .map((column) => {
                 return (
                   <DropdownMenuCheckboxItem
@@ -93,7 +82,7 @@ export function DataTable({ columns, data, displayOrderPage }) {
                   >
                     {column.id}
                   </DropdownMenuCheckboxItem>
-                );
+                )
               })}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -117,7 +106,7 @@ export function DataTable({ columns, data, displayOrderPage }) {
             ))}
           </TableHeader>
 
-          <TableBody>
+          <TableBody >
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 // Each Row data is available
@@ -125,9 +114,7 @@ export function DataTable({ columns, data, displayOrderPage }) {
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
                   className="cursor-pointer"
-                  onClick={() => {
-                    displayOrderPage(row.original);
-                  }} //This is the code which is opening the displayOrderPage.
+                  onClick={() => {alert(row.original);displayOrderPage(row.original)}} //This is the code which is opening the displayOrderPage.  
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="text-center py-7 ">
@@ -152,23 +139,9 @@ export function DataTable({ columns, data, displayOrderPage }) {
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-        >
-          Next
-        </Button>
+      <div className="w-full flex justify-end p-5 gap-20">
+        <p>Total</p>
+        <p>Amount</p>
       </div>
     </div>
   );
