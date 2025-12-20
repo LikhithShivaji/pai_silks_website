@@ -20,8 +20,12 @@ router.get('/categories', customerController.getAllCategories);
 //To get productbyID
 router.get('/:productId', customerController.getProductById);
 
+router.get('/products/new-releases', customerController.getNewReleaseProducts);
+
 // get products by category
 router.get('/products/:category', customerController.getProductsByCategory);
+
+
 
 // add product to wishlistt and get roduct in the wish list and remove product from wish list
 router.get('/wishlist/check-test', customerController.checkWishlist);

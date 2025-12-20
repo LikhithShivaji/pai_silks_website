@@ -83,10 +83,13 @@ getProductsByCategory: `
       ORDER BY name;
     `,
 
-    
-
-
-  
+getNewReleaseProducts: `
+    SELECT *
+    FROM product
+    WHERE is_new_release = 1
+      AND is_deleted = 0
+    ORDER BY created_at DESC;
+    `,
     
   },
 

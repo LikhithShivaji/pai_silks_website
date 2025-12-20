@@ -147,6 +147,19 @@ async checkWishlist(user_id, product_id) {
   }
 }
 
+// Get new release products
+async getNewReleaseProducts() {
+  try {
+    const [rows] = await pool.query(
+      sqlqueries.product.getNewReleaseProducts
+    );
+    return rows;
+  } catch (err) {
+    console.error("Error in getNewReleaseProducts:", err);
+    throw err;
+  }
+}
+
 // Add product to wishlist
 async addToWishlist(user_id, product_id) {
   try {

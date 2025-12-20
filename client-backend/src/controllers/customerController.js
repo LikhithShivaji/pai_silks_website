@@ -237,6 +237,27 @@ exports.getProductsByCategory = async (req, res) => {
   }
 };
 
+// ---------------------- GET NEW RELEASE PRODUCTS ----------------------
+
+exports.getNewReleaseProducts = async (req, res) => {
+  try {
+    const products = await productManager.getNewReleaseProducts();
+
+    return res.status(200).json({
+      success: true,
+      data: products,
+      message: "New release products fetched successfully"
+    });
+
+  } catch (error) {
+    console.error("Error in getNewReleaseProducts Controller:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch new release products"
+    });
+  }
+};
+
 
 // ====== ADD TO WISHLIST ======
 exports.addToWishlist = async (req, res) => {
