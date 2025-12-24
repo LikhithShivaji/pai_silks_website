@@ -4,6 +4,56 @@ const utils = require('../utils/utils');
 const appDefines = require('../constants/appDefines');
 const CookiesKey = require('../constants/cookieKeys');
 const productManager = require('../components/productManager/productManager')
+const customerSignupManager = require('../components/customerLoginManager/customerSignupManager');
+const bcrypt = require('bcrypt');
+
+exports.customerSignup = async (req, res) => {
+  try {
+    const { user_name, pri_email, phone_number, address, password } = req.body;
+
+    if (!user_name || !pri_email || !password || !phone_number) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields',
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await customerSignupManager.registerCustomer({
+      user_name,
+      pri_email,
+      phone_number,
+      address,
+      hashedPassword,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Customer registered successfully',
+      data: result,
+    });
+
+  } catch (error) {
+    console.error('Error in customerSignup:', error);
+
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({
+        success: false,
+        message: 'Email already registered',
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Signup failed',
+    });
+  }
+};
+
+
+
+
 
 // customerController.js
 exports.customerLogin = async (req, res) => {
@@ -48,6 +98,7 @@ exports.customerLogin = async (req, res) => {
       }
       return res.status(200).json({
         message: 'Login successful',
+        user_id: loginResult.userData.user_id,
         validSession: true,
         localeStr: 'msg.success.loginSuccess',
       });
@@ -103,7 +154,9 @@ exports.customerLogin = async (req, res) => {
       return res.status(200).json({
         sid: result.sid,
         message: 'Login successful',
-        user_status_id: result.user_status_id,
+        user_status_id: res.user_status_id,
+        user_id: loginResult.userData.user_id,              // ✅ important for frontend
+        pri_email: loginResult.userData.pri_email,
         localeStr: 'msg.success.loginSuccess',
       });
     }

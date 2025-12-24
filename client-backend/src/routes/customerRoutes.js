@@ -3,6 +3,9 @@ const router = express.Router();
 const customerController = require('../controllers/customerController');
 
 
+// Customer signup
+router.post('/signup', customerController.customerSignup);
+
 
 // Customer login
 router.post('/customer-login', customerController.customerLogin);

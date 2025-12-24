@@ -4,6 +4,44 @@ const bcrypt = require('bcrypt');
 const sqlqueries = require('../dbOps/sqlQueries');
 
 class CustomerCmds {
+
+  // ---------------------- CUSTOMER SIGN UP ----------------------
+
+// Insert customer
+async insertCustomerUser(userData) {
+  try {
+    const {
+      user_name,
+      pri_email,
+      phone_number,
+      address,
+      hashedPassword
+    } = userData;
+
+    const [result] = await pool.query(
+      sqlqueries.signup.insertCustomer,
+      [
+        user_name,
+        pri_email,
+        phone_number,
+        address,
+        hashedPassword,
+        2 // CUSTOMER role_id
+      ]
+    );
+
+    return {
+      user_id: result.insertId,
+      pri_email,
+    };
+
+  } catch (err) {
+    console.error("Error in insertCustomerUser:", err);
+    throw err;
+  }
+}
+
+
   
   // Verify customer password
   async verifyCustomerPasswd(pri_email, passwd) {
