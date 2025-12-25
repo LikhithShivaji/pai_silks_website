@@ -126,16 +126,21 @@ exports.adminLogin = async (req, res) => {
 exports.createProduct = async (req, res) => {
   try {
     const productData = req.body;
-    const result = await productManager.createProduct(productData);
+    const productId = await productManager.createProduct(productData);
 
     res.status(201).json({
       success: true,
       message: "Product created successfully",
-    
+      product_id: productId
     });
+
   } catch (error) {
     console.error("Error in createProduct Controller:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      
+    });
   }
 };
 

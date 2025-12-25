@@ -66,7 +66,7 @@ class Cmds {
 
     async createProduct(productData) {
         try {
-            await pool.query(sqlqueries.product.insertProduct, [productData.name,
+            const [result] = await pool.query(sqlqueries.product.insertProduct, [productData.name,
             productData.description || null,
             productData.category || null,
             productData.collection || null,
@@ -78,6 +78,7 @@ class Cmds {
             productData.saree_length || null,
             productData.isNewRelease || 0
             ]);
+            return result.insertId;
         } catch (err) {
             console.error("Error in updateSessionStatus:", err);
             throw err;
