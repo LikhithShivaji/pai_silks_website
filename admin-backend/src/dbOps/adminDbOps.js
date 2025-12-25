@@ -76,7 +76,7 @@ class Cmds {
             productData.regular_price,
             productData.selling_price || null,
             productData.saree_length || null,
-            productData.isNewRelease || null
+            productData.isNewRelease || 0
             ]);
         } catch (err) {
             console.error("Error in updateSessionStatus:", err);
