@@ -131,6 +131,7 @@ exports.createProduct = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Product created successfully",
+      productId
     });
   } catch (error) {
     console.error("Error in createProduct Controller:", error);
