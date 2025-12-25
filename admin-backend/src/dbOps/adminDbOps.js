@@ -78,7 +78,6 @@ class Cmds {
             productData.saree_length || null,
             productData.isNewRelease || 0
             ]);
-            return result.insertId; 
         } catch (err) {
             console.error("Error in updateSessionStatus:", err);
             throw err;
