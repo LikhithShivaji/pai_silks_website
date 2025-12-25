@@ -1,4 +1,17 @@
 const sqlqueries = {
+
+
+   signup: {
+  insertCustomer: `
+    INSERT INTO master_user
+    (user_name, pri_email, phone_number, address, pass, role_id, created, is_delete)
+    VALUES (?, ?, ?, ?, ?, ?, NOW(), 0)
+  `
+},
+
+
+
+
     login: {
         getUserDetails: `SELECT * FROM master_user WHERE pri_email = ?`,
         getSessionDetails: `SELECT * FROM session WHERE pri_email = ? ORDER BY login_date_time DESC LIMIT 1`,
@@ -83,10 +96,13 @@ getProductsByCategory: `
       ORDER BY name;
     `,
 
-    
-
-
-  
+getNewReleaseProducts: `
+    SELECT *
+    FROM product
+    WHERE is_new_release = 1
+      AND is_deleted = 0
+    ORDER BY created_at DESC;
+    `,
     
   },
 

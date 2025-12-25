@@ -57,6 +57,17 @@ const getProductsByCategory = async (category) => {
   }
 };
 
+
+// Get new release products
+const getNewReleaseProducts = async () => {
+  try {
+    return await dbCmds.getNewReleaseProducts();
+  } catch (err) {
+    console.error("Error in getNewReleaseProducts:", err);
+    throw err;
+  }
+};
+
 // ====== ADD PRODUCT TO WISHLIST ======
 const addToWishlist = async (user_id, product_id) => {
   try {
@@ -294,5 +305,6 @@ module.exports = {
   getStock,
   getOrderById,
   getOrderItems,
-  getOrdersByUser
+  getOrdersByUser,
+  getNewReleaseProducts
 };
