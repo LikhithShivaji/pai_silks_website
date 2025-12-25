@@ -1,6 +1,21 @@
 const crypto = require('crypto');
 
 class Utils {
+
+    sendResponse(res, data = null, message = 'Success', status = 200) {
+        return res.status(status).json({
+            success: true,
+            data,
+            message
+        });
+    }
+
+    sendError(res, error, status = 500) {
+        return res.status(status).json({
+            success: false,
+            message: error.message || error
+        });
+    }
     
     handleMissingParams(res, msg) {
         return res.status(400).json({ error: msg });
