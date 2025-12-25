@@ -1,102 +1,206 @@
-import React, { useEffect, useState, useContext } from "react";
-import "./Cart.css";
+import React, { useEffect, useContext } from "react";
 import CartItem from "./CartItem";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";
+import footerBg from "../assets/footerbgimage.svg";
+import { X, ShoppingBag } from 'lucide-react';
 
-
-const Cart = ({ onClose, cartItems, onUpdate }) => {
+const Cart = ({ onClose }) => {
   const navigate = useNavigate();
 
-  const { dynamicCartItem, setDynamicCartItem, total, setTotal,} = useContext(CartContext);
+  const {
+    cartItems,        
+    setCartItems,     
+    dynamicCartItem,
+    setDynamicCartItem,
+    total,
+    setTotal,
+    handleRemoveFromCart // <--- 1. Import the new function
+  } = useContext(CartContext);
 
-  // Initialize cart items with quantity = 1 when loaded
+  // 1. Initialize quantities from Global Cart when drawer opens
   useEffect(() => {
-    const itemsWithQty = cartItems.map(item => ({
+    const itemsWithQty = cartItems.map((item) => ({
       ...item,
       quantity: item.quantity || 1,
     }));
     setDynamicCartItem(itemsWithQty);
-  }, [cartItems]);
+  }, [cartItems, setDynamicCartItem]);
 
-  // Update quantity of a specific item
-  const changeQuantity = (index, newQuantity) => {
-    setDynamicCartItem(prev => {
-      const updatedItems = [...prev];
-      updatedItems[index] = {
-        ...updatedItems[index],
-        quantity: newQuantity,
-      };
-      return updatedItems;
-    });
+  // --------------------------------------------------------
+  // 2. HYBRID QUANTITY CHANGE (Local + DB)
+  // --------------------------------------------------------
+  const changeQuantity = async (index, newQuantity) => {
+    const userId = localStorage.getItem("user_id");
+    const itemToUpdate = dynamicCartItem[index];
+
+    // Optimistic UI Update
+    const updatedCart = [...dynamicCartItem];
+    updatedCart[index] = { ...updatedCart[index], quantity: newQuantity };
+    setDynamicCartItem(updatedCart);
+    setCartItems(updatedCart);
+
+    // API Call
+    if (userId) {
+      try {
+        await fetch("https://pai-silks-website-1.onrender.com/api/cart/update", {
+          method: "POST", // Check if your API uses POST or PUT
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            product_id: itemToUpdate.id || itemToUpdate.product_id,
+            quantity: newQuantity
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to update quantity DB:", error);
+      }
+    }
   };
 
-  // Remove an item from cart
-  const handleProductRemove = (e, index) => {
-    const newCartItems = dynamicCartItem.filter((_, i) => i !== index);
-    setDynamicCartItem(newCartItems);
-    onUpdate(newCartItems);
-  };
+  // 3. REMOVE ITEM (Now using Context!)
+  // We don't need the local handleProductRemove anymore.
 
-  // Calculate total based on quantity * unit price
+  // 4. Calculate Total
   useEffect(() => {
-    setTotal(dynamicCartItem.reduce(
-      (acc, item) => acc + item.quantity * item.discounted_price,0
-    ));
-  }, [dynamicCartItem])
+    setTotal(
+      dynamicCartItem.reduce(
+        (acc, item) => acc + (item.quantity || 1) * (Number(item.discounted_price) || Number(item.selling_price) || 0),
+        0
+      )
+    );
+  }, [dynamicCartItem, setTotal]);
 
-  const totalcheckdemo=()=>{
-    dynamicCartItem.map((item)=>(console.log(item,item.quantity)));
-    console.log(dynamicCartItem);    
-    console.log(total+99);    
-  }
+  // 5. PROCEED TO CHECKOUT
+  const handleProceedToCheckout = () => {
+    const userId = localStorage.getItem("user_id");
+    onClose(); 
+
+    if (userId) {
+      navigate("/checkout");
+    } else {
+      navigate("/login", { state: { from: "checkout" } });
+    }
+  };
 
   return (
-    <div className="cart-wrapper">
-      <div className="my-cart-panel">
-        <div className="my-cart-naming-and-button">
-          <p className="cart-main-name">Cart</p>
-          <button className="cart-close-button" onClick={onClose}></button>
-        </div>
-
-        <div className="cart-products">
-          {dynamicCartItem.length === 0 ? (
-            <p>No items in cart</p>
-          ) : (
-            dynamicCartItem.map((item, index) => (
-              <CartItem
-                key={item.id}
-                item={item}
-                index={index}
-                onQuantityChange={changeQuantity}
-                onRemove={handleProductRemove}
-              />
-            ))
-          )}
-
-          <div className="total-bill">
-            <h3>Total bill</h3>
-            <div className="total-cart-bill">
-              <h3>Order Amount</h3>
-              <h3>₹ {total}</h3>
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300">
+      
+      {/* Sidebar */}
+      <div
+        className="
+          fixed inset-y-0 right-0
+          w-[85vw] md:w-[450px]
+          bg-[#FFF8F0]/95 backdrop-blur-xl
+          shadow-2xl
+          flex flex-col
+          font-['Poppins']
+          animate-in slide-in-from-right duration-300
+        "
+      >
+        {/* --- HEADER --- */}
+        <div 
+          className="relative px-6 py-6 border-b border-[#68232B]/10 flex justify-between items-center bg-white/50"
+          style={{ backgroundImage: `url(${footerBg})`}}
+        >
+          <div className="flex items-center gap-3 z-10">
+            <div className="p-2 bg-[#68232B]/10 rounded-full text-[#FFCB85]">
+                <ShoppingBag size={20} />
             </div>
-            <div className="delivery-bill">
-              <h3>Delivery Fee</h3>
-              <h3>₹ 99</h3>
-            </div>
-            <div className="grand-total">
-              <h3>Grand Total</h3>
-              <h3>₹ {total + 99}</h3>
-            </div>
+            <h2 className="text-xl font-bold text-[#FFCB85] tracking-wide">
+              Your Cart
+            </h2>
+            <span className="bg-[#68232B] text-[#FFCB85] text-xs font-bold px-2 py-0.5 rounded-full">
+              {dynamicCartItem.length}
+            </span>
           </div>
-        </div>
 
-        {/* Add to cart Button */}
-        <div className="checkout-button">
-          <button className="checkout" onClick={()=>{navigate("/checkout")}}>
-            <h4>Proceed to Checkout</h4>
+          <button
+            onClick={onClose}
+            className="z-10 p-2 hover:bg-[#68232B]/10 rounded-full transition-colors text-[#FFCB85] cursor-pointer"
+          >
+            <X size={24} />
           </button>
         </div>
+
+        {/* --- CONTENT --- */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#FFCB85]/70 backdrop-blur-md">
+          {dynamicCartItem.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-[#68232B]/60 gap-4">
+              <div className="p-6 bg-[#68232B]/5 rounded-full">
+                <ShoppingBag size={48} strokeWidth={1} />
+              </div>
+              <p className="text-lg font-medium">Your cart is empty</p>
+              <button 
+                onClick={onClose}
+                className="text-sm underline underline-offset-4 hover:text-[#68232B]"
+              >
+                Continue Shopping
+              </button>
+            </div>
+          ) : (
+            <>
+              {dynamicCartItem.map((item, index) => (
+                <div 
+                  key={item.id || index} 
+                  className="bg-white/60 backdrop-blur-md rounded-lg border border-white/10 hover:shadow-lg overflow-hidden transition-all duration-300"
+                >
+                  <CartItem
+                    item={item}
+                    index={index}
+                    onQuantityChange={changeQuantity}
+                    // --- 2. Use the Context Function Here ---
+                    onRemove={() => handleRemoveFromCart(item.id || item.product_id)}
+                  />
+                </div>
+              ))}
+
+              {/* Bill Summary */}
+              <div className="mt-6 bg-white/80 backdrop-blur-md rounded-xl p-5 border border-white/40 shadow-sm text-[#68232B]">
+                <h3 className="font-bold mb-4 border-b border-[#68232B]/10 pb-2">Order Summary</h3>
+                <div className="flex justify-between mb-2 text-sm">
+                  <span className="opacity-80">Order Amount</span>
+                  <span className="font-semibold">₹ {total}</span>
+                </div>
+                <div className="flex justify-between mb-2 text-sm">
+                  <span className="opacity-80">Delivery Fee</span>
+                  <span className="font-semibold text-green-700">₹ 99</span>
+                </div>
+                <div className="flex justify-between mt-4 pt-3 border-t border-[#68232B]/20">
+                  <span className="font-bold text-lg">Grand Total</span>
+                  <span className="font-bold text-lg">₹ {total + 99}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* --- FOOTER --- */}
+        {dynamicCartItem.length > 0 && (
+          <div 
+            className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md" 
+            style={{ backgroundImage: `url(${footerBg})`}}
+          >
+            <button
+              onClick={handleProceedToCheckout}
+              className="
+                w-full h-14
+                rounded-full
+                font-bold text-lg text-white
+                shadow-lg shadow-orange-900/20
+                bg-gradient-to-r from-[#FEDB87] to-[#BD7923]
+                hover:brightness-110
+                active:scale-95
+                transition-all duration-300
+                flex items-center justify-center gap-2
+                cursor-pointer
+              "
+            >
+              Proceed to Checkout
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );

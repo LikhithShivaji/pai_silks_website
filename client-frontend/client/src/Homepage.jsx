@@ -1,143 +1,390 @@
-import './Homepage.css'
-import Footer from './components/Footer';
-import Header from './components/Header';
-import ProductCard from './components/ProductCard'
-import CategoryCard from './components/Categorycard.jsx';
-import ReviewCard from './components/ReviewCard.jsx';
-// import App from './App.jsx'
-import ViewProductPage from './components/ViewProductPage'; 
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import frame from './assets/heroframe.svg'
-import heroimage1 from './assets/heroimage1.svg'
-import wedding from './assets/weddingcoll.svg'
-import party from './assets/partywearcoll.svg'
-import festive from './assets/festivecoll.svg'
-import casual from './assets/casualcoll.svg'
-import underprice from './assets/underpricecoll.svg'
-import finisher from './assets/finisher.svg'
-import bestsellerheart from "./assets/bestsellerheart.svg"
+import Footer from "./components/Footer";
+import Header from "./components/Header";
+import ProductCard from "./components/ProductCard";
+import CategoryCard from "./components/Categorycard.jsx";
+import ReviewCard from "./components/ReviewCard.jsx";
+import { useNavigate } from "react-router-dom";
+
+import frame from "./assets/heroframe.svg";
+import finisher from "./assets/finisher.svg";
+import underprice from "./assets/underpricecoll.svg";
+
 import trendingProducts from "./products.js";
 import { categories } from "./categoryData";
 import reviews from "./reviews.js";
+
 import React, { useEffect, useState, useContext } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import { CartContext } from "./CartContext.jsx";
+import footerBg from "./assets/footerbgimage.svg";
+import HeroImage from "@/assets/HeroImage.png";
+import { Heart } from "lucide-react";
+import PeacockLoader from "./components/PeacockLoader";
+// import PageLoader from "./components/Pageloader";
 
 function Homepage() {
-    const navigate = useNavigate();
-    const { cartItems, setCartItems,wishListItems, setWishListItems, handleAddToCart } = useContext(CartContext);
-    const topFourProducts = trendingProducts.slice(0, 9);
-    const [mainSaree, rem1, rem2, rem3] = trendingProducts;
+  const navigate = useNavigate();
+  const {
+    cartItems,
+    setCartItems,
+    wishListItems,
+    setWishListItems,
+    handleAddToCart,
+    handleAddToWishList,
+  } = useContext(CartContext);
 
-    const [currentIndex, setCurrentIndex] = useState(0);
+  const topFourProducts = trendingProducts.slice(0, 9);
 
-    useEffect(() => {
-      const interval = setInterval(() => {
-        setCurrentIndex((prevIndex) =>
-          prevIndex === reviews.length - 1 ? 0 : prevIndex + 1
-        );
-      }, 3000); // 5 seconds
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [collections, setCollections] = useState([]);
+  const [loadingCollections, setLoadingCollections] = useState(true);
+  const [loadingBestSellers, setLoadingBestSellers] = useState(true);
+  const [fillColor, setFillColor] = useState("transparent");
 
-      return () => clearInterval(interval); // cleanup
-    }, []);
+  const [bestSellers, setBestSellers] = useState([]);
+  const [currentBestIndex, setCurrentBestIndex] = useState(0);
+  const currentProduct = bestSellers[currentBestIndex];
 
-    const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
-    const updateWishList = (dynamicWishListItem) => setWishListItems(dynamicWishListItem);
+  const updateCart = (c) => setCartItems(c);
+  const updateWishList = (w) => setWishListItems(w);
 
-    
+  const handleSvgClick = () => {
+    setFillColor((c) => (c === "transparent" ? "#ffc780" : "transparent"));
+  };
+
+  useEffect(() => {
+    if (loadingBestSellers || loadingCollections) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [loadingCollections, loadingBestSellers]);
+
+  /* Reviews auto-scroll */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1));
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  /* Collections */
+  useEffect(() => {
+    fetch("https://pai-silks-website-1.onrender.com/api/collections")
+      .then((res) => res.json())
+      .then((data) => data.success && setCollections(data.data))
+      .finally(() => setLoadingCollections(false));
+  }, []);
+
+  /* Best sellers */
+  useEffect(() => {
+    fetch("https://pai-silks-website-1.onrender.com/api/bestsellers")
+      .then((res) => res.json())
+      .then((res) => res.success && setBestSellers(res.data))
+      .finally(() => setLoadingBestSellers(false));
+  }, []);
+
+  useEffect(() => {
+    if (!bestSellers.length) return;
+    const interval = setInterval(() => {
+      setCurrentBestIndex((prev) =>
+        prev === bestSellers.length - 1 ? 0 : prev + 1
+      );
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [bestSellers]);
+
+  const onHeartClick = async () => {
+    const userId = localStorage.getItem("user_id");
+
+    const productForWishlist = {
+      id: currentProduct.product_id || currentProduct.id,
+      name: currentProduct.name,
+      image1: currentProduct.image_url || currentProduct.image1,
+      discounted_price: Number(currentProduct.selling_price), 
+      regular_price: Number(currentProduct.regular_price),
+      description: currentProduct.description,
+    };
+
+    handleSvgClick(); 
+    handleAddToWishList(productForWishlist);
+
+    if (userId) {
+      try {
+        const response = await fetch("https://pai-silks-website-1.onrender.com/api/wishlist/add", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            product_id: productForWishlist.id,
+          }),
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          console.log("Successfully added to Wishlist DB");
+        } else {
+          console.error("Failed to add to DB:", data.message);
+        }
+      } catch (error) {
+        console.error("API Error:", error);
+      }
+    } else {
+        console.log("User not logged in, saved to local storage only.");
+    }
+  };
 
   return (
-    <>
-      <Header cartItems={cartItems} onUpdate={updateCart} wishListItems={wishListItems} onWishListUpdate={updateWishList}/>
-      <div className="herosection">
-        <img className="upframe" src={frame}></img>
-        <div className="heroimagesection">
-          <img className="heroimages" src={heroimage1}></img>
-        </div>
-        <img className="downframe" src={frame}></img>
-        <h1 className="headerdesc"><u>Check out our Collections</u></h1>
-        <div className="catdiv" onClick={()=>navigate("/shop")}>
-          <div className="category">
-            <img src={wedding}></img>
-            <h2>Wedding collections</h2>
-          </div>
-          <div className="category">
-            <img src={party}></img>
-            <h2>Party wear</h2>
-          </div>
-          <div className="category">
-            <img src={festive}></img>
-            <h2>Festive Collections</h2>
-          </div>
-          <div className="category">
-            <img src={casual}></img>
-            <h2>Casual wear</h2>
-          </div>
-          <div className="category">
-            <img src={underprice}></img>
-            <h2>Under 2000</h2>
+    <div className="scrollbar-hide w-full">
+      <Header
+        cartItems={cartItems}
+        onUpdate={updateCart}
+        wishListItems={wishListItems}
+        onWishListUpdate={updateWishList}
+      />
+
+      {/* HERO SECTION */}
+      <section
+        className="text-white text-center py-4 bg-cover bg-fixed w-full"
+        style={{ backgroundImage: `url(${footerBg})` }}
+      >
+        <img src={frame} className="w-[95%] rotate-180 mx-auto" />
+
+        <div className="w-full flex justify-center">
+          <div className="relative flex justify-center items-center rounded-xl w-[85%] h-130 overflow-hidden  aspect-square md:aspect-video max-h-80 sm:max-h-full">
+            <img
+              src={HeroImage}
+              alt="Hero background"
+              className="w-full h-full object-cover"
+            />
           </div>
         </div>
-        <div className="finishingline">
-          <img src={finisher}></img>
-        </div>
-      </div>
-      <h1 className="newcollheader"><u>Check out our Newest Collections</u></h1>
-      <div className="trending-section">
-        <div className="product-grid-homepage">
-          {topFourProducts.map((product) => (
-            <ProductCard key={product.id} {...product} onAddToCart={() => handleAddToCart(product)} />
-          ))}
-        </div>
-      </div>
-      <div className='bestsellers'>
-        <img className="upframe" src={frame}></img>
-          <h1 className="bestsellerheader"><u>Best Sellers</u></h1>
-          <div className='bestseller-saree-section'>
-            <div className='rem-saree'>
-              <div className='rem-saree-1'><img src={mainSaree.image1}/></div>
-              <div className='rem-saree-2'><img src={mainSaree.image1}/></div>
-              <div className='rem-saree-3'><img src={mainSaree.image1}/></div>
-            </div>
-            <div className='main-saree'><img src={mainSaree.image1}/></div>
-            <div className='main-saree-desc'>
-              <div className='sub-desc-heart'><img src={bestsellerheart} alt="" /></div>
-              <div className='sub-desc-name'><h1>{mainSaree.name}</h1></div>
-              <div className='sub-desc-desc'><p>{mainSaree.description}</p></div>
-              <div className='sub-desc-price-section'>
-                <div className='main-price'><del><h5>₹ {mainSaree.main_price}</h5></del></div>
-                <div className='disc-price'><h2>₹ {mainSaree.discounted_price}</h2></div>
+
+        <img src={frame} className="w-[95%] mx-auto" />
+
+        <h1 className="text-xl md:text-5xl my-[1%] py-[4%] text-[#FFCB85]">
+          <u>Check out our Collections</u>
+        </h1>
+
+        <div
+          className="grid grid-cols-3 md:grid-cols-6 items-center cursor-pointer"
+          onClick={() => navigate("/shop")}
+        >
+          {loadingCollections ? (
+            <PeacockLoader />
+          ) : (
+            collections.map((c) => (
+              <div key={c.id} className="cursor-pointer">
+                <img
+                  src={c.image || underprice}
+                  className="max-w-[80%] mx-auto transition-transform duration-500 hover:scale-105"
+                />
+                <h2 className="text-[1.6vw]">{c.collection}</h2>
               </div>
-              <div className='buttons'>
-                <button className='cart-button'><p>Add to Cart</p></button>
-                <button className='buy-now-button'><p>Buy Now</p></button>
+            ))
+          )}
+        </div>
+
+        <div className="pt-4">
+          <img src={finisher} className="w-[95%] mx-auto" />
+        </div>
+      </section>
+
+      {/* TRENDING */}
+      <h1 className="text-xl md:text-5xl my-[1%] py-[4%] text-center text-[#68232B]">
+        <u>Check out our Newest Collections</u>
+      </h1>
+
+      <div className="flex gap-4 overflow-x-auto px-2 py-4 scrollbar-hide">
+        {topFourProducts.map((product) => (
+          <div
+            key={product.id}
+            className="flex-none min-w-[190px] w-[clamp(150px,25vw,220px)]"
+          >
+            <ProductCard
+              {...product}
+              onAddToCart={() => handleAddToCart(product)}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* BEST SELLER */}
+      {currentProduct && (
+        <section
+          className="py-12 bg-cover bg-fixed flex flex-col items-center"
+          style={{ backgroundImage: `url(${footerBg})` }}
+        >
+          {/* Top Frame */}
+          <img
+            src={frame}
+            className="max-w-[95%] w-full rotate-180 opacity-90"
+            alt="Frame Top"
+          />
+
+          {/* Section Title */}
+          <h1 className="text-2xl md:text-5xl font-bold text-[#FFCB85] py-5 font-['Poppins']">
+            <u>Best Sellers</u>
+          </h1>
+
+          {/* --- MAIN CONTENT CONTAINER --- */}
+          {loadingBestSellers ? (
+            <PeacockLoader />
+          ) : (
+            <div className="w-full max-w-[90%] md:max-w-[85%] mx-auto">
+              <div className="flex flex-col lg:grid lg:grid-cols-[1.6fr_1fr] gap-8 lg:gap-12 items-start">
+                <div className="w-full flex flex-col md:flex-row-reverse gap-4 bg-white/3 backdrop-blur-md border border-white/10 rounded-3xl p-6 shadow-xl">
+                  <div className="w-full md:w-[80%] bg-transparent rounded-2xl overflow-hidden shadow-sm border border-stone-200/50">
+                    <div className="aspect-[3/4] lg:aspect-square w-full relative group">
+                      <img
+                        src={currentProduct.image_url}
+                        alt={currentProduct.name}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-row md:flex-col gap-3 md:w-[20%] justify-between md:justify-start">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="relative aspect-[3/4] w-full cursor-pointer rounded-xl overflow-hidden border border-stone-200/50 hover:border-[#BD7923] transition-all"
+                      >
+                        <img
+                          src={currentProduct.image_url}
+                          alt={`Thumbnail ${i}`}
+                          className="absolute inset-0 w-full h-full object-cover hover:opacity-90 transition-opacity"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="w-full flex flex-col justify-center h-full gap-6 text-[#FFCB85] text-left rounded-3xl shadow-xl">
+                  <div className="flex justify-between items-center gap-5 h-40 flex ">
+                    <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold font-['Poppins'] text-[#FFCB85] leading-tight">
+                      {currentProduct.name}
+                    </h1>
+                    <Heart
+                      size={100}
+                      className="md:w-10 md:h-10 cursor-pointer flex-shrink-0 hover:scale-150 transition-transform"
+                      fill={fillColor}
+                      onClick={onHeartClick}
+                    />
+                  </div>
+
+                  <p className="text-sm md:text-lg text-[#FFCB85]/90 leading-relaxed h-20 flex items-center">
+                    {currentProduct.description}
+                  </p>
+
+                  <div className="flex items-baseline gap-4 mt-2">
+                    <h2 className="text-3xl md:text-5xl font-bold text-white">
+                      ₹ {currentProduct.selling_price}
+                    </h2>
+                    <h5 className="text-lg md:text-2xl text-gray-400 decoration-1 line-through">
+                      ₹ {currentProduct.regular_price}
+                    </h5>
+                  </div>
+
+                  <div className="h-px w-full bg-[#FFCB85]/20 my-2"></div>
+
+                  <div className="flex flex-col sm:flex-row gap-4 w-full mt-4">
+                    <button
+                      onClick={() => {
+                        if (!currentProduct) return;
+
+                        const productForCart = {
+                          id: currentProduct.product_id || currentProduct.id,
+                          name: currentProduct.name,
+                          image1: currentProduct.image_url,
+                          discounted_price: Number(
+                            currentProduct.selling_price
+                          ),
+                          regular_price: Number(currentProduct.regular_price),
+                          description: currentProduct.description,
+                          quantity: 1,
+                        };
+
+                        handleAddToCart(productForCart);
+                      }}
+                      className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg shadow-orange-900/20
+                 hover:bg-gradient-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer border-2 border-[#FEDB87] bg-transparent
+                 hover:brightness-110 active:scale-95 transition-all duration-200"
+                    >
+                      Add to Cart
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (!currentProduct) return;
+
+                        const productForCart = {
+                          id: currentProduct.product_id || currentProduct.id,
+                          name: currentProduct.name,
+                          image1: currentProduct.image_url,
+                          discounted_price: Number(
+                            currentProduct.selling_price
+                          ),
+                          regular_price: Number(currentProduct.regular_price),
+                          description: currentProduct.description,
+                          quantity: 1,
+                        };
+
+                        handleAddToCart(productForCart);
+                        navigate("/checkout");
+                      }}
+                      className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg shadow-orange-900/20
+                 border-2 border-[#FEDB87] bg-transparent hover:bg-gradient-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer
+                 hover:bg-[#FEDB87]/10 active:scale-95 transition-all duration-200"
+                    >
+                      Buy Now
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        <img className="downframe" src={frame}></img>
-      </div>
-      <div className="saree-categories">
-        <h1>Our Categories</h1>
-        <div className="scroll-wrapper">
-          <div className="scroll-track">
-            {categories.map((cat, index) => (
-              <CategoryCard key={index} name={cat.name} image={cat.image} />
-            ))}
-            {categories.map((cat, index) => (
-              <CategoryCard key={`dup-${index}`} name={cat.name} image={cat.image} />
+          )}
+
+          {/* Bottom Frame */}
+          <img
+            src={frame}
+            className="max-w-[95%] w-full mt-12 opacity-90"
+            alt="Frame Bottom"
+          />
+        </section>
+      )}
+
+      {/* CATEGORIES SCROLL */}
+      <section className="text-center text-[#68232B] py-4">
+        <h1 className="text-xl md:text-5xl">
+          <u>Our Categories</u>
+        </h1>
+        <div className="overflow-hidden">
+          <div className="flex gap-4 animate-[scrollLeft_25s_linear_infinite] w-max">
+            {[...categories, ...categories].map((cat, i) => (
+              <CategoryCard key={i} {...cat} />
             ))}
           </div>
         </div>
-      </div>
-      <div className="customerReview">
-        <h1>Our Happy Customers</h1>
-        <div className="reviews-container">
+      </section>
+
+      {/* REVIEWS */}
+      <section className="py-[1vw]">
+        <h1 className="text-xl md:text-5xl text-center text-[#68232B] py-[2vw]">
+          <u>Our Happy Customers</u>
+        </h1>
+        <div className="flex justify-center py-4 transition-opacity duration-3000">
           <ReviewCard review={reviews[currentIndex]} />
         </div>
-      </div>
+      </section>
+
       <Footer />
-    </>
+    </div>
   );
 }
 
-export default Homepage
+export default Homepage;
