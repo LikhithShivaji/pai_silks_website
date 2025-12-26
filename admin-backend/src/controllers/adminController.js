@@ -6,6 +6,8 @@ const orderManager = require('../components/orderManager/orderManager')
 const utils = require('../utils/utils');
 const appDefines = require('../constants/appDefines');
 const CookiesKey = require('../constants/cookieKeys');
+const admindb = require('../dbOps/adminDbOps'); // adjust path if needed
+
 // adminController.js
 
 // adminController.js
@@ -241,23 +243,50 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
+exports.updateProductImages = async (req, res) => {
+    const product_id = req.params.id;
+
+    try {
+        const images = await productManager.updateImages(
+            product_id,
+            req.files,
+            admindb.insertImages.bind(admindb) // reuse your insertImages
+        );
+
+        res.status(200).json({ success: true, images });
+    } catch (err) {
+        console.error("Error updating product images:", err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
+
 exports.insertImage = async (req, res) => {
   try {
-    const { product_id, images } = req.body;
+    const { product_id } = req.body;
 
-    if (!product_id || !Array.isArray(images) || images.length === 0) {
+    if (!product_id || !req.files || req.files.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Product ID and images array are required"
+        message: "Product ID and images are required"
       });
     }
+
+    // Extract Cloudinary URLs
+    const images = req.files.map((file, index) => ({
+      image_url: file.path,   // ✅ Cloudinary URL
+      is_primary_image: index === 0 ? 1 : 0
+    }));
+
     await productManager.insertImages(product_id, images);
+
     res.status(200).json({
       success: true,
-      message: "Images inserted successfully"
+      message: "Images uploaded successfully",
+      images
     });
   } catch (error) {
-    console.error("Error in insertImage Controller:", error);
+    console.error("Insert Image Error:", error);
     res.status(500).json({
       success: false,
       message: error.message
@@ -266,29 +295,6 @@ exports.insertImage = async (req, res) => {
 };
 
 
-exports.updateProductImage = async (req, res) => {
-  try {
-    const { image_id, image_url, is_primary_image } = req.body;
 
-    if (!image_id) {
-      return res.status(400).json({
-        success: false,
-        message: "image_id is required"
-      });
-    }
 
-    await productManager.updateProductImage({image_id,image_url,is_primary_image});
-
-    res.status(200).json({
-      success: true,
-      message: "Image updated successfully"
-    });
-  } catch (error) {
-    console.error("Error in updateProductImage Controller:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
 

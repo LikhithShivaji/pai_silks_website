@@ -1,4 +1,5 @@
 const dbCmds = require('../../dbOps/adminDbOps');
+const cloudinary = require('../../config/cloudinary');
 
 const createProduct = async (productData) => {
     
@@ -56,13 +57,33 @@ const getAllProductDetails = async () => {
 };
 
 
-const updateProduct = async (productData) => {
-    // validate mandatory fields
-    if (!productData.id || !productData.name || !productData.regular_price) {
-        throw new Error("Product id, name and regular price are required");
+const updateImages = async (product_id, files, insertImagesFn) => {
+    if (!product_id) throw new Error("Product ID is required");
+    if (!files || files.length === 0) return [];
+
+    const uploadedImages = [];
+
+    // Upload each file to Cloudinary
+    for (let i = 0; i < files.length; i++) {
+        const uploaded = await cloudinary.uploader.upload(files[i].path, {
+            folder: `products/${product_id}`,
+        });
+        uploadedImages.push({
+            image_url: uploaded.secure_url,
+            is_primary_image: i === 0 ? 1 : 0
+        });
     }
-    return await dbCmds.updateProduct(productData);
+
+    // Delete old images
+    await dbCmds.deleteImagesByProductId(product_id);
+
+    // Insert new images using your existing insertImages API
+    await insertImagesFn(product_id, uploadedImages);
+
+    return uploadedImages;
 };
+
+
 
 const insertImages = async (product_id, images) => {
   if (!product_id) {
@@ -76,27 +97,16 @@ const insertImages = async (product_id, images) => {
   return await dbCmds.insertImages(product_id, images);
 };
 
-const updateProductImage = async ({ image_id, image_url, is_primary_image }) => {
-  if (!image_id) {
-    throw new Error("image_id is required");
-  }
 
-  if (is_primary_image === 1) {
-    await dbCmds.resetPrimaryImageByImageId(image_id);
-  }
 
-  return await dbCmds.updateProductImage(
-    image_id,
-    image_url,
-    is_primary_image
-  );
-};
+
+
 
 module.exports = {
     createProduct,
     getCategoryWiseCount,
     getAllProductDetails,
-    updateProduct,
+    updateImages,
     insertImages,
-    updateProductImage
+    
 };
