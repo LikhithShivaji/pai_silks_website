@@ -21,4 +21,8 @@ router.put('/update-product', adminController.updateProduct);
 
 router.put('/update-order-status', adminController.updateOrderStatus);
 
+router.post('/insert-image', adminController.insertImage);
+
+router.put('/update-image', adminController.updateProductImage);
+
 module.exports = router;

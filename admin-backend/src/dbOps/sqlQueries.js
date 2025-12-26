@@ -10,8 +10,11 @@ const sqlqueries = {
     product: {
         insertProduct: `INSERT INTO product (name, description, category, collection, material, product_code, product_wash_care, regular_price, selling_price, saree_length, is_new_release) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         getCategoryWiseCount:  `SELECT p.category, COUNT(p.id) AS sari_count FROM product p WHERE p.is_deleted = 0 GROUP BY p.category`,
-        getAllProductDetails: `SELECT p.id AS product_id, p.name, p.description, p.category, p.collection, p.material, p.product_code, p.product_wash_care, p.regular_price, p.selling_price, p.saree_length, p.is_new_release, COALESCE(pi.image_url, '') AS image_url, ps.stock_qty, p.created_at, p.updated_at FROM product p LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1 LEFT JOIN product_stock ps ON p.id = ps.product_id WHERE p.is_deleted = 0`,
-        updateProduct: `UPDATE product SET name = ?, description = ?, category = ?, collection = ?, material = ?, product_code = ?, product_wash_care = ?, regular_price = ?, selling_price = ?, saree_length = ?, is_new_release = ? WHERE id = ?`
+        getAllProductDetails: `SELECT p.id AS product_id, p.name, p.description, p.category, p.collection, p.material, p.product_code, p.product_wash_care, p.regular_price, p.selling_price, p.saree_length, p.is_new_release, ps.stock_qty, p.created_at, p.updated_at, pi.id AS image_id, pi.image_url, pi.is_primary_image FROM product p LEFT JOIN product_images pi ON p.id = pi.product_id LEFT JOIN product_stock ps ON p.id = ps.product_id WHERE p.is_deleted = 0`,
+        updateProduct: `UPDATE product SET name = ?, description = ?, category = ?, collection = ?, material = ?, product_code = ?, product_wash_care = ?, regular_price = ?, selling_price = ?, saree_length = ?, is_new_release = ? WHERE id = ?`,
+        insertImage: `INSERT INTO product_images (product_id, image_url, is_primary_image) VALUES (?, ?, ?)`,
+        resetPrimaryImageByImageId: `UPDATE product_images SET is_primary_image = 0 WHERE product_id = (SELECT product_id FROM product_images WHERE id = ?)`,
+        updateProductImage: `UPDATE product_images SET image_url = COALESCE(?, image_url), is_primary_image = COALESCE(?, is_primary_image) WHERE id = ?`
     },
 
     dashBoard: {
