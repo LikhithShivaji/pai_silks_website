@@ -240,3 +240,55 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.insertImage = async (req, res) => {
+  try {
+    const { product_id, images } = req.body;
+
+    if (!product_id || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID and images array are required"
+      });
+    }
+    await productManager.insertImages(product_id, images);
+    res.status(200).json({
+      success: true,
+      message: "Images inserted successfully"
+    });
+  } catch (error) {
+    console.error("Error in insertImage Controller:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+exports.updateProductImage = async (req, res) => {
+  try {
+    const { image_id, image_url, is_primary_image } = req.body;
+
+    if (!image_id) {
+      return res.status(400).json({
+        success: false,
+        message: "image_id is required"
+      });
+    }
+
+    await productManager.updateProductImage({image_id,image_url,is_primary_image});
+
+    res.status(200).json({
+      success: true,
+      message: "Image updated successfully"
+    });
+  } catch (error) {
+    console.error("Error in updateProductImage Controller:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+

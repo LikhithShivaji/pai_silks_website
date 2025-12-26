@@ -165,7 +165,7 @@ class Cmds {
             console.error("Error in updateProduct:", err);
             throw err;
         }
-    }   
+    }
 
     async updateOrderStatus(order_id, new_status) {
         try {
@@ -180,6 +180,40 @@ class Cmds {
         }
     }
 
+    async insertImages(product_id, images) {
+        try {
+            const values = images.map(img => [
+                product_id,
+                img.image_url,
+                img.is_primary_image ?? 0
+            ]);
+
+            const [result] = await pool.query(
+                sqlqueries.product.insertImage,
+                [values]
+            );
+
+            return result.affectedRows;
+        } catch (err) {
+            console.error("Error in insertImages:", err);
+            throw err;
+        }
+    }
+
+    async resetPrimaryImageByImageId(image_id) {
+        await pool.query(
+            sqlqueries.product.resetPrimaryImageByImageId,
+            [image_id]
+        );
+    }
+
+    async updateProductImage(image_id, image_url, is_primary_image) {
+        const [result] = await pool.query(
+            sqlqueries.product.updateProductImage,
+            [image_url, is_primary_image, image_id]
+        );
+        return result.affectedRows;
+    }
 }
 
 module.exports = new Cmds();
