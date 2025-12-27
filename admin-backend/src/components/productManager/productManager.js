@@ -3,6 +3,24 @@ const cloudinary = require('../../config/cloudinary');
 
 
 
+
+
+const createProduct = async (productData) => {
+    
+    if (!productData.name || !productData.regular_price) {
+        throw new Error("Product name and regular price are required");
+    }
+
+    const productId = await dbCmds.createProduct(productData);
+
+    // 2️⃣ Insert stock
+    const stockQty = productData.stock_qty ?? 0;
+    await dbCmds.insertProductStock(productId, stockQty);
+
+    return productId;
+};
+
+
 const updateProduct = async (productData, files = []) => {
   if (!productData.id) {
     throw new Error("Product ID is required");
@@ -10,6 +28,11 @@ const updateProduct = async (productData, files = []) => {
 
   // 1️⃣ Update product basic details
   await dbCmds.updateProduct(productData);
+
+  // 2️⃣ Update stock_qty (if provided) — always, not just when images exist
+  if (productData.stock_qty !== undefined) {
+    await dbCmds.updateProductStock(productData.id, productData.stock_qty);
+  }
 
   // 2️⃣ If images are provided → update images
   if (files && files.length > 0) {
@@ -34,18 +57,6 @@ const updateProduct = async (productData, files = []) => {
   }
 
   return true;
-};
-
-
-const createProduct = async (productData) => {
-    
-    if (!productData.name || !productData.regular_price) {
-        throw new Error("Product name and regular price are required");
-    }
-
-    const productId = await dbCmds.createProduct(productData);
-
-    return productId;
 };
 
 const getCategoryWiseCount = async () => {

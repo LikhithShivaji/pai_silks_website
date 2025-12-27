@@ -15,7 +15,9 @@ const sqlqueries = {
         insertImage: `INSERT INTO product_images (product_id, image_url, is_primary_image) VALUES ?`,
         resetPrimaryImageByImageId: `UPDATE product_images SET is_primary_image = 0 WHERE product_id = (SELECT product_id FROM product_images WHERE id = ?)`,
         getImagesByProductId: `SELECT * FROM product_images WHERE product_id = ?`,
-        deleteImagesByProductId: `DELETE FROM product_images WHERE product_id = ?`
+        deleteImagesByProductId: `DELETE FROM product_images WHERE product_id = ?`,
+        insertProductStock: `INSERT INTO product_stock (product_id, stock_qty) VALUES (?, ?)`,
+        updateProductStock: `UPDATE product_stock SET stock_qty = ?, updated_at = NOW() WHERE product_id = ?`,
     },
 
     dashBoard: {
