@@ -169,18 +169,22 @@ getNewReleaseProducts: `
   `,
 
  getCart: `
-    SELECT 
-    c.cart_id, 
-    c.quantity, 
-    p.id AS product_id,
-    p.name,
-    p.selling_price AS price,   -- IMPORTANT
-    p.regular_price,
-    p.category
+     SELECT 
+      c.cart_id, 
+      c.quantity, 
+      p.id AS product_id,
+      p.name,
+      p.selling_price AS price,
+      p.regular_price,
+      p.category,
+      pi.id AS image_id,
+      pi.image_url,
+      pi.is_primary_image
   FROM cart c
   JOIN product p ON c.product_id = p.id
+  LEFT JOIN product_images pi ON p.id = pi.product_id
   WHERE c.user_id = ?
-  ORDER BY c.added_at DESC;
+  ORDER BY c.added_at DESC, pi.is_primary_image DESC; 
   `,
 
   updateCartQuantity: `

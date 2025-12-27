@@ -190,10 +190,40 @@ const moveWishlistToCart = async (user_id, product_id) => {
 
 const getCart = async (user_id) => {
   try {
-    const cartItems = await dbCmds.getCart(user_id);
-    return cartItems; // return whatever dbCmds returns
+    const rows = await dbCmds.getCart(user_id);
+
+    // Map cart items to include product images
+    const cartMap = {};
+
+    rows.forEach(row => {
+      if (!cartMap[row.cart_id]) {
+        cartMap[row.cart_id] = {
+          cart_id: row.cart_id,
+          quantity: row.quantity,
+          product: {
+            id: row.product_id,
+            name: row.name,
+            price: row.price,
+            regular_price: row.regular_price,
+            category: row.category,
+            images: []
+          }
+        };
+      }
+
+      // Push image if exists
+      if (row.image_id) {
+        cartMap[row.cart_id].product.images.push({
+          id: row.image_id,
+          url: row.image_url,
+          is_primary: row.is_primary_image
+        });
+      }
+    });
+
+    return Object.values(cartMap);
   } catch (err) {
-    console.error("Error in getCart:", err);
+    console.error("Error in getCart ProductManager:", err);
     throw err;
   }
 };
