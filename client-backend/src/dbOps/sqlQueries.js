@@ -48,6 +48,7 @@ const sqlqueries = {
           p.product_code,
           p.product_wash_care,
           p.regular_price,
+          p.saree_length,
           p.selling_price,
           IFNULL(ps.stock_qty, 0) AS stock_qty,
           COUNT(oi.product_id) AS total_sold,
@@ -76,6 +77,7 @@ const sqlqueries = {
       p.product_code,
       p.product_wash_care,
       p.regular_price,
+      p.saree_length,
       p.selling_price,
       IFNULL(ps.stock_qty, 0) AS stock_qty,
       GROUP_CONCAT(pi.image_url) AS images
