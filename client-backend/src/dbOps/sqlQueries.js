@@ -92,10 +92,27 @@ const sqlqueries = {
 `,
 
 getProductsByCategory: `
-      SELECT * 
-      FROM product 
-      WHERE category = ? AND is_deleted = 0
-      ORDER BY name;
+      SELECT 
+      p.id,
+      p.name,
+      p.description,
+      p.category,
+      p.collection,
+      p.material,
+      p.product_code,
+      p.product_wash_care,
+      p.regular_price,
+      p.saree_length,
+      p.selling_price,
+      IFNULL(ps.stock_qty, 0) AS stock_qty,
+      pi.id AS image_id,
+      pi.image_url,
+      pi.is_primary_image
+  FROM product p
+  LEFT JOIN product_stock ps ON p.id = ps.product_id
+  LEFT JOIN product_images pi ON p.id = pi.product_id
+  WHERE p.category = ? AND p.is_deleted = 0
+  ORDER BY p.name, pi.is_primary_image DESC;
     `,
 
 getNewReleaseProducts: `

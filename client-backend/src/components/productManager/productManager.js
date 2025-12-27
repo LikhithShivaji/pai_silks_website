@@ -50,13 +50,44 @@ const getProductById = async (productId) => {
 //Get all the products of a category
 const getProductsByCategory = async (category) => {
   try {
-    return await dbCmds.getProductsByCategory(category);
+    const rows = await dbCmds.getProductsByCategory(category);
+
+    // Convert flat rows into products with images array
+    const productsMap = {};
+
+    rows.forEach(row => {
+      if (!productsMap[row.id]) {
+        productsMap[row.id] = {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          category: row.category,
+          collection: row.collection,
+          material: row.material,
+          product_code: row.product_code,
+          product_wash_care: row.product_wash_care,
+          regular_price: row.regular_price,
+          selling_price: row.selling_price,
+          saree_length: row.saree_length,
+          stock_qty: row.stock_qty,
+          images: []
+        };
+      }
+      if (row.image_id) {
+        productsMap[row.id].images.push({
+          id: row.image_id,
+          url: row.image_url,
+          is_primary: row.is_primary_image
+        });
+      }
+    });
+
+    return Object.values(productsMap);
   } catch (err) {
     console.error("Error in getProductsByCategory:", err);
     throw err;
   }
 };
-
 
 // Get new release products
 const getNewReleaseProducts = async () => {
