@@ -3,8 +3,15 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const upload = require('../middlewares/cloudinaryUpload')
 
-//used to create a product
+
+
 router.post('/create-product', adminController.createProduct);
+
+router.put(
+  '/update-product',
+  upload.array('images', 10),   // 👈 accept images here
+  adminController.updateProduct
+);
 
 router.get('/get-order-stats', adminController.getOrderStats);
 
@@ -29,6 +36,6 @@ upload.array("images", 5), // frontend key = "images"
 );  
 
 //Update product images
-router.put('/products/:id/images', upload.array('images', 10), adminController.updateProductImages);
+//router.put('/products/:id/images', upload.array('images', 10), adminController.updateProductImages);
 
 module.exports = router;

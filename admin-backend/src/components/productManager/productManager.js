@@ -1,6 +1,42 @@
 const dbCmds = require('../../dbOps/adminDbOps');
 const cloudinary = require('../../config/cloudinary');
 
+
+
+const updateProduct = async (productData, files = []) => {
+  if (!productData.id) {
+    throw new Error("Product ID is required");
+  }
+
+  // 1️⃣ Update product basic details
+  await dbCmds.updateProduct(productData);
+
+  // 2️⃣ If images are provided → update images
+  if (files && files.length > 0) {
+    const uploadedImages = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const uploaded = await cloudinary.uploader.upload(files[i].path, {
+        folder: `products/${productData.id}`,
+      });
+
+      uploadedImages.push({
+        image_url: uploaded.secure_url,
+        is_primary_image: i === 0 ? 1 : 0
+      });
+    }
+
+    // Delete old images
+    await dbCmds.deleteImagesByProductId(productData.id);
+
+    // Insert new images
+    await dbCmds.insertImages(productData.id, uploadedImages);
+  }
+
+  return true;
+};
+
+
 const createProduct = async (productData) => {
     
     if (!productData.name || !productData.regular_price) {
@@ -106,6 +142,7 @@ module.exports = {
     createProduct,
     getCategoryWiseCount,
     getAllProductDetails,
+    updateProduct,
     updateImages,
     insertImages,
     

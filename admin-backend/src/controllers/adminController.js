@@ -125,6 +125,40 @@ exports.adminLogin = async (req, res) => {
   }
 };
 
+
+exports.insertImage = async (req, res) => {
+  try {
+    const { product_id } = req.body;
+
+    if (!product_id || !req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Product ID and images are required"
+      });
+    }
+
+    // Extract Cloudinary URLs
+    const images = req.files.map((file, index) => ({
+      image_url: file.path,   // ✅ Cloudinary URL
+      is_primary_image: index === 0 ? 1 : 0
+    }));
+
+    await productManager.insertImages(product_id, images);
+
+    res.status(200).json({
+      success: true,
+      message: "Images uploaded successfully",
+      images
+    });
+  } catch (error) {
+    console.error("Insert Image Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 exports.createProduct = async (req, res) => {
   try {
     const productData = req.body;
@@ -218,7 +252,10 @@ exports.getOrderDetails = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   try {
     const productData = req.body;
-    const result = await productManager.updateProduct(productData);
+    const files = req.files || [];
+
+    await productManager.updateProduct(productData, files);
+
     res.status(200).json({
       success: true,
       message: "Product updated successfully",
@@ -261,38 +298,7 @@ exports.updateProductImages = async (req, res) => {
 };
 
 
-exports.insertImage = async (req, res) => {
-  try {
-    const { product_id } = req.body;
 
-    if (!product_id || !req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Product ID and images are required"
-      });
-    }
-
-    // Extract Cloudinary URLs
-    const images = req.files.map((file, index) => ({
-      image_url: file.path,   // ✅ Cloudinary URL
-      is_primary_image: index === 0 ? 1 : 0
-    }));
-
-    await productManager.insertImages(product_id, images);
-
-    res.status(200).json({
-      success: true,
-      message: "Images uploaded successfully",
-      images
-    });
-  } catch (error) {
-    console.error("Insert Image Error:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
 
 
 
