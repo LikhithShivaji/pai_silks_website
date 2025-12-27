@@ -215,10 +215,46 @@ async addToWishlist(user_id, product_id) {
 // Get all wishlist items for a user
 async getWishlist(user_id) {
   try {
-    const [rows] = await pool.query(sqlqueries.wishlist.getWishlist, [
-      user_id,
-    ]);
-    return rows;
+    const [rows] = await pool.query(sqlqueries.wishlist.getWishlist, [user_id]);
+
+    // Aggregate images per product
+    const wishlistMap = new Map();
+
+    rows.forEach(row => {
+      const wishlistId = row.wishlist_id;
+
+      if (!wishlistMap.has(wishlistId)) {
+        wishlistMap.set(wishlistId, {
+          wishlist_id: wishlistId,
+          product_id: row.product_id,
+          name: row.name,
+          description: row.description,
+          category: row.category,
+          collection: row.collection,
+          material: row.material,
+          product_code: row.product_code,
+          product_wash_care: row.product_wash_care,
+          regular_price: row.regular_price,
+          selling_price: row.selling_price,
+          saree_length: row.saree_length,
+          images: row.image_url ? [{
+            id: row.image_id,
+            url: row.image_url,
+            is_primary_image: row.is_primary_image
+          }] : []
+        });
+      } else {
+        if (row.image_url) {
+          wishlistMap.get(wishlistId).images.push({
+            id: row.image_id,
+            url: row.image_url,
+            is_primary_image: row.is_primary_image
+          });
+        }
+      }
+    });
+
+    return Array.from(wishlistMap.values());
   } catch (err) {
     console.error("Error in getWishlist:", err);
     throw err;

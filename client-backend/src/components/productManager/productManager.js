@@ -120,7 +120,8 @@ const addToWishlist = async (user_id, product_id) => {
 // ====== GET USER WISHLIST ======
 const getWishlist = async (user_id) => {
   try {
-    return await dbCmds.getWishlist(user_id);
+    const wishlistItems = await dbCmds.getWishlist(user_id);
+    return wishlistItems; // each item now contains `images` array
   } catch (err) {
     console.error("Error in getWishlist:", err);
     throw err;
