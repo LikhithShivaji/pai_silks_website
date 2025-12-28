@@ -177,6 +177,9 @@ getNewReleaseProducts: `
     p.selling_price AS price,   -- IMPORTANT
     p.regular_price,
     p.category
+    FROM cart c
+    JOIN product p ON c.product_id = p.id
+    WHERE c.user_id = ?
     ORDER BY c.added_at DESC;
   `,
 
