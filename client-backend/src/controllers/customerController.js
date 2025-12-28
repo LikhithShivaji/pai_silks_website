@@ -350,21 +350,26 @@ exports.addToWishlist = async (req, res) => {
 // ====== GET WISHLIST ITEMS ======
 exports.getWishlist = async (req, res) => {
   try {
-    const { user_id } = req.params;
+    const user_id = req.params.user_id;
     if (!user_id) {
-      return res.status(400).json({ success: false, message: "User ID is required" });
+       return res.status(400).json({
+        success: false,
+        message: "user_id is required",
+      });
     }
 
-    const wishlistItems = await productManager.getWishlist(user_id);
+   const result = await productManager.getWishlist(user_id);
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      data: wishlistItems,
+      data: result,
       message: "Wishlist fetched successfully",
     });
   } catch (err) {
-    console.error("Error in getWishlist Controller:", err);
-    return res.status(500).json({ success: false, message: err.message || "Failed to fetch wishlist" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch wishlist",
+    });
   }
 };
 

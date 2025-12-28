@@ -139,27 +139,11 @@ getNewReleaseProducts: `
     `,
 
     getWishlist: `
-      SELECT 
-    w.wishlist_id,
-    p.id AS product_id,
-    p.name,
-    p.description,
-    p.category,
-    p.collection,
-    p.material,
-    p.product_code,
-    p.product_wash_care,
-    p.regular_price,
-    p.selling_price,
-    p.saree_length,
-    pi.id AS image_id,
-    pi.image_url,
-    pi.is_primary_image
-FROM wishlist w
-JOIN product p ON w.product_id = p.id
-LEFT JOIN product_images pi ON p.id = pi.product_id
-WHERE w.user_id = ?
-ORDER BY w.added_at DESC;
+      SELECT w.wishlist_id, p.*
+      FROM wishlist w
+      JOIN product p ON w.product_id = p.id
+      WHERE w.user_id = ?
+      ORDER BY w.added_at DESC;
     `,
 
     removeWishlist: `
@@ -185,22 +169,15 @@ ORDER BY w.added_at DESC;
   `,
 
  getCart: `
-     SELECT 
-      c.cart_id, 
-      c.quantity, 
-      p.id AS product_id,
-      p.name,
-      p.selling_price AS price,
-      p.regular_price,
-      p.category,
-      pi.id AS image_id,
-      pi.image_url,
-      pi.is_primary_image
-  FROM cart c
-  JOIN product p ON c.product_id = p.id
-  LEFT JOIN product_images pi ON p.id = pi.product_id
-  WHERE c.user_id = ?
-  ORDER BY c.added_at DESC, pi.is_primary_image DESC; 
+    SELECT 
+    c.cart_id, 
+    c.quantity, 
+    p.id AS product_id,
+    p.name,
+    p.selling_price AS price,   -- IMPORTANT
+    p.regular_price,
+    p.category
+    ORDER BY c.added_at DESC;
   `,
 
   updateCartQuantity: `
