@@ -139,9 +139,13 @@ getNewReleaseProducts: `
     `,
 
     getWishlist: `
-      SELECT w.wishlist_id, p.*
+      SELECT 
+      w.wishlist_id, 
+      p.*, 
+      pi.image_url
       FROM wishlist w
       JOIN product p ON w.product_id = p.id
+      LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
       WHERE w.user_id = ?
       ORDER BY w.added_at DESC;
     `,
@@ -174,11 +178,13 @@ getNewReleaseProducts: `
     c.quantity, 
     p.id AS product_id,
     p.name,
-    p.selling_price AS price,   -- IMPORTANT
+    p.selling_price AS price,
     p.regular_price,
-    p.category
+    p.category,
+    pi.image_url
     FROM cart c
     JOIN product p ON c.product_id = p.id
+    LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
     WHERE c.user_id = ?
     ORDER BY c.added_at DESC;
   `,

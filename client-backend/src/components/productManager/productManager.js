@@ -191,7 +191,13 @@ const moveWishlistToCart = async (user_id, product_id) => {
 const getCart = async (user_id) => {
   try {
     const cartItems = await dbCmds.getCart(user_id);
-    return cartItems; 
+
+    // Return the items with a fallback image if image_url is missing
+    return cartItems.map(item => ({
+      ...item,
+      // If image_url is null from the JOIN, provide a placeholder
+      image_url: item.image_url || 'https://via.placeholder.com/200x200?text=No+Image'
+    }));
     } catch (err) {
     console.error("Error in getCart:", err);
     throw err;
