@@ -4,22 +4,25 @@ import ProductCard from "./components/ProductCard";
 import CategoryCard from "./components/Categorycard.jsx";
 import ReviewCard from "./components/ReviewCard.jsx";
 import { useNavigate } from "react-router-dom";
-
 import frame from "./assets/heroframe.svg";
 import finisher from "./assets/finisher.svg";
-import underprice from "./assets/underpricecoll.svg";
-
 import trendingProducts from "./products.js";
 import { categories } from "./categoryData";
 import reviews from "./reviews.js";
-
 import React, { useEffect, useState, useContext } from "react";
 import { CartContext } from "./CartContext.jsx";
 import footerBg from "./assets/footerbgimage.svg";
 import HeroImage from "@/assets/HeroImage.png";
 import { Heart } from "lucide-react";
 import PeacockLoader from "./components/PeacockLoader";
-// import PageLoader from "./components/Pageloader";
+import { useToast } from "./ToastContext";
+import underprice from "./assets/underpricecoll.svg";
+import casualcoll from "@/assets/casualcoll.svg";
+import festivecoll from "@/assets/festivecoll.svg";
+import partywearcoll from "@/assets/partywearcoll.svg";
+import weddingcoll from "@/assets/weddingcoll.svg";
+import ethniccoll from "@/assets/ethniccoll.svg";
+import { Sparkle } from "lucide-react";
 
 function Homepage() {
   const navigate = useNavigate();
@@ -30,7 +33,11 @@ function Homepage() {
     setWishListItems,
     handleAddToCart,
     handleAddToWishList,
+    handleRemoveFromWishList,
+    handleRemoveFromCart,
   } = useContext(CartContext);
+
+  const { showToast } = useToast();
 
   const topFourProducts = trendingProducts.slice(0, 9);
 
@@ -39,10 +46,11 @@ function Homepage() {
   const [loadingCollections, setLoadingCollections] = useState(true);
   const [loadingBestSellers, setLoadingBestSellers] = useState(true);
   const [fillColor, setFillColor] = useState("transparent");
-
   const [bestSellers, setBestSellers] = useState([]);
   const [currentBestIndex, setCurrentBestIndex] = useState(0);
   const currentProduct = bestSellers[currentBestIndex];
+  const [newReleases, setNewReleases] = useState([]);
+const [loadingNew, setLoadingNew] = useState(true);
 
   const updateCart = (c) => setCartItems(c);
   const updateWishList = (w) => setWishListItems(w);
@@ -50,6 +58,23 @@ function Homepage() {
   const handleSvgClick = () => {
     setFillColor((c) => (c === "transparent" ? "#ffc780" : "transparent"));
   };
+
+  const collectionImages = {
+    "Casual Wear": casualcoll,
+    "Festive Collections": festivecoll,
+    "Party Wear": partywearcoll,
+    "Wedding Collection": weddingcoll,
+    "Ethnic Wear": ethniccoll,
+    "Under 2000": underprice,
+  };
+
+  const isWishlisted =
+    currentProduct &&
+    wishListItems.some(
+      (item) =>
+        (item.id || item.product_id) ===
+        (currentProduct.product_id || currentProduct.id)
+    );
 
   useEffect(() => {
     if (loadingBestSellers || loadingCollections) {
@@ -64,6 +89,7 @@ function Homepage() {
 
   /* Reviews auto-scroll */
   useEffect(() => {
+    window.scrollTo(0, 0);
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev === reviews.length - 1 ? 0 : prev + 1));
     }, 3000);
@@ -96,45 +122,90 @@ function Homepage() {
     return () => clearInterval(interval);
   }, [bestSellers]);
 
-  const onHeartClick = async () => {
-    const userId = localStorage.getItem("user_id");
 
-    const productForWishlist = {
-      id: currentProduct.product_id || currentProduct.id,
-      name: currentProduct.name,
-      image1: currentProduct.image_url || currentProduct.image1,
-      discounted_price: Number(currentProduct.selling_price), 
-      regular_price: Number(currentProduct.regular_price),
-      description: currentProduct.description,
-    };
-
-    handleSvgClick(); 
-    handleAddToWishList(productForWishlist);
-
-    if (userId) {
+useEffect(() => {
+    const fetchProducts = async () => {
       try {
-        const response = await fetch("https://pai-silks-website-1.onrender.com/api/wishlist/add", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            product_id: productForWishlist.id,
-          }),
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          console.log("Successfully added to Wishlist DB");
-        } else {
-          console.error("Failed to add to DB:", data.message);
+        const response = await fetch("https://pai-silks-website.onrender.com/api/get-all-product-details");
+        const result = await response.json();
+        if (result.success) {
+          const filtered = result.data.filter((p) => Number(p.is_new_release) === 1);
+          // console.log("filtered new releases are", filtered);
+          const safeData = filtered.map(p => {
+             const rawImgObj = (p.images && p.images.length > 0) ? p.images[0] : p.image_url;
+             const finalImgString = (typeof rawImgObj === 'object' && rawImgObj?.image_url) 
+                ? rawImgObj.image_url 
+                : rawImgObj;
+             return {
+                ...p,
+                id: p.product_id || p.id,
+                image1: finalImgString || "https://placehold.co/300",
+                name: p.product_name || p.name,
+                main_price: p.regular_price || p.regularPrice || 0,
+                discounted_price: p.selling_price || p.discountedPrice || 0
+             };
+          });
+          setNewReleases(safeData);
         }
       } catch (error) {
-        console.error("API Error:", error);
+        console.error("Error fetching new releases:", error);
+      } finally {
+        setLoadingNew(false);
       }
+    };
+    fetchProducts();
+  }, []);
+
+  const onHeartClick = () => {
+    if (!currentProduct) return;
+    const prodId = currentProduct.product_id || currentProduct.id;
+
+    if (isWishlisted) {
+      handleRemoveFromWishList(prodId);
+      showToast("Removed from Wishlist", "error");
     } else {
-        console.log("User not logged in, saved to local storage only.");
+      const productForWishlist = {
+        id: prodId,
+        name: currentProduct.name,
+        image1: currentProduct.image_url || currentProduct.image1,
+        discounted_price: Number(currentProduct.selling_price),
+        regular_price: Number(currentProduct.regular_price),
+        description: currentProduct.description,
+      };
+      handleAddToWishList(productForWishlist);
+      showToast("Added to Wishlist", "wishlist");
+    }
+  };
+
+  const isInCart =
+    currentProduct &&
+    cartItems.some(
+      (item) =>
+        String(item.id || item.product_id).trim() ===
+        String(currentProduct.product_id || currentProduct.id).trim()
+    );
+
+  const onCartToggle = () => {
+    if (!currentProduct) return;
+    const prodId = currentProduct.product_id || currentProduct.id;
+
+    if (isInCart) {
+      // console.log("Removing ID:", prodId);
+      handleRemoveFromCart(prodId);
+      showToast("Removed from Cart", "error");
+    } else {
+      // console.log("Adding ID:", prodId);
+      const productForCart = {
+        id: prodId,
+        name: currentProduct.name,
+        image1: currentProduct.image_url || currentProduct.image1,
+        discounted_price: Number(currentProduct.selling_price),
+        regular_price: Number(currentProduct.regular_price),
+        description: currentProduct.description,
+        quantity: 1,
+      };
+      handleAddToCart(productForCart);
+      showToast("Added to Cart", "cart");
     }
   };
 
@@ -147,7 +218,6 @@ function Homepage() {
         onWishListUpdate={updateWishList}
       />
 
-      {/* HERO SECTION */}
       <section
         className="text-white text-center py-4 bg-cover bg-fixed w-full"
         style={{ backgroundImage: `url(${footerBg})` }}
@@ -155,7 +225,7 @@ function Homepage() {
         <img src={frame} className="w-[95%] rotate-180 mx-auto" />
 
         <div className="w-full flex justify-center">
-          <div className="relative flex justify-center items-center rounded-xl w-[85%] h-130 overflow-hidden  aspect-square md:aspect-video max-h-80 sm:max-h-full">
+          <div className="relative flex justify-center items-center rounded-xl w-[85%] h-130 overflow-hidden aspect-square md:aspect-video max-h-80 sm:max-h-full">
             <img
               src={HeroImage}
               alt="Hero background"
@@ -170,24 +240,55 @@ function Homepage() {
           <u>Check out our Collections</u>
         </h1>
 
-        <div
-          className="grid grid-cols-3 md:grid-cols-6 items-center cursor-pointer"
-          onClick={() => navigate("/shop")}
-        >
+        <div className="grid grid-cols-3 gap-5 md:grid-cols-6 items-center">
           {loadingCollections ? (
             <PeacockLoader />
           ) : (
-            collections.map((c) => (
-              <div key={c.id} className="cursor-pointer">
-                <img
-                  src={c.image || underprice}
-                  className="max-w-[80%] mx-auto transition-transform duration-500 hover:scale-105"
-                />
-                <h2 className="text-[1.6vw]">{c.collection}</h2>
-              </div>
-            ))
+            collections.map((c, index) => {
+              const imageSrc = collectionImages[c.collection] || underprice;
+              return (
+                <div
+                  key={c.id || index}
+                  className="cursor-pointer"
+                  onClick={() =>
+                    navigate("/shop", {
+                      state: { selectedCollection: c.collection },
+                    })
+                  }
+                >
+                  <img
+                    src={imageSrc}
+                    className="max-w-[80%] mx-auto transition-transform duration-500 hover:scale-105"
+                    alt={c.collection}
+                  />
+                  <h2 className="text-[1.6vw]">{c.collection}</h2>
+                </div>
+              );
+            })
           )}
         </div>
+
+        <button onClick={()=>{navigate("/shop")}}
+          className="cursor-pointer group relative overflow-hidden rounded-full p-5 lg:px-12 lg:py-5 my-5 lg:my-10 text-sm lg:text-2xl font-bold font-['Poppins'] text-[#BD7923] border-2 border-[#BD7923] bg-transparent
+                      transition-all duration-500 ease-out hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923] hover:text-whitehover:border-transparent
+                      hover:scale-105 hover:shadow-[0_0_40px_rgba(189,121,35,0.6)] hover:text-white"
+        >
+          <div
+            className=" absolute inset-0 w-full h-full bg-linear-to-r from-transparent via-white/40 to-transparent -translate-x-[150%] skew-x-[-20deg] transition-transform duration-1000 ease-in-out
+                        group-hover:translate-x-[150%]"
+          />
+          <span className="relative flex items-center gap-3">
+            <Sparkle
+              className="w-6 h-6 transition-transform duration-700 group-hover:rotate-180"
+              fill="currentColor"
+            />
+            EXPLORE ALL COLLECTIONS
+            <Sparkle
+              className="w-6 h-6 transition-transform duration-700 group-hover:rotate-180"
+              fill="currentColor"
+            />
+          </span>
+        </button>
 
         <div className="pt-4">
           <img src={finisher} className="w-[95%] mx-auto" />
@@ -199,19 +300,34 @@ function Homepage() {
         <u>Check out our Newest Collections</u>
       </h1>
 
-      <div className="flex gap-4 overflow-x-auto px-2 py-4 scrollbar-hide">
-        {topFourProducts.map((product) => (
-          <div
-            key={product.id}
-            className="flex-none min-w-[190px] w-[clamp(150px,25vw,220px)]"
-          >
-            <ProductCard
-              {...product}
-              onAddToCart={() => handleAddToCart(product)}
-            />
-          </div>
-        ))}
+      {/* New Arrivals Section */}
+<div className="flex gap-4 overflow-x-auto px-2 py-4 scrollbar-hide">
+  {loadingNew ? (
+    // Optional: Simple Loading State (or use your PeacockLoader)
+    <div className="flex w-full justify-center p-10">
+       <span className="text-[#BD7923] font-bold animate-pulse">Loading New Arrivals...</span>
+    </div>
+  ) : newReleases.length > 0 ? (
+    newReleases.map((product) => (
+      <div
+        key={product.id}
+        className="flex-none min-w-47.5 w-[clamp(150px,25vw,220px)]"
+      >
+        <ProductCard
+          {...product}
+          // Ensure we pass the full object correctly to your cart handler
+          onAddToCart={() => handleAddToCart(product)}
+          showToast={showToast}
+        />
       </div>
+    ))
+  ) : (
+    // Fallback if no new releases found
+    <p className="w-full text-center text-gray-500 italic">
+      More new collections coming soon!
+    </p>
+  )}
+</div>
 
       {/* BEST SELLER */}
       {currentProduct && (
@@ -239,9 +355,9 @@ function Homepage() {
               <div className="flex flex-col lg:grid lg:grid-cols-[1.6fr_1fr] gap-8 lg:gap-12 items-start">
                 <div className="w-full flex flex-col md:flex-row-reverse gap-4 bg-white/3 backdrop-blur-md border border-white/10 rounded-3xl p-6 shadow-xl">
                   <div className="w-full md:w-[80%] bg-transparent rounded-2xl overflow-hidden shadow-sm border border-stone-200/50">
-                    <div className="aspect-[3/4] lg:aspect-square w-full relative group">
+                    <div className="aspect-3/4 lg:aspect-square w-full h-full relative group">
                       <img
-                        src={currentProduct.image_url}
+                        src={currentProduct.primary_image}
                         alt={currentProduct.name}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
                       />
@@ -252,10 +368,10 @@ function Homepage() {
                     {[1, 2, 3].map((i) => (
                       <div
                         key={i}
-                        className="relative aspect-[3/4] w-full cursor-pointer rounded-xl overflow-hidden border border-stone-200/50 hover:border-[#BD7923] transition-all"
+                        className="relative aspect-3/4 w-full cursor-pointer rounded-xl overflow-hidden border border-stone-200/50 hover:border-[#BD7923] transition-all"
                       >
                         <img
-                          src={currentProduct.image_url}
+                          src={currentProduct.primary_image}
                           alt={`Thumbnail ${i}`}
                           className="absolute inset-0 w-full h-full object-cover hover:opacity-90 transition-opacity"
                         />
@@ -265,14 +381,15 @@ function Homepage() {
                 </div>
 
                 <div className="w-full flex flex-col justify-center h-full gap-6 text-[#FFCB85] text-left rounded-3xl shadow-xl">
-                  <div className="flex justify-between items-center gap-5 h-40 flex ">
+                  <div className="flex justify-between items-center gap-5 h-40 ">
                     <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold font-['Poppins'] text-[#FFCB85] leading-tight">
                       {currentProduct.name}
                     </h1>
                     <Heart
-                      size={100}
-                      className="md:w-10 md:h-10 cursor-pointer flex-shrink-0 hover:scale-150 transition-transform"
-                      fill={fillColor}
+                      size={40}
+                      className="md:w-10 md:h-10 cursor-pointer shrink-0 hover:scale-150 transition-transform"
+                      fill={isWishlisted ? "#ffc780" : "transparent"}
+                      color={isWishlisted ? "#ffc780" : "currentColor"}
                       onClick={onHeartClick}
                     />
                   </div>
@@ -289,33 +406,19 @@ function Homepage() {
                       ₹ {currentProduct.regular_price}
                     </h5>
                   </div>
-
                   <div className="h-px w-full bg-[#FFCB85]/20 my-2"></div>
-
                   <div className="flex flex-col sm:flex-row gap-4 w-full mt-4">
                     <button
-                      onClick={() => {
-                        if (!currentProduct) return;
-
-                        const productForCart = {
-                          id: currentProduct.product_id || currentProduct.id,
-                          name: currentProduct.name,
-                          image1: currentProduct.image_url,
-                          discounted_price: Number(
-                            currentProduct.selling_price
-                          ),
-                          regular_price: Number(currentProduct.regular_price),
-                          description: currentProduct.description,
-                          quantity: 1,
-                        };
-
-                        handleAddToCart(productForCart);
-                      }}
-                      className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg shadow-orange-900/20
-                 hover:bg-gradient-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer border-2 border-[#FEDB87] bg-transparent
-                 hover:brightness-110 active:scale-95 transition-all duration-200"
+                      onClick={onCartToggle} // 👈 Use the new toggle handler
+                      className={`flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white  shadow-lg shadow-orange-900/20 cursor-pointer  border-2 border-[#FEDB87]  transition-all duration-200 active:scale-95
+                        ${
+                          isInCart
+                            ? "bg-linear-to-r from-[#FEDB87] to-[#BD7923] brightness-110" // Active Style (Filled)
+                            : "bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]" // Default Style (Outline)
+                        }
+                      `}
                     >
-                      Add to Cart
+                      {isInCart ? "Added" : "Add to Cart"}
                     </button>
 
                     <button
@@ -338,7 +441,7 @@ function Homepage() {
                         navigate("/checkout");
                       }}
                       className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg shadow-orange-900/20
-                 border-2 border-[#FEDB87] bg-transparent hover:bg-gradient-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer
+                 border-2 border-[#FEDB87] bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer
                  hover:bg-[#FEDB87]/10 active:scale-95 transition-all duration-200"
                     >
                       Buy Now

@@ -8,6 +8,7 @@ import MyProfile from "./MyProfile";
 import Checkout from "./Checkout"
 import LoginPage from "./LoginPage";
 import PeacockLoader from "./components/PeacockLoader";
+import Signup from "./components/Signup";
 
 export default function AppRouter() {
   return (
@@ -22,6 +23,7 @@ export default function AppRouter() {
         <Route path="/my-profile" element={<MyProfile />} />
         <Route path="/animation" element={<PeacockLoader />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/signup" element={<Signup />} />
       </Routes>
     </Router>
   );
