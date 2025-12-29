@@ -66,6 +66,10 @@ class Cmds {
 
     async createProduct(productData) {
         try {
+
+            const isNewRelease = productData.is_new_release !== undefined 
+            ? Number(productData.is_new_release)
+            : 0;
             const [result] = await pool.query(sqlqueries.product.insertProduct, [productData.name,
             productData.description || null,
             productData.category || null,
@@ -76,7 +80,7 @@ class Cmds {
             productData.regular_price,
             productData.selling_price || null,
             productData.saree_length || null,
-            productData.isNewRelease || 0
+            isNewRelease
             ]);
 
         

@@ -13,6 +13,8 @@ const createProduct = async (productData) => {
 
     const productId = await dbCmds.createProduct(productData);
 
+    
+
     // 2️⃣ Insert stock
     const stockQty = productData.stock_qty ?? 0;
     await dbCmds.insertProductStock(productId, stockQty);
