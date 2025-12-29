@@ -351,15 +351,14 @@ exports.addToWishlist = async (req, res) => {
 exports.getWishlist = async (req, res) => {
   try {
     const user_id = req.params.user_id;
-
     if (!user_id) {
-      return res.status(400).json({
+       return res.status(400).json({
         success: false,
         message: "user_id is required",
       });
     }
 
-    const result = await productManager.getWishlist(user_id);
+   const result = await productManager.getWishlist(user_id);
 
     res.status(200).json({
       success: true,
@@ -367,13 +366,13 @@ exports.getWishlist = async (req, res) => {
       message: "Wishlist fetched successfully",
     });
   } catch (err) {
-    console.error("Error in getWishlist Controller:", err);
     res.status(500).json({
       success: false,
       message: "Failed to fetch wishlist",
     });
   }
 };
+
 
 // ====== REMOVE FROM WISHLIST ======
 exports.removeWishlist = async (req, res) => {

@@ -66,7 +66,11 @@ class Cmds {
 
     async createProduct(productData) {
         try {
-            await pool.query(sqlqueries.product.insertProduct, [productData.name,
+
+            const isNewRelease = productData.is_new_release !== undefined 
+            ? Number(productData.is_new_release)
+            : 0;
+            const [result] = await pool.query(sqlqueries.product.insertProduct, [productData.name,
             productData.description || null,
             productData.category || null,
             productData.collection || null,
@@ -76,13 +80,28 @@ class Cmds {
             productData.regular_price,
             productData.selling_price || null,
             productData.saree_length || null,
-            productData.isNewRelease || null
+            isNewRelease
             ]);
+
+        
+            return result.insertId;
         } catch (err) {
             console.error("Error in updateSessionStatus:", err);
             throw err;
         }
     }
+
+    async insertProductStock(product_id, stock_qty) {
+        try {
+            await pool.query(
+            sqlqueries.product.insertProductStock,
+            [product_id, stock_qty ?? 0]
+    );
+        } catch (err) {
+            console.error("Error in insertProductStock:", err);
+            throw err;
+  }
+}
 
     async getOrderStats() {
         try {
@@ -144,27 +163,36 @@ class Cmds {
         }
     }
 
-    async updateProduct(productData) {
-        try {
-            await pool.query(sqlqueries.product.updateProduct, [
-                productData.name,
-                productData.description || null,
-                productData.category || null,
-                productData.collection || null,
-                productData.material || null,
-                productData.product_code || null,
-                productData.product_wash_care || null,
-                productData.regular_price,
-                productData.selling_price || null,
-                productData.saree_length || null,
-                productData.isNewRelease || null,
-                productData.id
-            ]);
-        } catch (err) {
-            console.error("Error in updateProduct:", err);
-            throw err;
-        }
-    }   
+async updateProduct(productData) {
+  try {
+    await pool.query(sqlqueries.product.updateProduct, [
+      productData.name,
+      productData.description || null,
+      productData.category || null,
+      productData.collection || null,
+      productData.material || null,
+      productData.product_code || null,
+      productData.product_wash_care || null,
+      productData.regular_price,
+      productData.selling_price || null,
+      productData.saree_length || null,
+      productData.isNewRelease,
+      productData.id
+    ]);
+  } catch (err) {
+    console.error("Error in updateProduct:", err);
+    throw err;
+  }
+}
+
+async updateProductStock(product_id, stock_qty) {
+  await pool.query(
+    sqlqueries.product.updateProductStock,
+    [stock_qty, product_id]
+  );
+}
+
+
 
     async updateOrderStatus(order_id, new_status) {
         try {
@@ -179,6 +207,49 @@ class Cmds {
         }
     }
 
+  // Delete all images for a product
+    async deleteImagesByProductId(product_id) {
+        const [result] = await pool.query(sqlqueries.product.deleteImagesByProductId, [product_id]);
+        return result.affectedRows;
+    }
+
+
+    // Optional: fetch images for a product
+    async getImagesByProductId(product_id) {
+        const [rows] = await pool.query(sqlqueries.product.getImagesByProductId, [product_id]);
+        return rows;
+    }
+
+    // Optional: reset primary image
+    async resetPrimaryImageByImageId(image_id) {
+        await pool.query(sqlqueries.product.resetPrimaryImageByImageId, [image_id]);
+    }
+
+
+    async insertImages(product_id, images) {
+  try {
+    const values = images.map(img => [
+      product_id,
+      img.image_url,
+      img.is_primary_image ?? 0
+    ]);
+
+    const [result] = await pool.query(
+      sqlqueries.product.insertImage,
+      [values] // 👈 IMPORTANT: array of arrays
+    );
+
+    return result.affectedRows;
+  } catch (err) {
+    console.error("Error in insertImages:", err);
+    throw err;
+  }
+}
+
+
+    
+
+    
 }
 
 module.exports = new Cmds();

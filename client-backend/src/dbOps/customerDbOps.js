@@ -215,10 +215,16 @@ async addToWishlist(user_id, product_id) {
 // Get all wishlist items for a user
 async getWishlist(user_id) {
   try {
-    const [rows] = await pool.query(sqlqueries.wishlist.getWishlist, [
-      user_id,
-    ]);
-    return rows;
+    const [rows] = await pool.query(sqlqueries.wishlist.getWishlist, [user_id]);
+
+    // Map through the rows to ensure every item has a valid image string
+    const wishlistWithImages = rows.map(item => ({
+      ...item,
+      // If image_url is null from the database, provide a fallback placeholder
+      image_url: item.image_url || 'https://via.placeholder.com/300x400?text=No+Image+Available'
+    }));
+
+    return wishlistWithImages;
   } catch (err) {
     console.error("Error in getWishlist:", err);
     throw err;
@@ -256,8 +262,16 @@ async wishlistCount(user_id) {
 
 async getCart(user_id) {
   try {
+    // This calls your updated SQL query that includes the JOIN
     const [rows] = await pool.query(sqlqueries.cart.getCart, [user_id]);
-    return rows; // Return empty array if none
+
+    // Optional: Add a fallback for products without images
+    const cartWithImages = rows.map(item => ({
+      ...item,
+      image_url: item.image_url || 'https://via.placeholder.com/150' // Default image if null
+    }));
+
+    return cartWithImages;
   } catch (err) {
     console.error("Error in getCart:", err);
     throw err;
