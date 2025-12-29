@@ -28,6 +28,12 @@ const updateProduct = async (productData, files = []) => {
     throw new Error("Product ID is required");
   }
 
+  // 🔥 Normalize is_new_release
+  productData.is_new_release =
+    productData.is_new_release !== undefined
+      ? Number(productData.is_new_release)
+      : 0;
+
   // 1️⃣ Update product basic details
   await dbCmds.updateProduct(productData);
 

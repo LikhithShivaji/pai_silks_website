@@ -176,7 +176,7 @@ async updateProduct(productData) {
       productData.regular_price,
       productData.selling_price || null,
       productData.saree_length || null,
-      productData.isNewRelease || 0,
+      productData.isNewRelease,
       productData.id
     ]);
   } catch (err) {
