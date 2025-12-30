@@ -39,31 +39,32 @@ const sqlqueries = {
     // ✅ Get Bestsellers (includes product, stock, and primary image)
     getBestSellers: `
       SELECT 
-          p.id,
-          p.name,
-          p.description,
-          p.category,
-          p.collection,
-          p.material,
-          p.product_code,
-          p.product_wash_care,
-          p.regular_price,
-          p.saree_length,
-          p.selling_price,
-          IFNULL(ps.stock_qty, 0) AS stock_qty,
-          COUNT(oi.product_id) AS total_sold,
-          pi.image_url AS primary_image
-      FROM order_items oi
-      JOIN product p ON oi.product_id = p.id
-      LEFT JOIN product_stock ps ON p.id = ps.product_id
-      LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
-      WHERE p.is_deleted = 0 AND IFNULL(ps.stock_qty, 0) > 0
-      GROUP BY 
-          p.id, p.name, p.description, p.category, p.collection,
-          p.material, p.product_code, p.product_wash_care,
-          p.regular_price, p.selling_price, ps.stock_qty, pi.image_url
-      ORDER BY total_sold DESC
-      LIMIT ?;
+    p.id,
+    p.name,
+    p.description,
+    p.category,
+    p.collection,
+    p.material,
+    p.product_code,
+    p.product_wash_care,
+    p.regular_price,
+    p.saree_length,
+    p.selling_price,
+    IFNULL(ps.stock_qty, 0) AS stock_qty,
+    SUM(oi.quantity) AS total_sold, -- Changed from COUNT to SUM for unit accuracy
+    pi.image_url AS primary_image
+    FROM order_items oi
+    JOIN product p ON oi.product_id = p.id
+    LEFT JOIN product_stock ps ON p.id = ps.product_id
+    LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
+    WHERE p.is_deleted = 0 
+      AND IFNULL(ps.stock_qty, 0) > 0
+    GROUP BY 
+        p.id, 
+        ps.stock_qty, 
+        pi.image_url
+    ORDER BY total_sold DESC
+    LIMIT ?;
     `,
 
   getProductByIdWithImages: `

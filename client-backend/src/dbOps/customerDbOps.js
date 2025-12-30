@@ -376,11 +376,19 @@ async checkCart(user_id, product_id) {
 
   // Reduce stock
   async reduceStock(product_id, quantity) {
+
+    // 1. Force convert to Numbers to prevent string concatenation issues
+    const pId = Number(product_id);
+    const qty = Number(quantity);
+
+    console.log(`--- Stock Update Attempt ---`);
+    console.log(`Target Product ID: ${pId}, Subtraction Qty: ${qty}`);
     const [result] = await pool.query(sqlqueries.stock.reduceStock, [
       quantity,
       product_id,
       quantity
     ]);
+    console.log(`Rows affected: ${result.affectedRows}`);
     if (result.affectedRows === 0) {
       throw new Error(`Insufficient  stock for product_id ${product_id}`);
     }
