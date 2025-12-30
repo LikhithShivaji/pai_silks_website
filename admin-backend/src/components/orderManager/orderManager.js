@@ -19,6 +19,7 @@ const getOrderDetails = async () => {
                     shipping_address: row.shipping_address,
                     payment_method: row.payment_method,
                     payment_status: row.payment_status,
+                    image_url: row.image_url,
                     shipment_status: row.shipment_status,
                     amount: 0, // will sum later
                     product_list: []
