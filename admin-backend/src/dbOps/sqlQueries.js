@@ -18,6 +18,7 @@ const sqlqueries = {
         deleteImagesByProductId: `DELETE FROM product_images WHERE product_id = ?`,
         insertProductStock: `INSERT INTO product_stock (product_id, stock_qty) VALUES (?, ?)`,
         updateProductStock: `UPDATE product_stock SET stock_qty = ?, updated_at = NOW() WHERE product_id = ?`,
+        deleteProduct: `UPDATE product SET is_deleted = 1 WHERE id = ?`,
     },
 
     dashBoard: {

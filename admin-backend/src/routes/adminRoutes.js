@@ -35,6 +35,8 @@ upload.array("images", 5), // frontend key = "images"
   adminController.insertImage
 );  
 
+router.delete('/delete-product/:id', adminController.deleteProduct);
+
 //Update product images
 //router.put('/products/:id/images', upload.array('images', 10), adminController.updateProductImages);
 
