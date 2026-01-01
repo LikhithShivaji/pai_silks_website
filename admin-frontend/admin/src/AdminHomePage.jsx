@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import PaiLogo from "./assets/PaiLogo.svg?react";
+import PaiLogo from "./assets/PaiLogo.svg";
 import { useState, useRef } from "react";
 
 import data from "@/productData.json";
@@ -8,9 +8,9 @@ import DashBoard from "./components/DashBoard";
 import AllProducts from "./components/AllProducts";
 import OrderList from "./components/OrderList";
 import AddProduct from "./components/AddProduct";
-import { Bell, Trash } from "lucide-react";
 import DisplayOrderPage from "./components/DisplayOrderPage";
 import UpdateProduct from "./components/UpdateProduct";
+import { Menu, X, Trash, Bell } from "lucide-react";
 
 const AdminHomePage = () => {
   const notifications = 3;
@@ -59,16 +59,30 @@ const AdminHomePage = () => {
     (o) => String(o.id) === String(selectedOrderId)
   );
 
-  useEffect(() => {
-  fetch("https://pai-silks-website.onrender.com/api/get-bestSeller-list")
-    .then(async (res) => {
-      console.log("BestSeller API status:", res.status);
 
+useEffect(() => {
+  fetch("https://pai-silks-website-1.onrender.com/api/bestsellers")
+    .then(async (res) => {
       const data = await res.json();
-      console.log("BestSeller API raw response:", data);
 
       if (data.success) {
-        setBestSellers(normalizeBestSellers(data.data));
+        const cleanData = data.data.map((p) => {
+          // 1. Calculate Revenue Manually
+          const price = parseFloat(p.selling_price || 0);
+          const sold = parseInt(p.total_sold || 0);
+          const totalRevenue = price * sold;
+
+          return {
+            id: p.id,
+            name: p.name,
+            image: p.primary_image || "https://placehold.co/100", 
+            totalSold: sold,
+            revenue: totalRevenue, 
+          };
+        });
+
+        setBestSellers(cleanData);
+        console.log("clean data is",cleanData)
       }
     })
     .catch((err) => {
@@ -77,22 +91,12 @@ const AdminHomePage = () => {
 }, []);
 
 
-const normalizeBestSellers = (list) => {
-  return list.map((p) => ({
-    id: p.product_id,
-    name: p.product_name,
-    image: p.image_url || null,
-    totalSold: p.total_quantity,
-    revenue: p.total_revenue,
-  }));
-};
-
-
 
   useEffect(() => {
     fetch("https://pai-silks-website.onrender.com/api/get-order-detils")
       .then((res) => res.json())
       .then((res) => {
+        console.log("🔥 FRESH DATA FROM DB:", res);
         if (res.success) {
           setOrders(normalizeOrders(res.data));
           console.log("response is ", res);
@@ -107,7 +111,7 @@ const normalizeBestSellers = (list) => {
       orderId: o.id,
       date: o.date,
       customerName: o.customer_name || "Guest",
-      status: o.status_of_order,
+      status: o.status_of_order || o.status || "Pending",
       amount: o.amount,
       address: o.shipping_address,
       paymentMethod: o.payment_method,
@@ -116,15 +120,19 @@ const normalizeBestSellers = (list) => {
         name: p.product_name || "Product",
         qty: p.quantity,
         price: Number(p.price),
+        // 👇 ADD THIS LINE
+        image: p.image_url, 
       })),
     }));
   };
 
   const changeOrderStatus = async (orderId, newStatus) => {
-    // optimistic update
+    // 1. Optimistic UI Update (Keep this, it's good!)
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+      prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status: newStatus } : o))
     );
+
+    console.log("📤 Sending Update for ID:", orderId, "Status:", newStatus);
 
     try {
       const res = await fetch(
@@ -132,22 +140,31 @@ const normalizeBestSellers = (list) => {
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, status: newStatus }),
+          
+          // 👇 THE UNIVERSAL PAYLOAD (Send every possible name)
+          body: JSON.stringify({ 
+              // ID variations
+              id: orderId,
+              orderId: orderId, 
+              order_id: orderId,
+
+              // Status variations
+              status: newStatus, 
+              status_of_order: newStatus,
+              order_status: newStatus
+          }),
         }
       );
 
-      console.log("PUT status code:", res.status);
-
       const data = await res.json();
-      console.log("PUT response body:", data);
+      console.log("📥 Backend Response:", data);
 
       if (!res.ok) {
         console.error("Update failed on backend");
-      } else {
-        console.log("✅ Order status updated successfully");
-      }
+        // Optional: Revert UI if failed
+      } 
     } catch (err) {
-      console.error("❌ Network / fetch error", err);
+      console.error("❌ Network error", err);
     }
   };
 
@@ -157,6 +174,7 @@ const normalizeBestSellers = (list) => {
         return <DashBoard
       displayOrderPage={displayOrderPage}
       bestSellers={bestSellers}
+      orders={orders}
     />;
 
       case "allProducts":
@@ -188,6 +206,7 @@ const normalizeBestSellers = (list) => {
       case "addProduct":
         return (
           <AddProduct
+            categories={categories}
             categoryName={selectedCategory}
             setCategoryProducts={setCategoryProducts}
             onBack={() => setCurrentView("allProducts")}
@@ -249,144 +268,180 @@ const normalizeBestSellers = (list) => {
     setActionOpenIndex(null);
   };
 
-  return (
-    <div className="bg-[#FAFAFA] flex h-screen">
-      <div className="h-full w-[20%] flex flex-col gap-20 items-center p-[2%] border-1">
-        <div className="flex flex-col w-full h-fit gap-5">
-          <div className="w-full flex justify-center">
-            <PaiLogo alt="" />
-          </div>
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-          {/* Dashboard */}
-          <div
-            onClick={handleGoToDashBoardPage}
-            className={`rounded-xl w-full p-3 text-center cursor-pointer transition-colors duration-300
+  const renderSidebarContent = () => (
+    <div className="flex flex-col gap-20 items-center p-[5%] w-full h-full overflow-y-scroll">
+      
+      <div className="flex flex-col w-full h-fit gap-5">
+        <div className="w-full flex justify-between items-center">
+           <div className="flex-1 flex justify-center">
+             <img src={PaiLogo} alt="" />
+           </div>
+           
+           <div className="xl:hidden cursor-pointer" onClick={() => setIsMobileMenuOpen(false)}>
+             <X size={28} />
+           </div>
+        </div>
+
+        <div
+          onClick={() => {
+            handleGoToDashBoardPage();
+            setIsMobileMenuOpen(false); 
+          }}
+          className={`rounded-xl w-full p-3 text-center cursor-pointer transition-colors duration-300
           ${
             activeView === "dashboard"
               ? "bg-[#68232B] text-white"
               : "hover:bg-[#68232B] hover:text-white text-black"
           }`}
-          >
-            Dashboard
-          </div>
+        >
+          Dashboard
+        </div>
 
-          {/* Order List */}
-          <div
-            onClick={handleOrderList}
-            className={`rounded-xl w-full p-3 text-center cursor-pointer transition-colors duration-300
+        <div
+          onClick={() => {
+            handleOrderList();
+            setIsMobileMenuOpen(false);
+          }}
+          className={`rounded-xl w-full p-3 text-center cursor-pointer transition-colors duration-300
           ${
             activeView === "orders"
               ? "bg-[#68232B] text-white"
               : "hover:bg-[#68232B] hover:text-white text-black"
           }`}
-          >
-            Order List
-          </div>
+        >
+          Order List
         </div>
+      </div>
 
-        <div className="flex flex-col gap-5 w-full">
-          <p className="text-2xl w-full text-center font-semibold">
-            Categories
-          </p>
+      <div className="flex flex-col gap-5 w-full">
+        <p className="text-2xl w-full text-center font-semibold">
+          Categories
+        </p>
 
-          {/* Render saved categories */}
-          {categories.map((category, index) => (
-            <div
-              key={index}
-              className={`relative border rounded-xl flex justify-between items-center transition-colors duration-300 cursor-pointer 
+        {categories.map((category, index) => (
+          <div
+            key={index}
+            className={`relative border rounded-xl flex justify-between items-center transition-colors duration-300 cursor-pointer 
             ${
               activeView === category
                 ? "bg-[#68232B] text-white"
                 : "hover:bg-[#68232B] hover:text-white text-black"
             }`}
-              onMouseEnter={() => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
+            <p
+              className="w-full h-full p-3 rounded-xl"
+              onClick={() => {
+                setSelectedCategory(category);
+                setActiveView(category);
+                handleGoToAllProductsPage();
+                setIsMobileMenuOpen(false);
+              }}
             >
-              <p
-                className="w-full h-full p-3 rounded-xl"
-                onClick={() => {
-                  setSelectedCategory(category);
-                  setActiveView(category); // ✅ highlight this category
-                  handleGoToAllProductsPage();
+              {category}
+            </p>
+            {hoveredIndex === index && (
+              <div
+                className="absolute right-2 cursor-pointer flex justify-center items-center"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(index);
                 }}
               >
-                {category}
-              </p>
-
-              {/* Show delete icon on hover */}
-              {hoveredIndex === index && (
-                <div
-                  className="absolute right-2 cursor-pointer flex justify-center items-center"
-                  onClick={(e) => {
-                    e.stopPropagation(); // prevent triggering category click
-                    handleDelete(index);
-                  }}
-                >
-                  <Trash />
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Add new category input + buttons */}
-          {isAdding && (
-            <div className="flex flex-col gap-2">
-              <input
-                type="text"
-                placeholder="Enter category name"
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                className="p-2 border rounded-lg outline-none"
-              />
-              <div className="flex w-full justify-center gap-3">
-                <div
-                  onClick={handleCancel}
-                  className="bg-black w-full text-white px-3 py-1 rounded-lg text-center"
-                >
-                  Cancel
-                </div>
-                <div
-                  onClick={handleSave}
-                  className="bg-black w-full text-white px-3 py-1 rounded-lg text-center"
-                >
-                  Save
-                </div>
+                <Trash size={18} />
               </div>
-            </div>
-          )}
-
-          {/* Add category button */}
-          {!isAdding && (
-            <div
-              className="border-1 p-3 rounded-xl bg-[#68232B] flex justify-center items-center text-white cursor-pointer"
-              onClick={handleAddClick}
-            >
-              ADD CATEGORY
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="h-full w-[85%]">
-        <div className="h-[10%] p-3 px-10 flex gap-5 items-center justify-end border-1">
-          <div
-            className="relative inline-block cursor-pointer"
-            onClick={() => alert("Go to OrderSection")}
-          >
-            <Bell className="w-6 h-6 text-gray-800" />
-            {notifications > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                {notifications}
-              </span>
             )}
           </div>
-          <div>Admin</div>
+        ))}
+
+        {isAdding && (
+          <div className="flex flex-col gap-2">
+            <input
+              type="text"
+              placeholder="Enter category name"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              className="p-2 border rounded-lg outline-none"
+            />
+            <div className="flex w-full justify-center gap-3">
+              <div
+                onClick={handleCancel}
+                className="bg-black w-full text-white px-3 py-1 rounded-lg text-center"
+              >
+                Cancel
+              </div>
+              <div
+                onClick={handleSave}
+                className="bg-black w-full text-white px-3 py-1 rounded-lg text-center"
+              >
+                Save
+              </div>
+            </div>
+          </div>
+        )}
+        {!isAdding && (
+          <div
+            className="border-1 p-3 rounded-xl bg-[#68232B] flex justify-center items-center text-white cursor-pointer"
+            onClick={handleAddClick}
+          >
+            ADD CATEGORY
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="bg-[#FAFAFA] flex h-screen w-full relative">
+      
+      <div className="h-full w-[20%] hidden xl:flex border-r border-gray-200">
+        {renderSidebarContent()}
+      </div>
+      {isMobileMenuOpen && (
+        <div 
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      <div className={`fixed top-0 left-0 h-full w-[75%] bg-[#FAFAFA] z-50 transform transition-transform duration-300 shadow-2xl xl:hidden ${
+        isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+      }`}>
+         {renderSidebarContent()}
+      </div>
+
+      <div className="h-full flex-1 flex flex-col w-full">
+        <div className="h-[10%] p-3 px-5 md:px-10 flex items-center justify-between border-b">
+            <div className="flex items-center gap-4">
+                <button 
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="xl:hidden p-2 rounded-md hover:bg-gray-200"
+                >
+                    <Menu className="w-6 h-6 text-black" />
+                </button>
+            </div>
+            <div className="flex gap-5 items-center">
+                <div
+                    className="relative inline-block cursor-pointer"
+                    onClick={() => alert("Go to OrderSection")}
+                >
+                    <Bell className="w-6 h-6 text-gray-800" />
+                    {notifications > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {notifications}
+                    </span>
+                    )}
+                </div>
+                <button className="bg-[]">Logout</button>
+            </div>
         </div>
         <div
           ref={containerRef}
-          className=" h-[90%] w-full bg-[#FFE9CC] overflow-y-auto scrollbar-hide"
+          className="h-[90%] w-full bg-[#FFE9CC] overflow-y-auto scrollbar-hide"
         >
-          <div className="w-full h-full border-1">{renderView()}</div>
+          <div className="w-full h-full">{renderView()}</div>
         </div>
       </div>
     </div>

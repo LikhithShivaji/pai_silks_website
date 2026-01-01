@@ -40,34 +40,48 @@ export const columns = [
   },
 
   {
-  id: "products",
-  header: ({ column }) => (
-    <div className="flex justify-center">
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Product Name
-        <ArrowUpDown className="ml-2 h-4 w-4" />
-      </Button>
-    </div>
-  ),
-  cell: ({ row }) => {
-    const products = row.original.product;
+    accessorKey: "product",
+    // 1. Keep your existing Sortable Header
+    header: ({ column }) => {
+      return (
+        <div className="flex justify-center">
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Product
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      );
+    },
+    // 2. Add this Cell Renderer for the "+X more" logic
+    cell: ({ row }) => {
+      // Get the list of products
+      const products = row.original.product; 
 
-    if (!Array.isArray(products) || products.length === 0) {
-      return <div className="text-center">—</div>;
-    }
+      // Safety check: Ensure it is an array
+      if (!Array.isArray(products) || products.length === 0) {
+        return <div className="text-center">-</div>;
+      }
 
-    return (
-      <div className="text-center">
-        {products
-          .map(p => p.name || "Unnamed Product")
-          .join(", ")}
-      </div>
-    );
+      // Logic: Get 1st name & count the rest
+      const firstName = products[0].name || "Unknown Product";
+      const remainingCount = products.length - 1;
+
+      return (
+        <div className="flex flex-col items-center text-center">
+          <span className="font-medium">{firstName}</span>
+          
+          {remainingCount > 0 && (
+            <span className="text-xs text-[#68232B] font-bold">
+              +{remainingCount} others
+            </span>
+          )}
+        </div>
+      );
+    },
   },
-},
 
 
   {
