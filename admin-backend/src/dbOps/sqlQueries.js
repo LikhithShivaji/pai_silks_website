@@ -18,6 +18,7 @@ const sqlqueries = {
         deleteImagesByProductId: `DELETE FROM product_images WHERE product_id = ?`,
         insertProductStock: `INSERT INTO product_stock (product_id, stock_qty) VALUES (?, ?)`,
         updateProductStock: `UPDATE product_stock SET stock_qty = ?, updated_at = NOW() WHERE product_id = ?`,
+        deleteProduct: `UPDATE product SET is_deleted = 1 WHERE id = ?`,
     },
 
     dashBoard: {
@@ -27,7 +28,17 @@ const sqlqueries = {
     },
 
     orders: {
-        getAllOrderData: `SELECT o.order_id, o.order_date, o.user_id, o.status, o.shipping_address,o.payment_method,o.payment_status, oi.product_id, oi.quantity, oi.price, s.shipment_status, mu.user_name, mu.pri_email, p.name from orders o JOIN order_items oi ON oi.order_id = o.order_id LEFT JOIN shipments s ON s.order_id = o.order_id LEFT JOIN payments py ON py.order_id = o.order_id LEFT JOIN master_user mu ON mu.user_id = o.user_id LEFT JOIN product p ON p.id = oi.product_id`,
+        getAllOrderData: `SELECT 
+    o.order_id, o.order_date, o.status, o.shipping_address, o.payment_method, 
+    o.payment_status, oi.product_id, oi.quantity, oi.price, s.shipment_status, 
+    mu.user_name, p.name as product_name, 
+    pi.image_url -- Select the image URL here
+    FROM orders o 
+    JOIN order_items oi ON oi.order_id = o.order_id 
+    LEFT JOIN shipments s ON s.order_id = o.order_id 
+    LEFT JOIN master_user mu ON mu.user_id = o.user_id 
+    LEFT JOIN product p ON p.id = oi.product_id
+    LEFT JOIN product_images pi ON pi.product_id = oi.product_id AND pi.is_primary_image = 1`,
         updateOrderStatus: `UPDATE orders SET status = ? WHERE order_id = ?`
     }   
 

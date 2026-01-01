@@ -152,7 +152,16 @@ const insertImages = async (product_id, images) => {
   return await dbCmds.insertImages(product_id, images);
 };
 
+const deleteProduct = async (productId) => {
+    // Check if product exists or perform other logic if needed
+    const result = await dbCmds.deleteProduct(productId);
+    
+    if (result.affectedRows === 0) {
+        throw new Error("Product not found or already deleted");
+    }
 
+    return result;
+};
 
 
 
@@ -164,5 +173,6 @@ module.exports = {
     updateProduct,
     updateImages,
     insertImages,
+    deleteProduct 
     
 };

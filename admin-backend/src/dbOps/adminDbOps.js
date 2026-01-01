@@ -176,7 +176,7 @@ async updateProduct(productData) {
       productData.regular_price,
       productData.selling_price || null,
       productData.saree_length || null,
-      productData.isNewRelease,
+      productData.is_new_release,
       productData.id
     ]);
   } catch (err) {
@@ -246,7 +246,15 @@ async updateProductStock(product_id, stock_qty) {
   }
 }
 
-
+    async deleteProduct(productId) {
+        try {
+            const [result] = await pool.query(sqlqueries.product.deleteProduct, [productId]);
+            return result;
+        } catch (err) {
+            console.error("Error in deleteProduct DB Ops:", err);
+            throw err;
+        }
+    }
     
 
     

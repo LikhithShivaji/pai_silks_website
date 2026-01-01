@@ -4,7 +4,6 @@ const appConstants = require('../../constants/appConstants');
 const getOrderDetails = async () => {
     try {
         const rows = await dbCmds.getAllOrderData();
-
         const ordersMap = {};
 
         rows.forEach(row => {
@@ -20,30 +19,29 @@ const getOrderDetails = async () => {
                     payment_method: row.payment_method,
                     payment_status: row.payment_status,
                     shipment_status: row.shipment_status,
-                    amount: 0, // will sum later
+                    amount: 0, 
                     product_list: []
                 };
             }
 
+            // ADDED: image_url is now pushed inside each product object
             ordersMap[orderId].product_list.push({
-                product_name: row.name,
+                product_name: row.product_name,
                 prod_id: row.product_id,
                 quantity: row.quantity,
-                price: row.price
+                price: row.price,
+                image_url: row.image_url // <--- Each product now has its own image
             });
 
+            // Calculate total amount
             ordersMap[orderId].amount = ordersMap[orderId].product_list.reduce(
-                (sum, prod) => sum + prod.price * prod.quantity,
+                (sum, prod) => sum + (parseFloat(prod.price) * prod.quantity),
                 0
             );
         });
 
-        const result = Object.values(ordersMap);
-
-        return result;
-
+        return Object.values(ordersMap);
     } catch (error) {
-        error.httpCode = error.httpCode || appConstants.HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR;
         throw error;
     }
 };
