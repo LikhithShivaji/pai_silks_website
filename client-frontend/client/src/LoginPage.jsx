@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CartContext } from "./CartContext";
-import footerBg from "@/assets/footerbgimage.svg";
+import footerBg from "@/assets/footerbgimnage.png";
 import {
   Mail,
   Lock,
@@ -34,6 +34,9 @@ const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
 
+    // 1. Keep a backup of the Guest Cart before we do anything
+    const guestCart = [...cartItems];
+
     try {
       const response = await fetch("https://pai-silks-website-1.onrender.com/api/customer-login", {
         method: "POST",
@@ -45,7 +48,6 @@ const LoginPage = () => {
       });
 
       const data = await response.json();
-      // console.log("Login Response:", data);
 
       if (data.user_id) {
         const userId = data.user_id;
@@ -54,13 +56,13 @@ const LoginPage = () => {
         localStorage.setItem("user_id", userId);
         localStorage.setItem("user_name", userName);
         localStorage.setItem("user_email", formData.email);
-        try {
-            // console.log("Starting Sync...");
 
+        try {
             const syncPromises = [];
 
-            if (cartItems.length > 0) {
-              cartItems.forEach(item => {
+            // Sync Cart (Keep this as is)
+            if (guestCart.length > 0) {
+              guestCart.forEach(item => {
                 syncPromises.push(
                     fetch("https://pai-silks-website-1.onrender.com/api/cart/add", {
                         method: "POST",
@@ -74,6 +76,8 @@ const LoginPage = () => {
                 );
               });
             }
+
+            // Sync Wishlist (Keep as is)
             if (wishListItems.length > 0) {
                 wishListItems.forEach(item => {
                     syncPromises.push(
@@ -90,20 +94,54 @@ const LoginPage = () => {
             }
 
             await Promise.all(syncPromises);
-            // console.log("Sync Complete!");
+
+            // Fetch final server data
             const finalCartRes = await fetch(`https://pai-silks-website-1.onrender.com/api/cart/cart-data?user_id=${userId}`);
             const finalCartData = await finalCartRes.json();
-            if(finalCartData.success) setCartItems(finalCartData.data);
 
+            if(finalCartData.success) {
+                const cleanCartData = finalCartData.data.map(serverItem => {
+                    // 👇 SMART MERGE LOGIC STARTS HERE
+                    // Try to find this item in our local guest cart
+                    const localItem = guestCart.find(local => 
+                        (local.id === serverItem.product_id) || 
+                        (local.id === serverItem.id) ||
+                        (local.product_id === serverItem.product_id)
+                    );
+
+                    // If we have a local quantity, prefer it (because it's the most recent user action)
+                    // Otherwise use server quantity
+                    const localQty = localItem ? Number(localItem.quantity) : 0;
+                    const serverQty = Number(serverItem.quantity || 1);
+                    
+                    // Use the HIGHER of the two to be safe
+                    const finalQty = Math.max(localQty, serverQty); 
+
+                    return {
+                        ...serverItem,
+                        id: serverItem.product_id || serverItem.id, 
+                        name: serverItem.product_name || serverItem.name,
+                        image: serverItem.image_url || serverItem.product_image || serverItem.image || serverItem.image1,
+                        quantity: finalQty, // <--- Using the smart quantity
+                        discounted_price: Number(serverItem.discounted_price || serverItem.selling_price || serverItem.price || 0),
+                        selling_price: Number(serverItem.selling_price || serverItem.price || 0)
+                    };
+                });
+
+                setCartItems(cleanCartData);
+            }
+
+            // Wishlist fetch...
             const finalWishRes = await fetch(`https://pai-silks-website-1.onrender.com/api/wishlist/${userId}`);
             const finalWishData = await finalWishRes.json();
             if(finalWishData.success) setWishListItems(finalWishData.data);
 
         } catch (syncErr) {
-            console.warn("Sync warning (Non-critical):", syncErr);
+            console.warn("Sync warning:", syncErr);
         }
 
-        if (cartItems.length > 0 || location.state?.from === "checkout") {
+        // Navigate
+        if (guestCart.length > 0 || location.state?.from === "checkout") {
              navigate("/checkout");
         } else {
              navigate("/");

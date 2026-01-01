@@ -19,6 +19,7 @@ const AdminHomePage = () => {
   const [activeView, setActiveView] = useState("dashboard");
   const [currentView, setCurrentView] = useState("dashboard");
 
+  // Changed: Categories will now store objects from DB: [{id: 1, name: "Silk"}]
   const [categories, setCategories] = useState([]);
   const [categoryProducts, setCategoryProducts] = useState({});
 
@@ -30,6 +31,9 @@ const AdminHomePage = () => {
   const [updateProductDetails, setUpdateProductDetails] = useState(null);
   const containerRef = useRef(null);
   const [bestSellers, setBestSellers] = useState([]);
+
+  // Base URL for API calls
+  const API_BASE = "https://pai-silks-website.onrender.com";
 
   const handleGoToDashBoardPage = () => {
     setCurrentView("dashboard");
@@ -59,38 +63,53 @@ const AdminHomePage = () => {
     (o) => String(o.id) === String(selectedOrderId)
   );
 
-
-useEffect(() => {
-  fetch("https://pai-silks-website-1.onrender.com/api/bestsellers")
-    .then(async (res) => {
+  // --- 1. NEW LOGIC: Fetch Categories from Database ---
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/getcategory`);
       const data = await res.json();
-
       if (data.success) {
-        const cleanData = data.data.map((p) => {
-          // 1. Calculate Revenue Manually
-          const price = parseFloat(p.selling_price || 0);
-          const sold = parseInt(p.total_sold || 0);
-          const totalRevenue = price * sold;
-
-          return {
-            id: p.id,
-            name: p.name,
-            image: p.primary_image || "https://placehold.co/100", 
-            totalSold: sold,
-            revenue: totalRevenue, 
-          };
-        });
-
-        setBestSellers(cleanData);
-        console.log("clean data is",cleanData)
+        setCategories(data.data || []);
       }
-    })
-    .catch((err) => {
-      console.error("BestSeller API error:", err);
-    });
-}, []);
+    } catch (err) {
+      console.error("Error fetching categories:", err);
+    }
+  };
+
+  // Load categories on mount (Replaces the localStorage useEffect)
+  useEffect(() => {
+    fetchCategories();
+  }, []);
 
 
+  useEffect(() => {
+    fetch("https://pai-silks-website-1.onrender.com/api/bestsellers")
+      .then(async (res) => {
+        const data = await res.json();
+
+        if (data.success) {
+          const cleanData = data.data.map((p) => {
+            const price = parseFloat(p.selling_price || 0);
+            const sold = parseInt(p.total_sold || 0);
+            const totalRevenue = price * sold;
+
+            return {
+              id: p.id,
+              name: p.name,
+              image: p.primary_image || "https://placehold.co/100", 
+              totalSold: sold,
+              revenue: totalRevenue, 
+            };
+          });
+
+          setBestSellers(cleanData);
+          console.log("clean data is", cleanData);
+        }
+      })
+      .catch((err) => {
+        console.error("BestSeller API error:", err);
+      });
+  }, []);
 
   useEffect(() => {
     fetch("https://pai-silks-website.onrender.com/api/get-order-detils")
@@ -120,14 +139,12 @@ useEffect(() => {
         name: p.product_name || "Product",
         qty: p.quantity,
         price: Number(p.price),
-        // 👇 ADD THIS LINE
         image: p.image_url, 
       })),
     }));
   };
 
   const changeOrderStatus = async (orderId, newStatus) => {
-    // 1. Optimistic UI Update (Keep this, it's good!)
     setOrders((prev) =>
       prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status: newStatus } : o))
     );
@@ -140,15 +157,10 @@ useEffect(() => {
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          
-          // 👇 THE UNIVERSAL PAYLOAD (Send every possible name)
           body: JSON.stringify({ 
-              // ID variations
               id: orderId,
               orderId: orderId, 
               order_id: orderId,
-
-              // Status variations
               status: newStatus, 
               status_of_order: newStatus,
               order_status: newStatus
@@ -161,7 +173,6 @@ useEffect(() => {
 
       if (!res.ok) {
         console.error("Update failed on backend");
-        // Optional: Revert UI if failed
       } 
     } catch (err) {
       console.error("❌ Network error", err);
@@ -172,10 +183,10 @@ useEffect(() => {
     switch (currentView) {
       case "dashboard":
         return <DashBoard
-      displayOrderPage={displayOrderPage}
-      bestSellers={bestSellers}
-      orders={orders}
-    />;
+          displayOrderPage={displayOrderPage}
+          bestSellers={bestSellers}
+          orders={orders}
+        />;
 
       case "allProducts":
         return (
@@ -206,7 +217,8 @@ useEffect(() => {
       case "addProduct":
         return (
           <AddProduct
-            categories={categories}
+            // Map objects back to strings for child component compatibility
+            categories={categories.map(c => c.name)}
             categoryName={selectedCategory}
             setCategoryProducts={setCategoryProducts}
             onBack={() => setCurrentView("allProducts")}
@@ -225,37 +237,40 @@ useEffect(() => {
 
       default:
         return <DashBoard
-      displayOrderPage={displayOrderPage}
-      bestSellers={bestSellers}
-    />;;
+          displayOrderPage={displayOrderPage}
+          bestSellers={bestSellers}
+        />;
     }
   };
-
-  useEffect(() => {
-    const stored = localStorage.getItem("categories");
-    if (stored) {
-      setCategories(JSON.parse(stored));
-    } else {
-      setCategories(data.categories); // load from data.json initially
-    }
-  }, []);
 
   useEffect(() => {
     if (containerRef.current) containerRef.current.scrollTop = 0;
   }, [currentView]);
 
-  const updateCategories = (newList) => {
-    setCategories(newList);
-    localStorage.setItem("categories", JSON.stringify(newList));
-  };
-
   const handleAddClick = () => setIsAdding(true);
 
-  const handleSave = () => {
+  // --- 2. NEW LOGIC: Save to Database ---
+  const handleSave = async () => {
     if (newCategory.trim() === "") return;
-    updateCategories([...categories, newCategory]);
-    setNewCategory("");
-    setIsAdding(false);
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/addcategory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newCategory }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Refresh list to get the new ID
+        fetchCategories();
+        setNewCategory("");
+        setIsAdding(false);
+      }
+    } catch (err) {
+      console.error("Error adding category:", err);
+      alert("Failed to add category");
+    }
   };
 
   const handleCancel = () => {
@@ -263,9 +278,25 @@ useEffect(() => {
     setIsAdding(false);
   };
 
-  const handleDelete = (index) => {
-    updateCategories(categories.filter((_, i) => i !== index));
-    setActionOpenIndex(null);
+  // --- 3. NEW LOGIC: Delete from Database ---
+  const handleDelete = async (id) => {
+    // Note: The UI loop passes 'cat.id' now, not index
+    if (!window.confirm("Are you sure you want to delete this category?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/categories/${id}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        fetchCategories(); // Refresh list
+        setActionOpenIndex(null);
+      } else {
+        alert("Failed to delete category");
+      }
+    } catch (err) {
+      console.error("Error deleting category:", err);
+    }
   };
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -320,12 +351,12 @@ useEffect(() => {
           Categories
         </p>
 
-        {categories.map((category, index) => (
+        {categories.map((cat, index) => (
           <div
-            key={index}
+            key={cat.id || index} // Use DB ID for key
             className={`relative border rounded-xl flex justify-between items-center transition-colors duration-300 cursor-pointer 
             ${
-              activeView === category
+              activeView === cat.name
                 ? "bg-[#68232B] text-white"
                 : "hover:bg-[#68232B] hover:text-white text-black"
             }`}
@@ -335,20 +366,20 @@ useEffect(() => {
             <p
               className="w-full h-full p-3 rounded-xl"
               onClick={() => {
-                setSelectedCategory(category);
-                setActiveView(category);
+                setSelectedCategory(cat.name); // Pass name string
+                setActiveView(cat.name);
                 handleGoToAllProductsPage();
                 setIsMobileMenuOpen(false);
               }}
             >
-              {category}
+              {cat.name}
             </p>
             {hoveredIndex === index && (
               <div
                 className="absolute right-2 cursor-pointer flex justify-center items-center"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDelete(index);
+                  handleDelete(cat.id); // Pass DB ID to delete
                 }}
               >
                 <Trash size={18} />
@@ -439,7 +470,7 @@ useEffect(() => {
         </div>
         <div
           ref={containerRef}
-          className="h-[90%] w-full bg-[#FFE9CC] overflow-y-auto scrollbar-hide"
+          className="h-[90%] w-full bg-[#FFE9CC] overflow-y-auto scrollbar-hide p-5"
         >
           <div className="w-full h-full">{renderView()}</div>
         </div>

@@ -2,20 +2,20 @@ import React, { useEffect, useContext } from "react";
 import CartItem from "./CartItem";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";
-import footerBg from "../assets/footerbgimage.svg";
-import { X, ShoppingBag } from 'lucide-react';
+import footerBg from "../assets/footerbgimnage.png";
+import { X, ShoppingBag } from "lucide-react";
 
 const Cart = ({ onClose }) => {
   const navigate = useNavigate();
 
   const {
-    cartItems,        
-    setCartItems,     
+    cartItems,
+    setCartItems,
     dynamicCartItem,
     setDynamicCartItem,
     total,
     setTotal,
-    handleRemoveFromCart // <--- 1. Import the new function
+    handleRemoveFromCart, // <--- 1. Import the new function
   } = useContext(CartContext);
 
   // 1. Initialize quantities from Global Cart when drawer opens
@@ -43,15 +43,18 @@ const Cart = ({ onClose }) => {
     // API Call
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/cart/update", {
-          method: "POST", // Check if your API uses POST or PUT
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            product_id: itemToUpdate.id || itemToUpdate.product_id,
-            quantity: newQuantity
-          }),
-        });
+        await fetch(
+          "https://pai-silks-website-1.onrender.com/api/cart/update",
+          {
+            method: "POST", // Check if your API uses POST or PUT
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              product_id: itemToUpdate.id || itemToUpdate.product_id,
+              quantity: newQuantity,
+            }),
+          }
+        );
       } catch (error) {
         console.error("Failed to update quantity DB:", error);
       }
@@ -63,18 +66,27 @@ const Cart = ({ onClose }) => {
 
   // 4. Calculate Total
   useEffect(() => {
-    setTotal(
-      dynamicCartItem.reduce(
-        (acc, item) => acc + (item.quantity || 1) * (Number(item.discounted_price) || Number(item.selling_price) || 0),
-        0
-      )
-    );
+    const calculatedTotal = dynamicCartItem.reduce((acc, item) => {
+      const qty = Number(item.quantity) || 1;
+
+      // 👇 FIX: Added 'item.price' and 'item.amount' to the list
+      const price =
+        Number(item.discounted_price) ||
+        Number(item.price) ||
+        Number(item.selling_price) ||
+        Number(item.amount) ||
+        0;
+
+      return acc + qty * price;
+    }, 0);
+
+    setTotal(calculatedTotal);
   }, [dynamicCartItem, setTotal]);
 
   // 5. PROCEED TO CHECKOUT
   const handleProceedToCheckout = () => {
     const userId = localStorage.getItem("user_id");
-    onClose(); 
+    onClose();
 
     if (userId) {
       navigate("/checkout");
@@ -85,7 +97,6 @@ const Cart = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300">
-      
       {/* Sidebar */}
       <div
         className="
@@ -99,13 +110,18 @@ const Cart = ({ onClose }) => {
         "
       >
         {/* --- HEADER --- */}
-        <div 
+        <div
           className="relative px-6 py-6 border-b border-[#68232B]/10 flex justify-between items-center bg-white/50"
-          style={{ backgroundImage: `url(${footerBg})`}}
+          style={{
+            backgroundImage: `url(${footerBg})`,
+            backgroundSize: "cover", // 👈 Forces image to shrink to fit the box
+            backgroundPosition: "center", // 👈 Keeps the important part in the middle
+            backgroundRepeat: "no-repeat", // 👈 Prevents tiling if the box is huge
+          }}
         >
           <div className="flex items-center gap-3 z-10">
             <div className="p-2 bg-[#68232B]/10 rounded-full text-[#FFCB85]">
-                <ShoppingBag size={20} />
+              <ShoppingBag size={20} />
             </div>
             <h2 className="text-xl font-bold text-[#FFCB85] tracking-wide">
               Your Cart
@@ -131,7 +147,7 @@ const Cart = ({ onClose }) => {
                 <ShoppingBag size={48} strokeWidth={1} />
               </div>
               <p className="text-lg font-medium">Your cart is empty</p>
-              <button 
+              <button
                 onClick={onClose}
                 className="text-sm underline underline-offset-4 hover:text-[#68232B]"
               >
@@ -141,8 +157,8 @@ const Cart = ({ onClose }) => {
           ) : (
             <>
               {dynamicCartItem.map((item, index) => (
-                <div 
-                  key={item.id || index} 
+                <div
+                  key={item.id || index}
                   className="bg-white/60 backdrop-blur-md rounded-lg border border-white/10 hover:shadow-lg overflow-hidden transition-all duration-300"
                 >
                   <CartItem
@@ -150,14 +166,18 @@ const Cart = ({ onClose }) => {
                     index={index}
                     onQuantityChange={changeQuantity}
                     // --- 2. Use the Context Function Here ---
-                    onRemove={() => handleRemoveFromCart(item.id || item.product_id)}
+                    onRemove={() =>
+                      handleRemoveFromCart(item.id || item.product_id)
+                    }
                   />
                 </div>
               ))}
 
               {/* Bill Summary */}
               <div className="mt-6 bg-white/80 backdrop-blur-md rounded-xl p-5 border border-white/40 shadow-sm text-[#68232B]">
-                <h3 className="font-bold mb-4 border-b border-[#68232B]/10 pb-2">Order Summary</h3>
+                <h3 className="font-bold mb-4 border-b border-[#68232B]/10 pb-2">
+                  Order Summary
+                </h3>
                 <div className="flex justify-between mb-2 text-sm">
                   <span className="opacity-80">Order Amount</span>
                   <span className="font-semibold">₹ {total}</span>
@@ -177,9 +197,9 @@ const Cart = ({ onClose }) => {
 
         {/* --- FOOTER --- */}
         {dynamicCartItem.length > 0 && (
-          <div 
-            className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md" 
-            style={{ backgroundImage: `url(${footerBg})`}}
+          <div
+            className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md"
+            style={{ backgroundImage: `url(${footerBg})` }}
           >
             <button
               onClick={handleProceedToCheckout}
@@ -200,7 +220,6 @@ const Cart = ({ onClose }) => {
             </button>
           </div>
         )}
-
       </div>
     </div>
   );

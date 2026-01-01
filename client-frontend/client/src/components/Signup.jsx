@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import footerBg from "@/assets/footerbgimage.svg";
+import footerBg from "@/assets/footerbgimnage.png";
 import {
   User,
   Mail,

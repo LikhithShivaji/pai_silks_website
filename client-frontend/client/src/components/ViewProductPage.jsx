@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 
 import frame from "../assets/heroframe.svg";
 import bgImage from "../assets/backgroundimagenew.jpg";
-import footerBgImage from "../assets/footerbgimage.svg";
+import footerBgImage from "../assets/footerbgimnage.png";
 import { Sparkle, Heart } from "lucide-react";
 
 import Header from "./Header";
