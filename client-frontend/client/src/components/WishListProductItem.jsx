@@ -6,7 +6,7 @@ function WishListProductItem({ item, index, onRemove, onMoveToCart }) {
     onRemove(e, index);
   };
 
-  const imageSrc = item.image1 || item.image_url || item.image || item.product_image || "https://placehold.co/100";
+  const imageSrc = item.image1 || item.image_url || item.image || item.product_image || item.primary_image ||"https://placehold.co/100";
 
   // const addToCartOperation = (e) => {
   //   e.stopPropagation();

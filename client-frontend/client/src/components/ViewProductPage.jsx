@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import frame from "../assets/heroframe.svg";
 import bgImage from "../assets/backgroundimagenew.jpg";
 import footerBgImage from "../assets/footerbgimage.webp";
-import { Sparkle, Heart } from "lucide-react";
+import { Sparkle, Heart, ArrowLeft } from "lucide-react";
 
 import Header from "./Header";
 import Footer from "./Footer";
@@ -215,11 +215,11 @@ function ViewProductPage() {
       />
 
       <button
-        onClick={() => navigate("/")}
-        className="m-4 px-4 py-2 bg-white/80 rounded hover:bg-white text-[#68232B] font-bold cursor-pointer backdrop-blur-sm"
-      >
-        ⬅ Back
-      </button>
+          onClick={() => navigate("/shop")}
+          className="fixed z-100 flex m-4 px-2 bg-white rounded-4xl hover:bg-[#68232B] hover:text-[#FEDB87] cursor-pointer font-bold justify-center gap-3 items-center p-3 text-sm md:text-lg w-30 md:w-50"
+        >
+          <ArrowLeft /> <p>Back</p>
+        </button>
 
       <div
         className="text-center py-4 text-white bg-cover bg-fixed bg-center bg-no-repeat"
