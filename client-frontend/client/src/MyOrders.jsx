@@ -140,16 +140,6 @@ const MyOrders = () => {
         }
 
         const result = await response.json();
-
-        console.group("🚀 DEBUGGING MY ORDERS");
-        console.log("1. Full API Response:", result);
-        if (Array.isArray(result) && result.length > 0) {
-            console.log("2. Structure of First Order:", result[0]);
-            // Check if items exist
-            if (result[0].items) console.log("3. Items inside first order:", result[0].items);
-            else console.warn("⚠️ No 'items' array found in the first order!");
-        }
-        console.groupEnd();
         
         // 🛑 IMPORTANT: Look at this log in your Console!
         // console.log("📦 RAW API RESPONSE:", result);
