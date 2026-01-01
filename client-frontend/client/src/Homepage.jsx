@@ -50,7 +50,15 @@ function Homepage() {
   const [currentBestIndex, setCurrentBestIndex] = useState(0);
   const currentProduct = bestSellers[currentBestIndex];
   const [newReleases, setNewReleases] = useState([]);
-const [loadingNew, setLoadingNew] = useState(true);
+  const [loadingNew, setLoadingNew] = useState(true);
+
+  const thumbnails =
+    bestSellers.length > 0
+      ? [1, 2, 3].map((offset) => {
+          const index = (currentBestIndex + offset) % bestSellers.length;
+          return { ...bestSellers[index], originalIndex: index };
+        })
+      : [];
 
   const updateCart = (c) => setCartItems(c);
   const updateWishList = (w) => setWishListItems(w);
@@ -122,28 +130,33 @@ const [loadingNew, setLoadingNew] = useState(true);
     return () => clearInterval(interval);
   }, [bestSellers]);
 
-
-useEffect(() => {
+  useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch("https://pai-silks-website.onrender.com/api/get-all-product-details");
+        const response = await fetch(
+          "https://pai-silks-website.onrender.com/api/get-all-product-details"
+        );
         const result = await response.json();
         if (result.success) {
-          const filtered = result.data.filter((p) => Number(p.is_new_release) === 1);
+          const filtered = result.data.filter(
+            (p) => Number(p.is_new_release) === 1
+          );
           // console.log("filtered new releases are", filtered);
-          const safeData = filtered.map(p => {
-             const rawImgObj = (p.images && p.images.length > 0) ? p.images[0] : p.image_url;
-             const finalImgString = (typeof rawImgObj === 'object' && rawImgObj?.image_url) 
-                ? rawImgObj.image_url 
+          const safeData = filtered.map((p) => {
+            const rawImgObj =
+              p.images && p.images.length > 0 ? p.images[0] : p.image_url;
+            const finalImgString =
+              typeof rawImgObj === "object" && rawImgObj?.image_url
+                ? rawImgObj.image_url
                 : rawImgObj;
-             return {
-                ...p,
-                id: p.product_id || p.id,
-                image1: finalImgString || "https://placehold.co/300",
-                name: p.product_name || p.name,
-                main_price: p.regular_price || p.regularPrice || 0,
-                discounted_price: p.selling_price || p.discountedPrice || 0
-             };
+            return {
+              ...p,
+              id: p.product_id || p.id,
+              image1: finalImgString || "https://placehold.co/300",
+              name: p.product_name || p.name,
+              main_price: p.regular_price || p.regularPrice || 0,
+              discounted_price: p.selling_price || p.discountedPrice || 0,
+            };
           });
           setNewReleases(safeData);
         }
@@ -268,7 +281,10 @@ useEffect(() => {
           )}
         </div>
 
-        <button onClick={()=>{navigate("/shop")}}
+        <button
+          onClick={() => {
+            navigate("/shop");
+          }}
           className="cursor-pointer group relative overflow-hidden rounded-full p-5 lg:px-12 lg:py-5 my-5 lg:my-10 text-sm lg:text-2xl font-bold font-['Poppins'] text-[#BD7923] border-2 border-[#BD7923] bg-transparent
                       transition-all duration-500 ease-out hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923] hover:text-whitehover:border-transparent
                       hover:scale-105 hover:shadow-[0_0_40px_rgba(189,121,35,0.6)] hover:text-white"
@@ -301,33 +317,35 @@ useEffect(() => {
       </h1>
 
       {/* New Arrivals Section */}
-<div className="flex gap-4 overflow-x-auto px-2 py-4 scrollbar-hide">
-  {loadingNew ? (
-    // Optional: Simple Loading State (or use your PeacockLoader)
-    <div className="flex w-full justify-center p-10">
-       <span className="text-[#BD7923] font-bold animate-pulse">Loading New Arrivals...</span>
-    </div>
-  ) : newReleases.length > 0 ? (
-    newReleases.map((product) => (
-      <div
-        key={product.id}
-        className="flex-none min-w-47.5 w-[clamp(150px,25vw,220px)]"
-      >
-        <ProductCard
-          {...product}
-          // Ensure we pass the full object correctly to your cart handler
-          onAddToCart={() => handleAddToCart(product)}
-          showToast={showToast}
-        />
+      <div className="flex gap-4 overflow-x-auto px-2 py-4 scrollbar-hide">
+        {loadingNew ? (
+          // Optional: Simple Loading State (or use your PeacockLoader)
+          <div className="flex w-full justify-center p-10">
+            <span className="text-[#BD7923] font-bold animate-pulse">
+              Loading New Arrivals...
+            </span>
+          </div>
+        ) : newReleases.length > 0 ? (
+          newReleases.map((product) => (
+            <div
+              key={product.id}
+              className="flex-none min-w-47.5 w-[clamp(150px,25vw,220px)]"
+            >
+              <ProductCard
+                {...product}
+                // Ensure we pass the full object correctly to your cart handler
+                onAddToCart={() => handleAddToCart(product)}
+                showToast={showToast}
+              />
+            </div>
+          ))
+        ) : (
+          // Fallback if no new releases found
+          <p className="w-full text-center text-gray-500 italic">
+            More new collections coming soon!
+          </p>
+        )}
       </div>
-    ))
-  ) : (
-    // Fallback if no new releases found
-    <p className="w-full text-center text-gray-500 italic">
-      More new collections coming soon!
-    </p>
-  )}
-</div>
 
       {/* BEST SELLER */}
       {currentProduct && (
@@ -353,33 +371,55 @@ useEffect(() => {
           ) : (
             <div className="w-full max-w-[90%] md:max-w-[85%] mx-auto">
               <div className="flex flex-col lg:grid lg:grid-cols-[1.6fr_1fr] gap-8 lg:gap-12 items-start">
+                {/* --- LEFT SIDE: IMAGES --- */}
                 <div className="w-full flex flex-col md:flex-row-reverse gap-4 bg-white/3 backdrop-blur-md border border-white/10 rounded-3xl p-6 shadow-xl">
-                  <div className="w-full md:w-[80%] bg-transparent rounded-2xl overflow-hidden shadow-sm border border-stone-200/50">
-                    <div className="aspect-3/4 lg:aspect-square w-full h-full relative group">
+                  {/* BIG MAIN IMAGE (Click to View Page) */}
+                  <div
+                    className="w-full md:w-[80%] bg-transparent rounded-2xl overflow-hidden shadow-sm border border-stone-200/50 cursor-pointer relative group"
+                    onClick={() =>
+                      navigate(
+                        `/product/${
+                          currentProduct.product_id || currentProduct.id
+                        }`
+                      )
+                    }
+                  >
+                    <div className="aspect-3/4 lg:aspect-square w-full h-full relative">
                       <img
                         src={currentProduct.primary_image}
                         alt={currentProduct.name}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
                       />
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-black/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <span className="bg-white/90 text-[#68232B] px-4 py-2 rounded-full font-bold shadow-lg">
+                          View Product
+                        </span>
+                      </div>
                     </div>
                   </div>
 
+                  {/* THUMBNAILS (Click to Rotate) */}
                   <div className="flex flex-row md:flex-col gap-3 md:w-[20%] justify-between md:justify-start">
-                    {[1, 2, 3].map((i) => (
+                    {thumbnails.map((thumb) => (
                       <div
-                        key={i}
-                        className="relative aspect-3/4 w-full cursor-pointer rounded-xl overflow-hidden border border-stone-200/50 hover:border-[#BD7923] transition-all"
+                        key={thumb.id || thumb.product_id}
+                        onClick={() => setCurrentBestIndex(thumb.originalIndex)} // 👈 CLICK TO SWAP IMAGE
+                        className="relative aspect-3/4 w-full cursor-pointer rounded-xl overflow-hidden border border-stone-200/50 hover:border-[#BD7923] transition-all group"
                       >
                         <img
-                          src={currentProduct.primary_image}
-                          alt={`Thumbnail ${i}`}
+                          src={thumb.primary_image} // 👈 Shows the OTHER products
+                          alt={thumb.name}
                           className="absolute inset-0 w-full h-full object-cover hover:opacity-90 transition-opacity"
                         />
+                        {/* Optional active ring effect */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-white/10 transition-colors"></div>
                       </div>
                     ))}
                   </div>
                 </div>
 
+                {/* --- RIGHT SIDE: DETAILS --- */}
                 <div className="w-full flex flex-col justify-center h-full gap-6 text-[#FFCB85] text-left rounded-3xl shadow-xl">
                   <div className="flex justify-between items-center gap-5 h-40 ">
                     <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold font-['Poppins'] text-[#FFCB85] leading-tight">
@@ -394,7 +434,7 @@ useEffect(() => {
                     />
                   </div>
 
-                  <p className="text-sm md:text-lg text-[#FFCB85]/90 leading-relaxed h-20 flex items-center">
+                  <p className="text-sm md:text-lg text-[#FFCB85]/90 leading-relaxed h-20 flex items-center line-clamp-3">
                     {currentProduct.description}
                   </p>
 
@@ -409,14 +449,14 @@ useEffect(() => {
                   <div className="h-px w-full bg-[#FFCB85]/20 my-2"></div>
                   <div className="flex flex-col sm:flex-row gap-4 w-full mt-4">
                     <button
-                      onClick={onCartToggle} // 👈 Use the new toggle handler
+                      onClick={onCartToggle}
                       className={`flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white  shadow-lg shadow-orange-900/20 cursor-pointer  border-2 border-[#FEDB87]  transition-all duration-200 active:scale-95
-                        ${
-                          isInCart
-                            ? "bg-linear-to-r from-[#FEDB87] to-[#BD7923] brightness-110" // Active Style (Filled)
-                            : "bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]" // Default Style (Outline)
-                        }
-                      `}
+              ${
+                isInCart
+                  ? "bg-linear-to-r from-[#FEDB87] to-[#BD7923] brightness-110"
+                  : "bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]"
+              }
+            `}
                     >
                       {isInCart ? "Added" : "Add to Cart"}
                     </button>
@@ -441,8 +481,8 @@ useEffect(() => {
                         navigate("/checkout");
                       }}
                       className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg shadow-orange-900/20
-                 border-2 border-[#FEDB87] bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer
-                 hover:bg-[#FEDB87]/10 active:scale-95 transition-all duration-200"
+       border-2 border-[#FEDB87] bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923] cursor-pointer
+       hover:bg-[#FEDB87]/10 active:scale-95 transition-all duration-200"
                     >
                       Buy Now
                     </button>
