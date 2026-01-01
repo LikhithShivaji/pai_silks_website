@@ -66,7 +66,7 @@ const AdminHomePage = () => {
   // --- 1. NEW LOGIC: Fetch Categories from Database ---
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/getcategory`);
+      const res = await fetch(`https://pai-silks-website.onrender.com/api/getcategory`);
       const data = await res.json();
       if (data.success) {
         setCategories(data.data || []);
@@ -254,7 +254,7 @@ const AdminHomePage = () => {
     if (newCategory.trim() === "") return;
     
     try {
-      const res = await fetch(`${API_BASE}/api/addcategory`, {
+      const res = await fetch(`https://pai-silks-website.onrender.com/api/addcategory`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCategory }),
@@ -284,7 +284,7 @@ const AdminHomePage = () => {
     if (!window.confirm("Are you sure you want to delete this category?")) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/categories/${id}`, {
+      const res = await fetch(`https://pai-silks-website.onrender.com/api/categories/${id}`, {
         method: "DELETE",
       });
 
