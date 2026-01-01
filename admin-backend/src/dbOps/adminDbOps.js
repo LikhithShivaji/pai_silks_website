@@ -255,6 +255,37 @@ async updateProductStock(product_id, stock_qty) {
             throw err;
         }
     }
+
+    async addCategory(name) {
+        try {
+            // Note: Adjust table/column names based on your schema (e.g., a 'categories' table)
+            const [result] = await pool.query(sqlqueries.product.addCategory, [name]);
+            return { id: result.insertId, name };
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    async deleteCategoryById(categoryId) {
+  try {
+    const [result] = await pool.query(sqlqueries.product.deleteCategory, [categoryId]);
+    return result;
+  } catch (err) {
+    console.error("Error in dbCmds.deleteCategoryById:", err);
+    throw err;
+  }
+}
+
+    // Get all categories from the database
+    async getAllCategories() {
+    try {
+        const [rows] = await pool.query(sqlqueries.product.getAllCategory);
+        return rows;
+    } catch (err) {
+        console.error("Error in dbCmds.getAllCategories:", err);
+        throw err;
+    }
+    }
     
 
     

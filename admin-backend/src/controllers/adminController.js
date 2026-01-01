@@ -324,5 +324,106 @@ exports.deleteProduct = async (req, res) => {
 
 
 
+exports.addCategory = async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
+
+    const newCategory = await productManager.addCategory(name);
+    return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getAllCategories = async (req, res) => {
+  try {
+    const categories = await productManager.getAllCategories();
+    return res.status(200).json({ success: true, data: categories });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.deleteAllCategories = async (req, res) => {
+  try {
+    await productManager.deleteAllCategories();
+    return res.status(200).json({ success: true, message: "All categories deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};exports.addCategory = async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
+
+    const newCategory = await productManager.addCategory(name);
+    return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getAllCategories = async (req, res) => {
+  try {
+    const categories = await productManager.getAllCategories();
+    return res.status(200).json({ success: true, data: categories });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.deleteAllCategories = async (req, res) => {
+  try {
+    await productManager.deleteAllCategories();
+    return res.status(200).json({ success: true, message: "All categories deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.addCategory = async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
+
+    const newCategory = await productManager.addCategory(name);
+    return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getAllCategories = async (req, res) => {
+  try {
+    const categories = await productManager.getAllCategories();
+    return res.status(200).json({ success: true, data: categories });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.deleteCategory = async (req, res) => {
+  try {
+    const { id } = req.params; // Gets the ID from the URL
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Category ID is required" });
+    }
+
+    await productManager.deleteCategoryById(id);
+
+    return res.status(200).json({
+      success: true,
+      message: `Category with ID ${id} deleted successfully`,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 
 
