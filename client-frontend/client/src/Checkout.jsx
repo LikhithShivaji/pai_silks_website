@@ -64,9 +64,17 @@ export default function Checkout() {
 
   useEffect(() => {
     const newTotal = cartItems.reduce((acc, item) => {
-      const price = Number(item.discounted_price || item.selling_price || 0);
-      const qty = Number(item.quantity || 1);
-      return acc + price * qty;
+      // 👇 FIX: Check all 4 possible names for price
+      const price = 
+        Number(item.discounted_price) || 
+        Number(item.selling_price) || 
+        Number(item.price) || 
+        Number(item.amount) || 
+        0;
+
+      const qty = Number(item.quantity) || 1;
+      
+      return acc + (price * qty);
     }, 0);
 
     setLocalTotal(newTotal);

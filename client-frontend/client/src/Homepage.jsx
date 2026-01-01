@@ -11,7 +11,7 @@ import { categories } from "./categoryData";
 import reviews from "./reviews.js";
 import React, { useEffect, useState, useContext } from "react";
 import { CartContext } from "./CartContext.jsx";
-import footerBg from "./assets/footerbgimage.svg";
+import footerBg from "./assets/footerbgimnage.png";
 import HeroImage from "@/assets/HeroImage.png";
 import { Heart } from "lucide-react";
 import PeacockLoader from "./components/PeacockLoader";
@@ -449,14 +449,25 @@ function Homepage() {
                   <div className="h-px w-full bg-[#FFCB85]/20 my-2"></div>
                   <div className="flex flex-col sm:flex-row gap-4 w-full mt-4">
                     <button
-                      onClick={onCartToggle}
+                      onClick={() => {
+                        if (isInCart) {
+                          onCartToggle();
+                        } else {
+                          const productForCart = {
+                            ...currentProduct,
+                            image: currentProduct.primary_image,
+                            image_url: currentProduct.primary_image,
+                          };
+                          handleAddToCart(productForCart);
+                        }
+                      }}
                       className={`flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white  shadow-lg shadow-orange-900/20 cursor-pointer  border-2 border-[#FEDB87]  transition-all duration-200 active:scale-95
-              ${
-                isInCart
-                  ? "bg-linear-to-r from-[#FEDB87] to-[#BD7923] brightness-110"
-                  : "bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]"
-              }
-            `}
+                        ${
+                          isInCart
+                            ? "bg-linear-to-r from-[#FEDB87] to-[#BD7923] brightness-110"
+                            : "bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]"
+                        }
+                      `}
                     >
                       {isInCart ? "Added" : "Add to Cart"}
                     </button>
@@ -468,7 +479,7 @@ function Homepage() {
                         const productForCart = {
                           id: currentProduct.product_id || currentProduct.id,
                           name: currentProduct.name,
-                          image1: currentProduct.image_url,
+                          image1: currentProduct.primary_image,
                           discounted_price: Number(
                             currentProduct.selling_price
                           ),

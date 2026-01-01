@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useContext } from "react";
 import WishListProductItem from "./WishListProductItem";
-import footerBg from "../assets/footerbgimage.svg";
+import footerBg from "../assets/footerbgimnage.png";
 import { X, Heart, ShoppingBag } from "lucide-react";
 import { CartContext } from "../CartContext"; // <--- IMPORT CONTEXT
 
 const WishList = ({ onClose }) => {
   // Use Context instead of local props for single source of truth
-  const { 
-    wishListItems, 
-    setWishListItems, 
+  const {
+    wishListItems,
+    setWishListItems,
     handleAddToCart,
-    cartItems // Needed to check if already in cart
+    cartItems, // Needed to check if already in cart
   } = useContext(CartContext);
 
   const [dynamicWishListItem, setDynamicWishListItem] = useState([]);
@@ -24,8 +24,8 @@ const WishList = ({ onClose }) => {
   // 1. REMOVE FROM WISHLIST (Hybrid: API + Local)
   // ---------------------------------------------------------
   const handleWishListProductRemove = async (e, index) => {
-    if(e) e.stopPropagation();
-    
+    if (e) e.stopPropagation();
+
     const itemToRemove = dynamicWishListItem[index];
     const userId = localStorage.getItem("user_id");
 
@@ -37,14 +37,17 @@ const WishList = ({ onClose }) => {
     // B. API Call if User
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/wishlist/remove", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            user_id: userId, 
-            product_id: itemToRemove.id || itemToRemove.product_id 
-          }),
-        });
+        await fetch(
+          "https://pai-silks-website-1.onrender.com/api/wishlist/remove",
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              product_id: itemToRemove.id || itemToRemove.product_id,
+            }),
+          }
+        );
       } catch (err) {
         console.error("Failed to remove from DB wishlist", err);
       }
@@ -56,13 +59,15 @@ const WishList = ({ onClose }) => {
   // ---------------------------------------------------------
   const handleMoveToCart = async (product) => {
     // 1. Add to Cart (Context handles DB sync automatically!)
-    await handleAddToCart(product); 
+    await handleAddToCart(product);
 
     // 2. Remove from Wishlist (since it's moved)
     // Find index of this product
-    const index = dynamicWishListItem.findIndex(item => item.id === product.id);
-    if(index !== -1) {
-        handleWishListProductRemove(null, index);
+    const index = dynamicWishListItem.findIndex(
+      (item) => item.id === product.id
+    );
+    if (index !== -1) {
+      handleWishListProductRemove(null, index);
     }
   };
 
@@ -75,7 +80,7 @@ const WishList = ({ onClose }) => {
     // A. Loop through all items and add to Cart Context
     // We use a loop because your Context handles the "User vs Guest" logic internally for each add
     for (const item of dynamicWishListItem) {
-        await handleAddToCart(item);
+      await handleAddToCart(item);
     }
 
     // B. Clear Wishlist (UI + Context)
@@ -84,28 +89,32 @@ const WishList = ({ onClose }) => {
 
     // C. If User -> Clear Wishlist in DB or Move All API
     if (userId) {
-        // Option 1: Call your specific "Move All" API if you have one
-        // Option 2: Just loop delete from wishlist since we added them to cart above
-        try {
-            await Promise.all(dynamicWishListItem.map(item => 
-                fetch("https://pai-silks-website-1.onrender.com/api/wishlist/remove", {
-                    method: "DELETE",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ user_id: userId, product_id: item.id })
-                })
-            ));
-        } catch (err) {
-            console.error("Error syncing empty wishlist to DB", err);
-        }
+      // Option 1: Call your specific "Move All" API if you have one
+      // Option 2: Just loop delete from wishlist since we added them to cart above
+      try {
+        await Promise.all(
+          dynamicWishListItem.map((item) =>
+            fetch(
+              "https://pai-silks-website-1.onrender.com/api/wishlist/remove",
+              {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: userId, product_id: item.id }),
+              }
+            )
+          )
+        );
+      } catch (err) {
+        console.error("Error syncing empty wishlist to DB", err);
+      }
     }
-    
+
     // Optional: Close wishlist after adding all
-    // onClose(); 
+    // onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300" >
-      
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300">
       {/* Sidebar Container */}
       <div
         className="
@@ -119,13 +128,18 @@ const WishList = ({ onClose }) => {
         "
       >
         {/* --- HEADER --- */}
-        <div 
+        <div
           className="relative px-6 py-6 border-b border-[#68232B]/10 flex justify-between items-center bg-white/50"
-          style={{ backgroundImage: `url(${footerBg})`}}
+          style={{
+            backgroundImage: `url(${footerBg})`,
+            backgroundSize: "cover", // 👈 Forces image to shrink to fit the box
+            backgroundPosition: "center", // 👈 Keeps the important part in the middle
+            backgroundRepeat: "no-repeat", // 👈 Prevents tiling if the box is huge
+          }}
         >
           <div className="flex items-center gap-3 z-10">
             <div className="p-2 bg-[#68232B]/10 rounded-full text-[#FFCB85]">
-                <Heart size={20} fill="#FFCB85" />
+              <Heart size={20} fill="#FFCB85" />
             </div>
             <h2 className="text-xl font-bold text-[#FFCB85] tracking-wide">
               Your WishList
@@ -151,7 +165,7 @@ const WishList = ({ onClose }) => {
                 <Heart size={48} strokeWidth={1} />
               </div>
               <p className="text-lg font-medium">Your wishlist is empty</p>
-              <button 
+              <button
                 onClick={onClose}
                 className="text-sm underline underline-offset-4 hover:text-[#68232B]"
               >
@@ -160,16 +174,16 @@ const WishList = ({ onClose }) => {
             </div>
           ) : (
             dynamicWishListItem.map((item, index) => (
-              <div 
-                key={item.id} 
+              <div
+                key={item.id}
                 className="bg-white/60 backdrop-blur-md rounded-lg border border-white/10 hover:shadow-lg overflow-hidden transition-all duration-300"
               >
-                 {/* Pass the new MoveToCart handler down to the child */}
-                 <WishListProductItem
+                {/* Pass the new MoveToCart handler down to the child */}
+                <WishListProductItem
                   item={item}
                   index={index}
                   onRemove={handleWishListProductRemove}
-                  onMoveToCart={() => handleMoveToCart(item)} 
+                  onMoveToCart={() => handleMoveToCart(item)}
                 />
               </div>
             ))
@@ -178,7 +192,10 @@ const WishList = ({ onClose }) => {
 
         {/* --- FOOTER BUTTON --- */}
         {dynamicWishListItem.length > 0 && (
-          <div className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md" style={{ backgroundImage: `url(${footerBg})`}}>
+          <div
+            className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md"
+            style={{ backgroundImage: `url(${footerBg})` }}
+          >
             <button
               onClick={handleAddAllToCart}
               className="
@@ -198,7 +215,6 @@ const WishList = ({ onClose }) => {
             </button>
           </div>
         )}
-
       </div>
     </div>
   );

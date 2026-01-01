@@ -1,5 +1,5 @@
 import React from "react";
-import footerBg from "../assets/footerbgimage.svg";
+import footerBg from "../assets/footerbgimnage.png";
 
 const ReviewCard = ({ review }) => {
   return (

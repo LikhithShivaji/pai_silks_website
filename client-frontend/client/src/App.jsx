@@ -8,8 +8,8 @@ import Footer from "./components/Footer";
 
 import { CartContext } from "./CartContext";
 
-import footerBg from "@/assets/footerbgimage.svg";
-import { ArrowLeft, X } from 'lucide-react'; // ✅ Added X icon
+import footerBg from "@/assets/footerbgimnage.png";
+import { ArrowLeft, X } from "lucide-react"; // ✅ Added X icon
 import PeacockLoader from "./components/PeacockLoader";
 import { useToast } from "./ToastContext";
 
@@ -58,10 +58,10 @@ const App = () => {
   /* ---------------- 👂 LISTEN FOR HOMEPAGE CLICK ---------------- */
   useEffect(() => {
     if (location.state && location.state.selectedCollection) {
-        // console.log("Receiving Collection:", location.state.selectedCollection);
-        setActiveCollection(location.state.selectedCollection);
-        // Clear state history so refresh doesn't stick
-        window.history.replaceState({}, document.title); 
+      // console.log("Receiving Collection:", location.state.selectedCollection);
+      setActiveCollection(location.state.selectedCollection);
+      // Clear state history so refresh doesn't stick
+      window.history.replaceState({}, document.title);
     }
   }, [location]);
 
@@ -71,10 +71,11 @@ const App = () => {
     const rawImg = p.image_url || p.images;
 
     if (Array.isArray(rawImg) && rawImg.length > 0) {
-        const first = rawImg[0];
-        cleanImage = typeof first === 'object' ? (first.image_url || first.url) : first;
-    } else if (typeof rawImg === 'string') {
-        cleanImage = rawImg.includes(',') ? rawImg.split(',')[0] : rawImg;
+      const first = rawImg[0];
+      cleanImage =
+        typeof first === "object" ? first.image_url || first.url : first;
+    } else if (typeof rawImg === "string") {
+      cleanImage = rawImg.includes(",") ? rawImg.split(",")[0] : rawImg;
     }
 
     return {
@@ -96,28 +97,34 @@ const App = () => {
   /* ---------------- 🔍 UPDATED FILTER LOGIC ---------------- */
   const filteredProducts = normalizedProducts
     .filter((product) => {
-        // 1. Price Filter
-        const priceMatch = product.discounted_price >= filters.minPrice && product.discounted_price <= filters.maxPrice;
-        
-        // 2. Category Filter
-        const catMatch = filters.categories.length === 0 || filters.categories.includes(product.category);
+      // 1. Price Filter
+      const priceMatch =
+        product.discounted_price >= filters.minPrice &&
+        product.discounted_price <= filters.maxPrice;
 
-        // 3. ✅ Collection Filter (The new logic)
-        let collectionMatch = true;
-        if (activeCollection) {
-            const target = activeCollection.toLowerCase().trim();
-            const pColl = (product.collection || "").toLowerCase().trim();
-            const pDesc = (product.description || "").toLowerCase();
+      // 2. Category Filter
+      const catMatch =
+        filters.categories.length === 0 ||
+        filters.categories.includes(product.category);
 
-            // Match 'collection' field OR check if description contains it
-            collectionMatch = pColl === target || pDesc.includes(target);
-        }
+      // 3. ✅ Collection Filter (The new logic)
+      let collectionMatch = true;
+      if (activeCollection) {
+        const target = activeCollection.toLowerCase().trim();
+        const pColl = (product.collection || "").toLowerCase().trim();
+        const pDesc = (product.description || "").toLowerCase();
 
-        return priceMatch && catMatch && collectionMatch;
+        // Match 'collection' field OR check if description contains it
+        collectionMatch = pColl === target || pDesc.includes(target);
+      }
+
+      return priceMatch && catMatch && collectionMatch;
     })
     .sort((a, b) => {
-      if (sortOption === "lowToHigh") return a.discounted_price - b.discounted_price;
-      if (sortOption === "highToLow") return b.discounted_price - a.discounted_price;
+      if (sortOption === "lowToHigh")
+        return a.discounted_price - b.discounted_price;
+      if (sortOption === "highToLow")
+        return b.discounted_price - a.discounted_price;
       return 0;
     });
 
@@ -135,21 +142,31 @@ const App = () => {
       {/* ================= Filter Bar ================= */}
       <div
         className="w-full p-2 flex flex-col md:flex-row items-center justify-center md:justify-between gap-3"
-        style={{ backgroundImage: `url(${footerBg})` }}
+        style={{
+          backgroundImage: `url(${footerBg})`,
+          backgroundSize: "cover", // 👈 Forces image to shrink to fit the box
+          backgroundPosition: "center", // 👈 Keeps the important part in the middle
+          backgroundRepeat: "no-repeat", // 👈 Prevents tiling if the box is huge
+        }}
       >
-        <button 
-          onClick={() => navigate("/")} 
+        <button
+          onClick={() => navigate("/")}
           className="hidden md:flex m-4 px-2 bg-white/80 rounded-4xl hover:bg-[#68232B] hover:text-[#FEDB87] cursor-pointer font-bold justify-center gap-3 items-center p-3 w-50"
         >
-          <ArrowLeft/> <p>Back</p>
+          <ArrowLeft /> <p>Back</p>
         </button>
 
         {/* ✅ Show Active Filter Badge */}
         {activeCollection && (
-            <div className="bg-white/90 px-4 py-2 rounded-full flex items-center gap-2 text-[#68232B] font-bold shadow-md animate-in fade-in">
-                <span>Showing: {activeCollection}</span>
-                <button onClick={() => setActiveCollection(null)} className="hover:bg-red-100 rounded-full p-1"><X size={16}/></button>
-            </div>
+          <div className="bg-white/90 px-4 py-2 rounded-full flex items-center gap-2 text-[#68232B] font-bold shadow-md animate-in fade-in">
+            <span>Showing: {activeCollection}</span>
+            <button
+              onClick={() => setActiveCollection(null)}
+              className="hover:bg-red-100 rounded-full p-1"
+            >
+              <X size={16} />
+            </button>
+          </div>
         )}
 
         <button
@@ -176,7 +193,7 @@ const App = () => {
         )}
 
         {loading ? (
-          <PeacockLoader/>
+          <PeacockLoader />
         ) : (
           <div
             className="
@@ -188,19 +205,26 @@ const App = () => {
             "
           >
             {filteredProducts.length > 0 ? (
-                filteredProducts.map((product) => (
+              filteredProducts.map((product) => (
                 <ProductCard
-                    key={product.id}
-                    {...product}
-                    onAddToCart={() => handleAddToCart(product)}
-                    showToast={showToast}
+                  key={product.id}
+                  {...product}
+                  onAddToCart={() => handleAddToCart(product)}
+                  showToast={showToast}
                 />
-                ))
+              ))
             ) : (
-                <div className="col-span-full flex flex-col items-center justify-center h-40 text-gray-500">
-                    <p className="text-xl">No products found in "{activeCollection}"</p>
-                    <button onClick={() => setActiveCollection(null)} className="text-[#68232B] underline mt-2">View All Products</button>
-                </div>
+              <div className="col-span-full flex flex-col items-center justify-center h-40 text-gray-500">
+                <p className="text-xl">
+                  No products found in "{activeCollection}"
+                </p>
+                <button
+                  onClick={() => setActiveCollection(null)}
+                  className="text-[#68232B] underline mt-2"
+                >
+                  View All Products
+                </button>
+              </div>
             )}
           </div>
         )}

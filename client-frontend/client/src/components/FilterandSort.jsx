@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import footerBg from "../assets/footerbgimage.svg";
+import footerBg from "../assets/footerbgimnage.png";
 
 // UI Components
 import { Input } from "@/components/ui/input";

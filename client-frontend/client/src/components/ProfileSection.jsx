@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from "react";
-import footerBg from "../assets/footerbgimage.svg";
+import footerBg from "../assets/footerbgimnage.png";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext"; 
 import { 
@@ -93,7 +93,12 @@ const Profile = ({ onClose }) => {
       >
         <div 
           className="relative px-6 py-6 border-b border-[#68232B]/10 flex justify-between items-center bg-white/50"
-          style={{ backgroundImage: `url(${footerBg})`}}
+          style={{ 
+    backgroundImage: `url(${footerBg})`,
+    backgroundSize: 'cover',   // 👈 Forces image to shrink to fit the box
+    backgroundPosition: 'center', // 👈 Keeps the important part in the middle
+    backgroundRepeat: 'no-repeat' // 👈 Prevents tiling if the box is huge
+  }}
         >
           <div className="absolute inset-0 opacity-10 pointer-events-none bg-cover bg-center"/>
           
@@ -152,7 +157,12 @@ const Profile = ({ onClose }) => {
 
         <div 
           className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md" 
-          style={{ backgroundImage: `url(${footerBg})`}}
+          style={{ 
+    backgroundImage: `url(${footerBg})`,
+    backgroundSize: 'cover',   // 👈 Forces image to shrink to fit the box
+    backgroundPosition: 'center', // 👈 Keeps the important part in the middle
+    backgroundRepeat: 'no-repeat' // 👈 Prevents tiling if the box is huge
+  }}
         >
           {isLoggedIn ? (
             <button

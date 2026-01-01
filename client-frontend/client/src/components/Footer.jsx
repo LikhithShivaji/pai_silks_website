@@ -1,7 +1,7 @@
 import facebook from "../assets/Facebook.svg";
 import instagram from "../assets/instagram.svg";
 import whatsapp from "../assets/whatsapp.svg";
-import footerBg from "../assets/footerbgimage.svg";
+import footerBg from "../assets/footerbgimnage.png";
 import { Input } from "./ui/input";
 
 function Footer() {
