@@ -1,7 +1,7 @@
 import React from "react";
 import Lottie from "lottie-react";
 import premiumLoader from "../assets/lottie/animation.json";
-import footerBg from "../assets/footerbgimnage.png";
+import footerBg from "../assets/footerbgimage.webp";
 
 const PageLoader = () => {
   return (

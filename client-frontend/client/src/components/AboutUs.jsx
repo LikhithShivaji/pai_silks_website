@@ -11,7 +11,7 @@ import maps from "../assets/map-trifold.svg";
 import { CartContext } from "../CartContext";
 
 // Using the pattern as a subtle texture overlay instead of a heavy background
-import footerBgPattern from "@/assets/footerbgimnage.png";
+import footerBgPattern from "@/assets/footerbgimage.webp";
 
 const AboutUs = () => {
   const { cartItems, setCartItems, wishListItems, setWishListItems } =

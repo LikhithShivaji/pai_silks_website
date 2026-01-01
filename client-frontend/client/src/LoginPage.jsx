@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CartContext } from "./CartContext";
-import footerBg from "@/assets/footerbgimnage.png";
+import footerBg from "@/assets/footerbgimage.webp";
 import {
   Mail,
   Lock,

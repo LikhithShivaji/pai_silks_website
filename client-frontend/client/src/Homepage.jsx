@@ -11,7 +11,7 @@ import { categories } from "./categoryData";
 import reviews from "./reviews.js";
 import React, { useEffect, useState, useContext } from "react";
 import { CartContext } from "./CartContext.jsx";
-import footerBg from "./assets/footerbgimnage.png";
+import footerBg from "./assets/footerbgimage.webp";
 import HeroImage from "@/assets/HeroImage.png";
 import { Heart } from "lucide-react";
 import PeacockLoader from "./components/PeacockLoader";
@@ -262,7 +262,7 @@ function Homepage() {
               return (
                 <div
                   key={c.id || index}
-                  className="cursor-pointer"
+                  className="cursor-pointer flex flex-col gap-5"
                   onClick={() =>
                     navigate("/shop", {
                       state: { selectedCollection: c.collection },
@@ -274,7 +274,7 @@ function Homepage() {
                     className="max-w-[80%] mx-auto transition-transform duration-500 hover:scale-105"
                     alt={c.collection}
                   />
-                  <h2 className="text-[1.6vw]">{c.collection}</h2>
+                  <h2 className="text-[2.5vw] md:text-[1.6vw]">{c.collection}</h2>
                 </div>
               );
             })

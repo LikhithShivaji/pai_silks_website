@@ -1,5 +1,5 @@
 import React from "react";
-import footerBg from "../assets/footerbgimnage.png";
+import footerBg from "../assets/footerbgimage.webp";
 
 const ReviewCard = ({ review }) => {
   return (

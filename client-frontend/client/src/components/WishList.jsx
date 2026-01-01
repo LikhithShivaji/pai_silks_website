@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import WishListProductItem from "./WishListProductItem";
-import footerBg from "../assets/footerbgimnage.png";
+import footerBg from "../assets/footerbgimage.webp";
 import { X, Heart, ShoppingBag } from "lucide-react";
 import { CartContext } from "../CartContext"; // <--- IMPORT CONTEXT
 
