@@ -172,7 +172,6 @@ function Homepage() {
   const onHeartClick = () => {
     if (!currentProduct) return;
     const prodId = currentProduct.product_id || currentProduct.id;
-
     if (isWishlisted) {
       handleRemoveFromWishList(prodId);
       showToast("Removed from Wishlist", "error");
@@ -180,7 +179,8 @@ function Homepage() {
       const productForWishlist = {
         id: prodId,
         name: currentProduct.name,
-        image1: currentProduct.image_url || currentProduct.image1,
+        image1: currentProduct.primary_image || currentProduct.image_url || currentProduct.image1,
+        primary_image: currentProduct.primary_image, 
         discounted_price: Number(currentProduct.selling_price),
         regular_price: Number(currentProduct.regular_price),
         description: currentProduct.description,
@@ -203,11 +203,9 @@ function Homepage() {
     const prodId = currentProduct.product_id || currentProduct.id;
 
     if (isInCart) {
-      // console.log("Removing ID:", prodId);
       handleRemoveFromCart(prodId);
       showToast("Removed from Cart", "error");
     } else {
-      // console.log("Adding ID:", prodId);
       const productForCart = {
         id: prodId,
         name: currentProduct.name,

@@ -7,60 +7,72 @@ import { Input } from "./ui/input";
 function Footer() {
   return (
     <>
-      {/* MAIN FOOTER */}
+      {/* --- MAIN FOOTER --- */}
       <footer
         className="
           font-['Poppins']
           text-white
           text-center
-          py-8
+          py-12              /* Increased padding for elegance */
           bg-no-repeat
           bg-cover
           bg-fixed
           bg-center
+          flex flex-col gap-10 /* Spacing between sections */
         "
         style={{ backgroundImage: `url(${footerBg})` }}
       >
-        {/* NEWSLETTER */}
+        
+        {/* 1. NEWSLETTER (Now visible on Mobile!) */}
         <div
           className="
             mx-auto
-            px-4 py-3
-            w-fit
-            bg-[#ffd596]
-            text-[#111]
-            rounded-[1.5rem]
-            hidden
-            sm:block
+            w-[90%] md:w-fit
+            px-6 py-6
+            bg-[#ffd596]/95 backdrop-blur-sm  /* Glass effect */
+            text-[#551920]
+            rounded-[2rem]
+            shadow-xl
+            border border-white/20
           "
         >
-          <h2 className="my-2">Subscribe to our newsletter!</h2>
+          <h2 className="text-lg md:text-xl font-bold mb-4">
+            Subscribe to our newsletter!
+          </h2>
 
-          <form className="flex items-center justify-center">
+          <form className="flex flex-col md:flex-row items-center gap-3">
             <Input
               type="email"
               placeholder="Your Email address"
               required
               className="
                 h-12
-                w-80
+                w-full md:w-80
                 rounded-xl
                 border-none
                 px-4
                 outline-none
                 bg-white
+                text-black
+                placeholder:text-gray-400
+                shadow-inner
               "
             />
             <button
               type="submit"
               className="
-                ml-4
                 h-12
-                px-10
-
+                w-full md:w-auto
+                px-8
                 bg-[#551920]
                 text-white
-                rounded-lg
+                font-semibold
+                rounded-xl
+                shadow-lg
+                hover:bg-[#6d2029]
+                hover:scale-105
+                active:scale-95
+                transition-all duration-300
               "
             >
               Subscribe
@@ -68,61 +80,78 @@ function Footer() {
           </form>
         </div>
 
-        {/* QUICK LINKS + ABOUT */}
+        {/* 2. LINKS & INFO */}
         <div
           className="
-            flex
-            justify-between
-            px-5
-            pt-8
-            mx-auto
+            grid grid-cols-2 
+            gap-8
+            px-6 md:px-6
+            w-full max-w-8xl mx-auto
           "
         >
-          {/* QUICK LINKS */}
-          <div className="text-left flex flex-col gap-5 sm:gap-5">
-            <h1 className="md:text-2xl text-lg">Quick Links</h1>
-            <div className="flex flex-col">
-              <p className="md:text-lg text-xs">Home</p>
-              <p className="md:text-lg text-xs">About Us</p>
-              <p className="md:text-lg text-xs">Categories</p>
-              <p className="md:text-lg text-xs">All Products</p>
+          {/* Left Column: Quick Links */}
+          <div className="text-left flex flex-col gap-4">
+            <h1 className="text-xl md:text-2xl font-bold relative inline-block w-fit">
+              Quick Links
+              <span className="absolute -bottom-1 left-0 w-1/2 h-0.5 bg-[#ffd596] rounded-full"></span>
+            </h1>
+            <div className="flex flex-col gap-2 text-sm md:text-lg text-white/80">
+              <a href="/" className="hover:text-[#ffd596] hover:translate-x-1 transition-all w-fit">Home</a>
+              <a href="/about-us" className="hover:text-[#ffd596] hover:translate-x-1 transition-all w-fit">About Us</a>
+              <a href="/shop" className="hover:text-[#ffd596] hover:translate-x-1 transition-all w-fit">Categories</a>
+              <a href="/shop" className="hover:text-[#ffd596] hover:translate-x-1 transition-all w-fit">All Products</a>
             </div>
           </div>
 
-          {/* ABOUT */}
-          <div className="text-right flex flex-col gap-5 sm:gap-5">
-            <h1 className="md:text-2xl text-lg">About</h1>
-            <div className="flex flex-col">
-              <p className="md:text-lg text-xs">+91 98745 60759</p>
-              <p className="md:text-lg text-xs">paisilks@gmail.com</p>
-              <p className="md:text-lg text-xs">Opp. Old Bus Stand, Near</p>
-              <p className="md:text-lg text-xs">Hemavathi statue, Hassan</p>
+          {/* Right Column: About/Contact */}
+          <div className="text-right flex flex-col gap-4 items-end">
+            <h1 className="text-xl md:text-2xl font-bold relative inline-block w-fit">
+              Contact
+              <span className="absolute -bottom-1 right-0 w-1/2 h-0.5 bg-[#ffd596] rounded-full"></span>
+            </h1>
+            <div className="flex flex-col gap-2 text-sm md:text-lg text-white/80">
+              <p className="hover:text-[#ffd596] transition-colors">+91 98745 60759</p>
+              <p className="hover:text-[#ffd596] transition-colors">paisilks@gmail.com</p>
+              <div className="mt-2">
+                <p>Opp. Old Bus Stand, Near</p>
+                <p>Hemavathi statue, Hassan</p>
+              </div>
             </div>
           </div>
         </div>
       </footer>
 
-      {/* GST + SOCIAL FOOTER */}
-      <div className="bg-[#551920] h-10 flex flex-col sm:flex-row items-center justify-between text-white">
-        <p className="text-center text-xs sm:text-base">
-          Copyright © 2025 SHRIDHARA VENKATARAMANA PAI. All Rights Reserved
-        </p>
+      {/* --- BOTTOM BAR --- */}
+      <div className="bg-[#551920] py-4 px-5 flex flex-col-reverse md:flex-row items-center justify-between gap-4 text-white border-t border-white/10">
+        <div className="flex flex-col items-center md:items-start gap-1">
+            <p className="text-center md:text-left text-xs md:text-sm text-white/60">
+              Copyright © 2025 SHRIDHARA VENKATARAMANA PAI. All Rights Reserved
+            </p>
+            
+            {/* 👇 YOUR CREDIT LINE */}
+            <a 
+              href="mailto:codearctechsolutions@gmail.com" 
+              className="text-[10px] md:text-xs text-[#ffd596] hover:scale-105 transition-all duration-300 cursor-pointer"
+            >
+              Designed by <b>CodeArc Tech Solutions</b>
+            </a>
+        </div>
+        
 
-        <div className="flex items-center">
+        <div className="flex items-center gap-6">
           {[facebook, instagram, whatsapp].map((icon, index) => (
             <a
               key={index}
               href="#"
               className="
-                h-8
-                w-8
-                mx-4
-                flex
-                items-center
-                justify-center
+                h-8 w-8
+                flex items-center justify-center
+                hover:scale-125
+                hover:brightness-125
+                transition-all duration-300
               "
             >
-              <img src={icon} alt="" className="w-full h-full object-contain" />
+              <img src={icon} alt="social" className="w-full h-full object-contain" />
             </a>
           ))}
         </div>
