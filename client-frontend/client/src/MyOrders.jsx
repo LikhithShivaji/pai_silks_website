@@ -12,17 +12,30 @@ const OrderCard = ({ order }) => {
   const orderId = order.id || order.order_id || "N/A";
   
   // --- SMART ITEM DETECTION ---
+  const itemsArray = order.items || order.order_items || [order];
   const firstItem = order.items && order.items.length > 0 ? order.items[0] : null;
 
-  // 1. Try to find the image (looking in multiple places)
-  const displayImage = firstItem?.image || firstItem?.product_image || firstItem?.product?.image || "https://placehold.co/150?text=Package";
+  const displayImage = 
+    firstItem.image || 
+    firstItem.product_image || 
+    firstItem.image_url ||      // 👈 Added this common key
+    firstItem.primary_image ||  // 👈 Added for Best Sellers consistency
+    firstItem.product?.image || 
+    order.image ||              // 👈 Check root order object too
+    order.product_image ||
+    "https://placehold.co/150?text=Package";
+
+  const rawName = 
+    firstItem.product_name || 
+    firstItem.name || 
+    firstItem.product?.name || 
+    order.product_name ||       // 👈 Check root order object
+    "Unknown Product";
   
-  // 2. Try to find the Name (The Fix for "Undefined")
-  // It checks: product_name, then name, then product.name, then fallback.
-  const rawName = firstItem?.product_name || firstItem?.name || firstItem?.product?.name || "Unknown Product";
-  
-  const displayName = firstItem 
-    ? `${rawName} ${order.items.length > 1 ? `+ ${order.items.length - 1} others` : ""}` 
+  const extraCount = itemsArray.length > 1 ? itemsArray.length - 1 : 0;
+
+  const displayName = itemsArray.length > 0 && rawName !== "Unknown Product"
+    ? `${rawName} ${extraCount > 0 ? `+ ${extraCount} others` : ""}` 
     : `Order #${orderId}`;
 
   const getStatusStyle = (s) => {
@@ -127,6 +140,16 @@ const MyOrders = () => {
         }
 
         const result = await response.json();
+
+        console.group("🚀 DEBUGGING MY ORDERS");
+        console.log("1. Full API Response:", result);
+        if (Array.isArray(result) && result.length > 0) {
+            console.log("2. Structure of First Order:", result[0]);
+            // Check if items exist
+            if (result[0].items) console.log("3. Items inside first order:", result[0].items);
+            else console.warn("⚠️ No 'items' array found in the first order!");
+        }
+        console.groupEnd();
         
         // 🛑 IMPORTANT: Look at this log in your Console!
         // console.log("📦 RAW API RESPONSE:", result);
