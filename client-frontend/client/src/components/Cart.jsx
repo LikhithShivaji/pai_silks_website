@@ -2,7 +2,7 @@ import React, { useEffect, useContext } from "react";
 import CartItem from "./CartItem";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";
-import footerBg from "../assets/footerbgimnage.png";
+import footerBg from "../assets/footerbgimage.webp";
 import { X, ShoppingBag } from "lucide-react";
 
 const Cart = ({ onClose }) => {

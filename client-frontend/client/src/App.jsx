@@ -8,7 +8,7 @@ import Footer from "./components/Footer";
 
 import { CartContext } from "./CartContext";
 
-import footerBg from "@/assets/footerbgimnage.png";
+import footerBg from "@/assets/footerbgimage.webp";
 import { ArrowLeft, X } from "lucide-react"; // ✅ Added X icon
 import PeacockLoader from "./components/PeacockLoader";
 import { useToast } from "./ToastContext";
