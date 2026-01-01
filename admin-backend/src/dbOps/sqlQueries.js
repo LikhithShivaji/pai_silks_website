@@ -19,6 +19,9 @@ const sqlqueries = {
         insertProductStock: `INSERT INTO product_stock (product_id, stock_qty) VALUES (?, ?)`,
         updateProductStock: `UPDATE product_stock SET stock_qty = ?, updated_at = NOW() WHERE product_id = ?`,
         deleteProduct: `UPDATE product SET is_deleted = 1 WHERE id = ?`,
+        addCategory: `INSERT INTO category (name) VALUES (?);`,
+        getAllCategory: `SELECT id, name FROM category WHERE is_deleted = 0 ORDER BY name ASC;`,
+        deleteCategory: `UPDATE category SET is_deleted = 1 WHERE id = ?;`,
     },
 
     dashBoard: {

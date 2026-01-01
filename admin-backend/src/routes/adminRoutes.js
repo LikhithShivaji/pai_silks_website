@@ -21,6 +21,10 @@ router.get('/get-recent-orders', adminController.getRecentOrders);
 
 router.get('/get-category-count', adminController.getCategoryWiseCount);
 
+router.post('/addcategory', adminController.addCategory);
+router.get('/getcategory', adminController.getAllCategories);
+router.delete('/categories/:id', adminController.deleteCategory);
+
 router.get('/get-all-product-details', adminController.getAllProductDetails);
 
 router.get('/get-order-detils',adminController.getOrderDetails);

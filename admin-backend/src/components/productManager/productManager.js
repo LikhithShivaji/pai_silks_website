@@ -164,7 +164,34 @@ const deleteProduct = async (productId) => {
 };
 
 
+const getAllCategories = async () => {
+  try {
+    // Call the database command
+    const categories = await dbCmds.getAllCategories();
+    
+    // Return the result to the controller
+    return categories; 
+  } catch (err) {
+    console.error("Error in productManager.getAllCategories:", err);
+    throw err;
+  }
+};
 
+const addCategory = async (name) => {
+  try {
+    return await dbCmds.addCategory(name);
+  } catch (err) {
+    throw err;
+  }
+};
+
+const deleteCategoryById = async (categoryId) => {
+  try {
+    return await dbCmds.deleteCategoryById(categoryId);
+  } catch (err) {
+    throw err;
+  }
+};
 
 module.exports = {
     createProduct,
@@ -173,6 +200,8 @@ module.exports = {
     updateProduct,
     updateImages,
     insertImages,
-    deleteProduct 
-    
+    deleteProduct, 
+    addCategory,
+    deleteCategoryById,
+    getAllCategories
 };
