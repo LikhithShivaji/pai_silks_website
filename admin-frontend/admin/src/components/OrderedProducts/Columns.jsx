@@ -36,18 +36,39 @@ export const columns = [
     header: ({ column }) => {
       return (
         <div className="flex justify-center">
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          
-        >
-          Product
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
+          <Button
+            variant="ghost"
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          >
+            Product
+            <ArrowUpDown className="ml-2 h-4 w-4" />
+          </Button>
         </div>
-      )
+      );
+    },
+    cell: ({ row }) => {
+      const products = row.original.product; 
+
+      if (!Array.isArray(products) || products.length === 0) {
+        return <div className="text-center">-</div>;
+      }
+      const firstName = products[0].name || "Unknown Product";
+      const remainingCount = products.length - 1;
+
+      return (
+        <div className="flex flex-col items-center text-center">
+          <span className="font-medium">{firstName}</span>
+          
+          {remainingCount > 0 && (
+            <span className="text-xs text-[#68232B] font-bold">
+              +{remainingCount} others
+            </span>
+          )}
+        </div>
+      );
     },
   },
+  
   {
     accessorKey: "orderId",
     header: ({ column }) => {

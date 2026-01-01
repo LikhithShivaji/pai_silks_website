@@ -1,158 +1,154 @@
 import React, { useEffect, useState } from "react";
 import { Trash } from "lucide-react";
 
-const AllProducts = ({ categoryName, onBack, onAddProductClick,onUpdateProduct}) => {
+const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [debugLog, setDebugLog] = useState([]);
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         setLoading(true);
-        setError("");
 
-        const res = await fetch(
-          "https://pai-silks-website.onrender.com/api/get-all-product-details"
-        );
-
+        const res = await fetch("https://pai-silks-website.onrender.com/api/get-all-product-details");
         const apiResponse = await res.json();
-
-        console.log("Full API response:", apiResponse);
+        console.log("api response is",apiResponse)
+        
         const productList = apiResponse.data || [];
-        const filtered = productList.filter((p) => p.category === categoryName);
+        console.log("productList is",productList)
+        
+        const filtered = productList.filter((p) => {
+            if (!p.category || !categoryName) return false;
+            const dbCat = p.category.toString().toLowerCase().trim();
+            const sideCat = categoryName.toString().toLowerCase().trim();
+            return dbCat === sideCat;
+        });
 
-        const mapped = filtered.map((p) => ({
-          id: p.product_id,
-          name: p.name,
-          category: p.category,
-          collection: p.collection,
-          description: p.description,
-          material: p.material,
-          code: p.product_code,
-          washCare: p.product_wash_care,
-          length: p.saree_length,
-          regularPrice: p.regular_price,
-          discountedPrice: p.selling_price,
-          stockQty: p.stock_qty,
-          images: p.image_url || [],
-        }));
+        if (filtered.length === 0 && productList.length > 0) {
+            setDebugLog(productList.map(p => p.category));
+        }
+
+        const mapped = filtered.map((p) => {
+          let rawImages = p.image_url || p.images || [];
+          let cleanImages = [];
+
+          if (Array.isArray(rawImages)) {
+             cleanImages = rawImages.map(img => typeof img === 'object' ? (img.image_url || img.url) : img);
+          } else if (typeof rawImages === 'string') {
+             cleanImages = rawImages.includes(',') ? rawImages.split(',') : [rawImages];
+          }
+
+          return {
+            id: p.product_id || p.id,
+            name: p.name,
+            category: p.category,
+            collection: p.collection,
+            description: p.description,
+            material: p.material,
+            code: p.product_code,
+            washCare: p.product_wash_care,
+            length: p.saree_length,
+            regularPrice: p.regular_price,
+            discountedPrice: p.selling_price,
+            stockQty: p.stock_qty,
+            images: cleanImages,
+            isNewRelease: p.is_new_release
+          };
+        });
 
         setProducts(mapped);
       } catch (err) {
-        console.error("Failed to fetch products:", err);
-        setError("Failed to load products");
+        console.error("Fetch Error:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    if (categoryName) {
-      fetchProducts();
-    }
+    if (categoryName) fetchProducts();
   }, [categoryName]);
 
-  const handleDeleteProduct = (productId) => {
-    console.log("product deleted was", productId)
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+  const handleDeleteProduct = async (productId) => {
+    const isConfirmed = window.confirm("Are you sure you want to delete this product?");
+    if (!isConfirmed) return;
+
+    try {
+      // ✅ FIX: Add the ID to the URL using template literals `${productId}`
+      const res = await fetch(`https://pai-silks-website.onrender.com/api/delete-product/${productId}`, {
+        method: "DELETE", // Usually route parameters use DELETE, but if this fails, try "POST"
+        headers: {
+          "Content-Type": "application/json",
+        },
+        // ❌ No body needed anymore, because the ID is in the URL
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setProducts((prev) => prev.filter((p) => p.id !== productId));
+        alert("Product deleted successfully!");
+      } else {
+        alert("Failed to delete: " + (data.message || "Unknown error"));
+      }
+    } catch (err) {
+      console.error("Delete Error:", err);
+      alert("Something went wrong.");
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <p className="text-gray-600">Loading products...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-2">
-        <p className="text-red-500 font-semibold">Failed to load products 😢</p>
-        <p className="text-sm text-gray-500">{error}</p>
-        <button
-          onClick={onBack}
-          className="mt-2 bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-        >
-          ← Back
-        </button>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-10 text-center">Loading...</div>;
 
   return (
-    <div className="w-full flex flex-col gap-4 h-full p-4 rounded-xl">
-      <div className="flex justify-between items-center">
+    <div className="w-full flex flex-col gap-4 h-full rounded-xl">
+      <div className="flex justify-between items-center py-5 border-b-1 border-b-white">
         <h2 className="text-xl font-semibold">
-          {categoryName || "All Products"}
+          {categoryName} <span className="text-sm text-gray-500">({products.length})</span>
         </h2>
         <div className="flex gap-2">
-          <button
-            onClick={onBack}
-            className="bg-gray-200 px-3 py-1 rounded hover:bg-gray-300"
-          >
-            ← Back
-          </button>
-          <button
-            onClick={onAddProductClick}
-            className="bg-[#68232B] text-white px-3 py-1 rounded hover:bg-[#82323c]"
-          >
-            + Add Product
-          </button>
+          <button onClick={onBack} className="bg-gray-200 px-3 py-1 rounded">← Back</button>
+          <button onClick={onAddProductClick} className="bg-[#68232B] text-white px-3 py-1 rounded">+ Add</button>
         </div>
       </div>
 
       {products.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-gray-500">
-          No products found in this category.
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+           <p className="text-gray-500">No products found matching "{categoryName}".</p>
+           
+           <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg max-w-md text-sm text-yellow-800">
+              <p className="font-bold">⚠️ Tips for Exact Matching:</p>
+              <p>Since we switched to strict matching, your Sidebar Category must match the Database Category <strong>exactly</strong> (ignoring case).</p>
+              <p className="mt-2">Sidebar: <strong>"{categoryName}"</strong></p>
+              <p className="mt-2">Available Categories in DB:</p>
+              <ul className="list-disc pl-5 max-h-32 overflow-y-auto">
+                  {[...new Set(debugLog)].map((cat, i) => (
+                      <li key={i}>{cat || "Undefined"}</li>
+                  ))}
+              </ul>
+           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid gap-[1.7rem] p-6
+              grid-cols-[repeat(auto-fill,minmax(300px,1fr))]
+              max-[600px]:gap-4 max-[600px]:p-4
+              max-[600px]:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]
+              max-[380px]:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
           {products.map((product) => (
-            <div
-              key={product.id}
-              className="p-5 bg-[#F5F5F5] rounded-2xl shadow-sm hover:shadow-xl cursor-pointer flex flex-col gap-5"
-              onClick={()=>onUpdateProduct(product)}
-            >
+            <div key={product.id} className="p-5 bg-[#F5F5F5] rounded-2xl cursor-pointer flex flex-col gap-5 hover:shadow-lg transition-all" onClick={() => onUpdateProduct(product)}>
               <div className="w-full flex items-center gap-3">
-                <div className="flex border-1 border-black max-w-30 h-30 justify-center items-center rounded-2xl overflow-hidden">
-                  {product.images && product.images.length > 0 && (
-                    <img
-                      src={product.images[0]}
-                      alt={`${product.name}-cover`}
-                      className="object-cover rounded-lg border w-full h-full"
-                    />
-                  )}
+                <div className="w-24 h-24 flex-shrink-0 border bg-white rounded-xl overflow-hidden">
+                    <img src={product.images[0] || "https://placehold.co/100"} alt="" className="w-full h-full object-cover object-center"/>
                 </div>
-                <div className="flex flex-col gap-3">
-                  <p className="font-semibold text-base">{product.name}</p>
-                  <p className="text-gray-600 text-sm">{product.category}</p>
-                  <div className="flex gap-10 items-baseline">
-                    <p className="font-semibold text-sm text-gray-400">
-                      <del>₹{product.regularPrice}</del>
-                    </p>
-                    <p className="font-semibold text-sm">
-                      ₹{product.discountedPrice}
-                      ₹{product.stockQty}
-                    </p>
-                  </div>
+                <div className="flex flex-col gap-1">
+                  <p className="font-semibold line-clamp-1">{product.name}</p>
+                  <p className="text-xs text-gray-500">{product.category}</p>
+                  <p className="font-bold text-[#68232B]">₹{product.discountedPrice}</p>
                 </div>
               </div>
-
-              <div className="grid grid-cols-[2.8fr_0.2fr] gap-1">
-                <div>
-                  <p className="text-sm font-medium">Summary</p>
-                  <p className="text-gray-500 font-light text-sm line-clamp-3">
-                    {product.description}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="flex items-start justify-end text-red-500 hover:text-red-700 transition transform hover:scale-110"
-                  onClick={() => {alert(Clicked); handleDeleteProduct(product.id)}}
-                >
-                  <Trash size={28} />
-                </button>
+              <div className="flex justify-between items-center pt-2 border-t mt-auto">
+                  <p className="text-xs text-gray-500 truncate w-3/4">{product.description}</p>
+                  <button className="text-red-400 hover:text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
+                    <Trash size={18} />
+                  </button>
               </div>
             </div>
           ))}
