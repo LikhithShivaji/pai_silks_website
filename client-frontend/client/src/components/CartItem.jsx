@@ -4,7 +4,8 @@ import { Minus, Plus, Trash2 } from "lucide-react";
 function CartItem({ item, index, onQuantityChange, onRemove }) {
   // Sync local state with props to ensure UI updates if parent changes
   const [itemCount, setItemCount] = useState(item.quantity || 1);
-
+  const imageSrc = item.image1 || item.image_url || item.image || item.product_image || "https://placehold.co/100";
+  
   useEffect(() => {
     setItemCount(item.quantity || 1);
   }, [item.quantity]);
@@ -22,12 +23,13 @@ function CartItem({ item, index, onQuantityChange, onRemove }) {
     onQuantityChange(index, newCount);
   };
 
+
   return (
     <div className="flex gap-4 p-3 group">
       {/* --- IMAGE SECTION --- */}
-      <div className="w-20 h-24 flex-shrink-0 rounded-lg overflow-hidden border border-white/40 shadow-sm bg-white">
+      <div className="w-20 h-24 fshrink-0 rounded-lg overflow-hidden border border-white/40 shadow-sm bg-white">
         <img
-          src={item.image1 || item.image || "https://placehold.co/100"}
+          src={imageSrc}
           alt={item.name}
           className="w-full h-full object-cover hover:scale-110 transition-transform duration-500"
         />
@@ -72,7 +74,7 @@ function CartItem({ item, index, onQuantityChange, onRemove }) {
               <Minus size={12} strokeWidth={3} />
             </button>
 
-            <span className="text-sm font-bold text-[#68232B] min-w-[1rem] text-center">
+            <span className="text-sm font-bold text-[#68232B] min-w-4 text-center">
               {itemCount}
             </span>
 

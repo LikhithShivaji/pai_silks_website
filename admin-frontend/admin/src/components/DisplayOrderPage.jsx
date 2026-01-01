@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { SelectComponent } from "./ui/SelectComponent";
 
 import {
@@ -17,6 +17,10 @@ export default function DisplayOrderPage({
   onBack = () => {},
   onChangeStatus,
 }) {
+  useEffect(() => {
+    console.log("order is", order);
+  }, []);
+
   if (!order) {
     return (
       <div className="p-6">
@@ -175,6 +179,7 @@ export default function DisplayOrderPage({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[100px]">Invoice</TableHead>
+              <TableHead className="w-[100px]">Product Image</TableHead>
               <TableHead>Product Name</TableHead>
               <TableHead>Product Id</TableHead>
               <TableHead>Quantity</TableHead>
@@ -188,6 +193,21 @@ export default function DisplayOrderPage({
               <TableRow key={index}>
                 <TableCell className="font-medium">
                   #{order.orderId}-{index + 1}
+                </TableCell>
+                <TableCell className="h-24 w-24 p-2">
+                  <div className="h-20 w-20 rounded-xl overflow-hidden border">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs text-gray-500">
+                        No Img
+                      </div>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>{product.name}</TableCell>
                 <TableCell>{index + 1}</TableCell>

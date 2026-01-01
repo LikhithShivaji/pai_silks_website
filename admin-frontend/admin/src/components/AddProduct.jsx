@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,8 +6,24 @@ import { Textarea } from "@/components/ui/textarea";
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
 
-const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
-  const [productImages, setProductImages] = useState([]);
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const AddProduct = ({
+  setCategoryProducts,
+  categoryName,
+  onBack,
+  categories,
+}) => {
+  const [imageFiles, setImageFiles] = useState([]);
+  const [previewUrls, setPreviewUrls] = useState([]);
+  const [collections, setCollections] = useState([]);
+  const [loadingCollections, setLoadingCollections] = useState(true);
 
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -21,66 +37,51 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
     discountedPrice: "",
     collection: "",
     stockQty: "",
+    isNewRelease: false, 
   });
 
-  // Compress and convert to base64
-  const compressAndConvert = (file, maxWidth = 1024, quality = 0.7) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = reject;
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => {
-          const ratio = Math.min(1, maxWidth / img.width);
-          const w = Math.round(img.width * ratio);
-          const h = Math.round(img.height * ratio);
-          const canvas = document.createElement("canvas");
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, w, h);
-          try {
-            const dataUrl = canvas.toDataURL("image/jpeg", quality);
-            resolve(dataUrl);
-          } catch (err) {
-            reject(err);
-          }
-        };
-        img.onerror = reject;
-        img.src = reader.result;
-      };
-      reader.readAsDataURL(file);
+  useEffect(() => {
+    return () => {
+      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [previewUrls]);
+
+  useEffect(() => {
+    if (loadingCollections) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [loadingCollections]);
+
+  useEffect(() => {
+    fetch("https://pai-silks-website-1.onrender.com/api/collections")
+      .then((res) => res.json())
+      .then((data) => data.success && setCollections(data.data))
+      .finally(() => setLoadingCollections(false));
+  }, []);
+
+  const handleImageUpload = (file) => {
+    if (!file) return;
+
+    setImageFiles((prev) => {
+      const updated = [...prev, file].slice(0, 4); // Max 4
+      return updated;
     });
 
-  // Called by ImageUpload when each image is done
-  const handleImageUpload = async (previewUrl) => {
-    try {
-      let finalUrl = previewUrl;
-
-      if (previewUrl instanceof File) {
-        finalUrl = await compressAndConvert(previewUrl, 800, 0.75);
-      } else if (
-        typeof previewUrl === "string" &&
-        previewUrl.startsWith("blob:")
-      ) {
-        const resp = await fetch(previewUrl);
-        const blob = await resp.blob();
-        finalUrl = await compressAndConvert(blob, 800, 0.75);
-      }
-
-      setProductImages((prev) => {
-        const updated = [...prev, finalUrl].slice(0, 4); // max 4
-        return updated;
-      });
-    } catch (err) {
-      console.error("handleImageUpload error:", err);
-      alert("Failed to process image. Try a smaller file.");
-    }
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrls((prev) => {
+      const updated = [...prev, objectUrl].slice(0, 4);
+      return updated;
+    });
   };
 
   const handleSaveProduct = async () => {
     if (!newProduct.name.trim()) {
-      alert("Please enter the required field");
+      alert("Please enter the required field (Product Name)");
       return false;
     }
 
@@ -88,7 +89,6 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
     const catKey =
       newProduct.category?.trim() || categoryName?.trim() || "UNCATEGORIZED";
 
-    // Build API payload exactly how backend expects
     const payload = {
       name: newProduct.name,
       description: newProduct.description,
@@ -101,42 +101,85 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
       regular_price: Number(newProduct.regularPrice) || 0,
       selling_price: Number(newProduct.discountedPrice) || 0,
       stock_qty: Number(newProduct.stockQty) || 0,
-      image_url: productImages, // base64 array
+      is_new_release: newProduct.isNewRelease ? 1 : 0,
       created_at: nowIso,
       updated_at: nowIso,
     };
 
     try {
-      const res = await fetch("https://pai-silks-website.onrender.com/api/create-product", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      console.log("Step 1: Creating Product...", payload);
+      const res = await fetch(
+        "https://pai-silks-website.onrender.com/api/create-product",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
 
-      if (res.ok) {
-        // const errorText = await res.text().catch(() => "");
-        console.log("Status is :", res.status);
-        alert(`Success! ${res.status}: ${"Product added successfully"}`);
-        onBack();
-        return false;
-      }
-      
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
-        console.error("API Error:", res.status, errorText);
-        alert(`Server Error ${res.status}: ${errorText || "Something went wrong on server"}`);
+        alert(`Server Error: ${errorText || "Could not create product"}`);
         return false;
       }
-      const created = await res.json(); 
 
-      // Update UI immediately so AllProducts shows it
+      const created = await res.json();
+
+      // ✅ ROBUST ID EXTRACTION
+      const newProductId =
+        created.product_id ||
+        created.id ||
+        created.insertId ||
+        (created.data && created.data.insertId) ||
+        (created.data && created.data.product_id);
+
+      console.log(
+        `Product Created (ID: ${newProductId}). Step 2: Uploading Images...`
+      );
+      console.log(
+        `Product Created new release is set to: ${newProduct.isNewRelease}). Step 2: Uploading Images...`
+      );
+
+      let finalImagesForUI = previewUrls; 
+
+      if (imageFiles.length > 0 && newProductId) {
+        const formData = new FormData();
+
+        formData.append("product_id", newProductId);
+
+        imageFiles.forEach((file, index) => {
+          formData.append("images", file);
+        });
+
+        const imgRes = await fetch(
+          "https://pai-silks-website.onrender.com/api/insert-image",
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+
+        const imgData = await imgRes.json();
+
+        if (imgData.success === "true" || imgData.success === true) {
+          console.log("✅ Images Uploaded!", imgData);
+
+          if (imgData.images && Array.isArray(imgData.images)) {
+            finalImagesForUI = imgData.images.map((img) => img.image_url);
+          }
+        } else {
+          console.warn("Image upload warning:", imgData);
+          alert("Product created, but check image upload status.");
+        }
+      }
+
+      alert(`Success! Product added successfully`);
+
       setCategoryProducts((prev = {}) => {
         const newProdForUI = {
           ...(created || payload),
-          id: created?.product_id || Date.now(),
-          images: productImages,
+          id: newProductId || Date.now(),
+          images: finalImagesForUI,
         };
 
         const updated = {
@@ -148,8 +191,9 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
         return updated;
       });
 
-      // Reset form state
-      setProductImages([]);
+      // Reset Form
+      setImageFiles([]);
+      setPreviewUrls([]);
       setNewProduct({
         name: "",
         category: "",
@@ -162,17 +206,17 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
         discountedPrice: "",
         collection: "",
         stockQty: "",
+        isNewRelease: false,
       });
 
       return true;
     } catch (err) {
-      console.error("Network/JSON Error:", err);
-      alert("Something went wrong while saving the product.");
+      console.error("Error:", err);
+      alert("Something went wrong.");
       return false;
     }
   };
 
-  // form submit handler — validates, hits API, updates UI, then navigates back
   const handleSubmit = async (e) => {
     e.preventDefault();
     const ok = await handleSaveProduct();
@@ -182,7 +226,7 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
   return (
     <form
       onSubmit={handleSubmit}
-      className="border-1 border-red-500 w-full p-5 flex flex-col gap-3"
+      className="w-full flex flex-col gap-3"
     >
       <div className="flex justify-between w-full">
         <div className="flex flex-col gap-3">
@@ -198,8 +242,7 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
         </button>
       </div>
 
-      <div className="h-full bg-white rounded-2xl flex flex-row gap-10 p-5">
-        {/* LEFT: product inputs */}
+      <div className="h-full bg-white rounded-2xl flex flex-col xl:flex-row gap-10 p-5">
         <div className="w-full p-2 flex flex-col gap-5">
           <label className="font-bold">Product Name</label>
           <Input
@@ -214,26 +257,59 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
           />
 
           <label className="font-bold">Category</label>
-          <Input
-            name="category"
-            placeholder="Category"
-            className="border-1 border-black resize-none"
+
+          <Select
             value={newProduct.category}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, category: e.target.value })
+            onValueChange={(value) =>
+              setNewProduct({ ...newProduct, category: value })
             }
-          />
+          >
+            <SelectTrigger className="w-full border border-black">
+              <SelectValue placeholder="Select a Category" />
+            </SelectTrigger>
+
+            <SelectContent>
+              {categories && categories.length > 0 ? (
+                categories.map((cat, idx) => {
+                  const categoryValue = cat.name || cat;
+
+                  return (
+                    <SelectItem key={idx} value={categoryValue}>
+                      {categoryValue}
+                    </SelectItem>
+                  );
+                })
+              ) : (
+                <SelectItem value="none" disabled>
+                  No Categories Available
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
 
           <label className="font-bold">Collection</label>
-          <Input
-            name="collection"
-            placeholder="Party Wear"
-            className="border-1 border-black resize-none"
-            value={newProduct.collection}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, collection: e.target.value })
+          <Select
+            onValueChange={(value) =>
+              setNewProduct({ ...newProduct, collection: value })
             }
-          />
+            value={newProduct.collection}
+          >
+            <SelectTrigger className="border-1 border-black w-full">
+              <SelectValue
+                placeholder={
+                  loadingCollections ? "Loading..." : "Select Collection"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {collections.map((item, idx) => (
+                // API returns object with "collection" key
+                <SelectItem key={item.id || idx} value={item.collection}>
+                  {item.collection}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <label className="font-bold">Description</label>
           <Textarea
@@ -290,16 +366,53 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
             }
           />
 
-          <label className="font-bold">Stock Quantity</label>
-          <Input
-            name="quantity"
-            placeholder="Stock Quantity"
-            className="border-1 border-black resize-none"
-            value={newProduct.stockQty}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, stockQty: e.target.value })
-            }
-          />
+          <div className="flex flex-col justify-between gap-10">
+            <div className="flex-1">
+              <label className="font-bold block mb-2">Stock Quantity</label>
+              <Input
+                name="quantity"
+                placeholder="Stock Quantity"
+                className="border-1 border-black resize-none"
+                value={newProduct.stockQty}
+                onChange={(e) =>
+                  setNewProduct({ ...newProduct, stockQty: e.target.value })
+                }
+              />
+            </div>
+
+            {/* --- NEW RELEASE TOGGLE --- */}
+            <div className="flex flex-col gap-2 items-start">
+              <label className="font-bold">Is New Release?</label>
+              <div
+                onClick={() =>
+                  setNewProduct({
+                    ...newProduct,
+                    isNewRelease: !newProduct.isNewRelease,
+                  })
+                }
+                className={`
+                  w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300
+                  ${newProduct.isNewRelease ? "bg-green-500" : "bg-gray-300"}
+                `}
+              >
+                <div
+                  className={`
+                    bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-300
+                    ${
+                      newProduct.isNewRelease
+                        ? "translate-x-7"
+                        : "translate-x-0"
+                    }
+                  `}
+                />
+              </div>
+              <span className="text-xs text-gray-500">
+                {newProduct.isNewRelease
+                  ? "Yes, Mark as New"
+                  : "No, Standard Product"}
+              </span>
+            </div>
+          </div>
 
           <div className="w-full flex gap-5">
             <div className="w-full flex flex-col gap-3">
@@ -338,11 +451,11 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
         {/* RIGHT: images & actions */}
         <div className="h-full w-full py-3 px-10 flex flex-col gap-5">
           <div className="w-full aspect-square gap-3 mt-3 bg-gray-300 p-5 rounded-xl flex justify-center items-center">
-            {productImages.length === 0 ? (
+            {previewUrls.length === 0 ? (
               <div>Add images here</div>
             ) : (
               <div className="w-full aspect-square grid grid-cols-2 grid-rows-2 gap-3 bg-gray-300 rounded-xl overflow-hidden">
-                {productImages.map((src, idx) => (
+                {previewUrls.map((src, idx) => (
                   <div
                     key={idx}
                     className="w-full h-full overflow-hidden rounded-lg border-1"
@@ -360,15 +473,8 @@ const AddProduct = ({ setCategoryProducts, categoryName, onBack }) => {
 
           <div className="flex flex-col gap-5">
             <p className="font-semibold">Product Gallery</p>
-            <div className="border-2 border-dashed border-gray-400 p-5 w-full rounded-2xl flex flex-col justify-center items-center gap-5">
-              <ImageIcon height={50} />
-              <div className="flex flex-col justify-center items-center">
-                <p className="text-[#7a7a7a]">Drop your image here, or browse</p>
-                <p className="text-[#7a7a7a]">Jpeg, png are allowed</p>
-              </div>
-            </div>
+            
 
-            {/* 4 upload slots */}
             {[...Array(4)].map((_, i) => (
               <ImageUpload key={i} onImageUpload={handleImageUpload} />
             ))}

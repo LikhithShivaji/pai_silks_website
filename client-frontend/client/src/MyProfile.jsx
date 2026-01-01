@@ -62,7 +62,7 @@ const MyProfile = () => {
       });
 
       const result = await response.json();
-      console.log("Update success:", result);
+      // console.log("Update success:", result);
 
       setIsEditing(false); // Switch back to view mode after saving
     } catch (error) {

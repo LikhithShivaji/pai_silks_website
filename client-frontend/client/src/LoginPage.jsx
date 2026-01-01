@@ -1,6 +1,6 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { CartContext } from "./CartContext"; // Import Context
+import { CartContext } from "./CartContext";
 import footerBg from "@/assets/footerbgimage.svg";
 import {
   Mail,
@@ -14,14 +14,13 @@ import {
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const location = useLocation(); // To check if they came from Checkout
+  const location = useLocation(); 
 
-  // Access global state to sync items
   const { cartItems, wishListItems, setCartItems, setWishListItems } =
     useContext(CartContext);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false); // Loading state for button
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -36,7 +35,6 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      // 1. LOGIN
       const response = await fetch("https://pai-silks-website-1.onrender.com/api/customer-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,27 +45,20 @@ const LoginPage = () => {
       });
 
       const data = await response.json();
-      console.log("Login Response:", data);
+      // console.log("Login Response:", data);
 
       if (data.user_id) {
         const userId = data.user_id;
-        
-        // Use name from API or fallback to email
         const userName = data.name || data.customer_name || formData.email.split("@")[0];
 
         localStorage.setItem("user_id", userId);
         localStorage.setItem("user_name", userName);
         localStorage.setItem("user_email", formData.email);
-
-        // ---------------------------------------------------------
-        // 2. SYNC BOTH CART & WISHLIST
-        // ---------------------------------------------------------
         try {
-            console.log("Starting Sync...");
+            // console.log("Starting Sync...");
 
             const syncPromises = [];
 
-            // A. Sync Cart
             if (cartItems.length > 0) {
               cartItems.forEach(item => {
                 syncPromises.push(
@@ -83,8 +74,6 @@ const LoginPage = () => {
                 );
               });
             }
-
-            // B. Sync Wishlist (THIS WAS MISSING!)
             if (wishListItems.length > 0) {
                 wishListItems.forEach(item => {
                     syncPromises.push(
@@ -100,20 +89,12 @@ const LoginPage = () => {
                 });
             }
 
-            // Execute all syncs
             await Promise.all(syncPromises);
-            console.log("Sync Complete!");
-
-            // ---------------------------------------------------------
-            // 3. REFRESH CONTEXT DATA (Pull fresh from DB)
-            // ---------------------------------------------------------
-            
-            // Refresh Cart
+            // console.log("Sync Complete!");
             const finalCartRes = await fetch(`https://pai-silks-website-1.onrender.com/api/cart/cart-data?user_id=${userId}`);
             const finalCartData = await finalCartRes.json();
             if(finalCartData.success) setCartItems(finalCartData.data);
 
-            // Refresh Wishlist
             const finalWishRes = await fetch(`https://pai-silks-website-1.onrender.com/api/wishlist/${userId}`);
             const finalWishData = await finalWishRes.json();
             if(finalWishData.success) setWishListItems(finalWishData.data);
@@ -122,7 +103,6 @@ const LoginPage = () => {
             console.warn("Sync warning (Non-critical):", syncErr);
         }
 
-        // 4. NAVIGATE
         if (cartItems.length > 0 || location.state?.from === "checkout") {
              navigate("/checkout");
         } else {
@@ -143,17 +123,13 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#FFF8F0] relative overflow-hidden font-['Poppins']">
-      {/* Background Texture */}
       <div
         className="absolute inset-0 opacity-[0.03] pointer-events-none bg-repeat"
         style={{ backgroundImage: `url(${footerBg})` }}
       />
 
-      {/* Ambient Blobs */}
       <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-[#68232B]/5 rounded-full blur-[100px]" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-[#FFCB85]/10 rounded-full blur-[100px]" />
-
-      {/* Glass Card */}
       <div
         className="
           relative z-10
@@ -166,7 +142,6 @@ const LoginPage = () => {
           animate-in fade-in zoom-in duration-500
         "
       >
-        {/* Header */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center p-3 bg-[#68232B]/5 rounded-2xl mb-4 text-[#68232B]">
             <Sparkles size={28} strokeWidth={1.5} />
@@ -255,7 +230,7 @@ const LoginPage = () => {
             className="
               w-full py-4 rounded-2xl font-bold text-lg text-white
               shadow-lg shadow-orange-900/20
-              bg-gradient-to-r from-[#FEDB87] to-[#BD7923]
+              bg-linear-to-r from-[#FEDB87] to-[#BD7923]
               hover:brightness-110 hover:shadow-xl hover:-translate-y-0.5
               active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed
               transition-all duration-300

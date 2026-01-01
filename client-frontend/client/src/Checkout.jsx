@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from "react";
-import { CartContext } from "@/CartContext.jsx"; // Adjust path if needed
-import CheckOutItem from "@/components/CheckOutItem.jsx"; // Adjust path if needed
+import { CartContext } from "@/CartContext.jsx"; 
+import CheckOutItem from "@/components/CheckOutItem.jsx"; 
 import logo from "@/assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 
@@ -23,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-/* ---------------- SCHEMA ---------------- */
 
 const checkoutSchema = z.object({
   email: z.string().email(),
@@ -38,13 +37,10 @@ const checkoutSchema = z.object({
   rememberMe: z.boolean().optional(),
 });
 
-/* ---------------- COMPONENT ---------------- */
 
 export default function Checkout() {
-  // CHANGE 1: Get 'cartItems' instead of dynamicCartItem
   const { cartItems, setCartItems } = useContext(CartContext);
 
-  // CHANGE 2: Local state for total calculation
   const [localTotal, setLocalTotal] = useState(0);
 
   const navigate = useNavigate();
@@ -66,13 +62,8 @@ export default function Checkout() {
     },
   });
 
-  // --------------------------------------------------------
-  // 1. CALCULATE TOTAL (Independent Logic)
-  // --------------------------------------------------------
   useEffect(() => {
-    // This runs as soon as cartItems loads from Context (DB or LocalStorage)
     const newTotal = cartItems.reduce((acc, item) => {
-      // Ensure we handle strings/numbers safely
       const price = Number(item.discounted_price || item.selling_price || 0);
       const qty = Number(item.quantity || 1);
       return acc + price * qty;
@@ -81,14 +72,10 @@ export default function Checkout() {
     setLocalTotal(newTotal);
   }, [cartItems]);
 
-  // --------------------------------------------------------
-  // 2. AUTO-FILL LOGIC
-  // --------------------------------------------------------
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
     const userEmail = localStorage.getItem("user_email");
 
-    // Pre-fill email from local storage immediately if available
     if (userEmail) form.setValue("email", userEmail);
 
     if (userId) {
@@ -97,11 +84,9 @@ export default function Checkout() {
       )
         .then((res) => res.json())
         .then((response) => {
-          // FIX: Use optional chaining (?.) so it doesn't crash if 'data' is missing
           if (response.success && response.data && response.data.length > 0) {
             const lastOrder = response.data[0];
 
-            // Safe check for name splitting
             const fullName = lastOrder.customer_name || "";
             const nameParts = fullName.trim().split(" ");
             const firstName = nameParts[0] || "";
@@ -119,11 +104,6 @@ export default function Checkout() {
     }
   }, [form]);
 
-  // --------------------------------------------------------
-  // 3. SUBMIT ORDER
-  // --------------------------------------------------------
-  // ... (Keep existing imports)
-
   const onSubmit = async (data) => {
     setIsSubmitting(true);
     const userId = localStorage.getItem("user_id");
@@ -135,18 +115,16 @@ export default function Checkout() {
     }
 
     try {
-      // 1. PREPARE ORDER PAYLOAD
       const orderPayload = {
         user_id: userId,
         customer_name: `${data.firstName} ${data.lastName}`,
         email: data.email,
-        phone_number: data.phone || "9999999999", // Add phone to form if missing
+        phone_number: data.phone || "9999999999", 
         shipping_address: `${data.address}, ${data.city}, ${data.state} - ${data.pincode}`,
         total_amount: localTotal + 99,
         payment_status: "Paid",
         payment_method: "UPI",
         order_status: "Pending",
-        // We send items here. If your backend 'createOrder' handles items, this is enough.
         items: cartItems.map(item => ({
             product_id: item.id || item.product_id,
             quantity: item.quantity || 1,
@@ -154,9 +132,8 @@ export default function Checkout() {
         }))
       };
 
-      console.log("Creating Order:", orderPayload);
+      // console.log("Creating Order:", orderPayload);
 
-      // 2. CALL CREATE ORDER API
       const response = await fetch("https://pai-silks-website-1.onrender.com/api/orders/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -164,38 +141,15 @@ export default function Checkout() {
       });
 
       const result = await response.json();
-      console.log("Order Result:", result);
+      // console.log("Order Result:", result);
 
       if (result.success || result.order_id || result.id) {
+        setCartItems([]); 
+        localStorage.removeItem("cart");
         
-        // --- [OPTIONAL] PLAN B: If backend needs items added separately ---
-        // If your database shows the Order Header but NO ITEMS, uncomment this block:
-        /*
-        const newOrderId = result.order_id || result.id;
-        await Promise.all(cartItems.map(item => 
-            fetch("https://pai-silks-website-1.onrender.com/api/order/add-item", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    order_id: newOrderId,
-                    product_id: item.id || item.product_id,
-                    quantity: item.quantity || 1,
-                    price: item.discounted_price || item.price
-                })
-            })
-        ));
-        */
-        // ------------------------------------------------------------------
-
-        // 3. SUCCESS: CLEAR CART & NAVIGATE
-        setCartItems([]); // Clear Context
-        localStorage.removeItem("cart"); // Clear Storage
-        
-        // If logged in, clear DB cart too (Optional but clean)
-        // await fetch(`.../api/cart/clear?user_id=${userId}`, { method: 'DELETE' });
 
         alert("Order Placed Successfully!");
-        navigate("/my-orders"); // <--- Redirect to the new My Orders page
+        navigate("/my-orders");
       } else {
         alert("Failed to place order: " + (result.message || "Unknown error"));
       }
@@ -210,12 +164,10 @@ export default function Checkout() {
 
   return (
     <>
-      {/* HEADER */}
       <header className="h-20 bg-white shadow flex justify-center items-center">
         <img src={logo} alt="Logo" className="h-16" />
       </header>
 
-      {/* MAIN */}
       <div className="grid grid-cols-1 lg:grid-cols-2 min-h-screen bg-white px-5 lg:px-30 font-['Poppins']">
         {/* LEFT – FORM */}
         <div className="bg-white p-10 animate-in slide-in-from-left duration-500">
@@ -344,7 +296,7 @@ export default function Checkout() {
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full h-12 text-lg bg-gradient-to-r from-[#ffe2a0] to-[#e8a348]"
+                className="w-full h-12 text-lg bg-linear-to-r from-[#ffe2a0] to-[#e8a348]"
               >
                 {isSubmitting ? (
                   <Loader2 className="animate-spin" />
@@ -356,7 +308,6 @@ export default function Checkout() {
           </Form>
         </div>
 
-        {/* RIGHT – CART SUMMARY */}
         <div className="bg-gray-50 p-10 border-l border-gray-200 animate-in slide-in-from-right duration-500">
           <div className="space-y-4 sticky top-10">
             <h2 className="text-xl font-semibold mb-4 text-[#68232B]">
@@ -364,7 +315,6 @@ export default function Checkout() {
             </h2>
 
             <div className="max-h-[60vh] overflow-y-auto scrollbar-hide pr-2 space-y-4">
-              {/* CHANGE 5: Iterate over cartItems directly */}
               {cartItems.map((item, index) => (
                 <CheckOutItem
                   key={item.id || index}
@@ -388,7 +338,6 @@ export default function Checkout() {
 
               <div className="flex justify-between font-bold text-2xl text-[#68232B] pt-2">
                 <span>Total</span>
-                {/* CHANGE 6: Display localTotal */}
                 <span>₹ {localTotal + 99}</span>
               </div>
             </div>

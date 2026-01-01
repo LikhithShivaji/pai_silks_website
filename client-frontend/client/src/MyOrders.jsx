@@ -11,9 +11,19 @@ const OrderCard = ({ order }) => {
   const dateStr = order.created_at || order.order_date || new Date().toISOString();
   const orderId = order.id || order.order_id || "N/A";
   
+  // --- SMART ITEM DETECTION ---
   const firstItem = order.items && order.items.length > 0 ? order.items[0] : null;
-  const displayImage = firstItem?.image || firstItem?.product_image || "https://placehold.co/150?text=Package";
-  const displayName = firstItem ? `${firstItem.product_name} ${order.items.length > 1 ? `+ ${order.items.length - 1} others` : ""}` : `Order #${orderId}`;
+
+  // 1. Try to find the image (looking in multiple places)
+  const displayImage = firstItem?.image || firstItem?.product_image || firstItem?.product?.image || "https://placehold.co/150?text=Package";
+  
+  // 2. Try to find the Name (The Fix for "Undefined")
+  // It checks: product_name, then name, then product.name, then fallback.
+  const rawName = firstItem?.product_name || firstItem?.name || firstItem?.product?.name || "Unknown Product";
+  
+  const displayName = firstItem 
+    ? `${rawName} ${order.items.length > 1 ? `+ ${order.items.length - 1} others` : ""}` 
+    : `Order #${orderId}`;
 
   const getStatusStyle = (s) => {
     switch (s) {
@@ -33,12 +43,12 @@ const OrderCard = ({ order }) => {
     <div className="group flex flex-col md:flex-row items-center gap-6 p-6 mb-6 bg-white/40 backdrop-blur-md border border-white/40 rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300">
       
       {/* Image Section */}
-      <div className="relative w-full md:w-32 aspect-[4/5] md:aspect-square flex-shrink-0 overflow-hidden rounded-2xl border border-stone-200 bg-white flex items-center justify-center">
+      <div className="relative w-full md:w-32 aspect-4/5 md:aspect-square shrink-0 overflow-hidden rounded-2xl border border-stone-200 bg-white flex items-center justify-center">
         <img 
           src={displayImage} 
           alt={displayName} 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          onError={(e) => { e.target.src = "https://placehold.co/150?text=PaiSilks"; }} // Fallback if image fails
+          onError={(e) => { e.target.src = "https://placehold.co/150?text=PaiSilks"; }} 
         />
       </div>
 
@@ -99,45 +109,70 @@ const MyOrders = () => {
     const fetchAndSortOrders = async () => {
       const userId = localStorage.getItem("user_id");
       
+      // 1. Log the ID we are asking for
+      // console.log(`👤 Checking orders for User ID: ${userId} on Server -1`);
+
       if (!userId) {
+        console.warn("⛔ No 'user_id' found in localStorage.");
         setLoading(false);
         return; 
       }
 
       try {
+        // ✅ Keeping your correct -1 URL
         const response = await fetch(`https://pai-silks-website-1.onrender.com/api/orders/user/${userId}`);
+        
+        if (!response.ok) {
+           throw new Error(`Server Error: ${response.status}`);
+        }
+
         const result = await response.json();
         
-        console.log("Fetched Orders:", result);
+        // 🛑 IMPORTANT: Look at this log in your Console!
+        // console.log("📦 RAW API RESPONSE:", result);
 
-        // Handle different API response structures (array or { data: [] })
-        const allOrders = Array.isArray(result) ? result : (result.data || []);
+        // 2. Universal Data Finder (catches all common backend wrappers)
+        let allOrders = [];
+        
+        if (Array.isArray(result)) {
+            allOrders = result;
+        } else if (result.data && Array.isArray(result.data)) {
+            allOrders = result.data;
+        } else if (result.orders && Array.isArray(result.orders)) {
+            allOrders = result.orders;
+        } else if (result.order && Array.isArray(result.order)) { // Common typo fix
+            allOrders = result.order;
+        }
 
-        // Filter Logic
+        // console.log(`📊 Found ${allOrders.length} orders to map.`);
+
+        // 3. Filter Logic (Safe Date Parsing)
         let today = new Date();
         const recent = [];
         const previous = [];
 
         allOrders.forEach((item) => {
-          // Use 'created_at' or 'order_date' from DB
-          let orderDate = new Date(item.created_at || item.order_date || Date.now());
-          let diff = Math.floor((today - orderDate) / (1000 * 60 * 60 * 24));
+          // Fallback to 'created_at', 'order_date', 'date', or NOW.
+          const rawDate = item.created_at || item.order_date || item.date || new Date();
+          const orderDate = new Date(rawDate);
+          
+          // Calculate difference safely
+          const diffTime = Math.abs(today - orderDate);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
-          if (diff < 30) {
+          if (diffDays <= 30) {
             recent.push(item);
           } else {
             previous.push(item);
           }
         });
 
-        // Sort by date (Newest first)
-        const sortByDate = (a, b) => new Date(b.created_at || b.order_date) - new Date(a.created_at || a.order_date);
-        
-        setRecentOrders(recent.sort(sortByDate));
-        setPreviousOrders(previous.sort(sortByDate));
+        // 4. Update State
+        setRecentOrders(recent.sort((a, b) => new Date(b.created_at || b.order_date) - new Date(a.created_at || a.order_date)));
+        setPreviousOrders(previous.sort((a, b) => new Date(b.created_at || b.order_date) - new Date(a.created_at || a.order_date)));
 
       } catch (error) {
-        console.error("Failed to fetch orders:", error);
+        console.error("❌ FETCH ERROR:", error);
       } finally {
         setLoading(false);
       }

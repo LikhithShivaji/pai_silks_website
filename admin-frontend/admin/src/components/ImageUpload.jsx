@@ -24,7 +24,11 @@ const ImageUpload = ({ onImageUpload }) => {
         clearInterval(interval)
         setUploading(false)
         setImagePreview(previewUrl)
-        onImageUpload(previewUrl) // send to parent ✅
+        
+        // ------------------------------------------------
+        // ✅ FIX: Send the FILE object, not the URL string
+        // ------------------------------------------------
+        onImageUpload(file) 
       }
     }, 300)
   }
