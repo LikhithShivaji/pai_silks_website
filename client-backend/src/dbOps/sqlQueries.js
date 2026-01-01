@@ -225,10 +225,18 @@ getNewReleaseProducts: `
   `,
 
   getOrderItems: `
-      SELECT oi.order_item_id, oi.product_id, oi.quantity, oi.price, p.name, p.selling_price
-      FROM order_items oi
-      JOIN product p ON oi.product_id = p.id
-      WHERE oi.order_id = ?;
+     SELECT 
+        oi.order_item_id, 
+        oi.product_id, 
+        oi.quantity, 
+        oi.price, 
+        p.name, 
+        p.selling_price,
+        pi.image_url
+    FROM order_items oi
+    JOIN product p ON oi.product_id = p.id
+    LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
+    WHERE oi.order_id = ?;
 
    `,
  
