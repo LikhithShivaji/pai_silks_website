@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from "react";
 import footerBg from "../assets/footerbgimage.svg";
 import { useNavigate } from "react-router-dom";
-import { CartContext } from "../CartContext"; // Import Context to clear data on logout
+import { CartContext } from "../CartContext"; 
 import { 
   X, 
   User, 
@@ -17,32 +17,28 @@ const Profile = ({ onClose }) => {
   const navigate = useNavigate();
   const { setCartItems, setWishListItems } = useContext(CartContext);
   
-  // Local state to track auth status
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Check login status on mount
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(!!userId); // Converts string/null to boolean
+    setIsLoggedIn(!!userId); 
+    // console.log(userId)
   }, []);
 
-  // --- LOGOUT LOGIC ---
   const handleLogout = () => {
-    // 1. Clear Local Storage
     localStorage.removeItem("user_id");
     localStorage.removeItem("user_name");
     localStorage.removeItem("user_email");
-    localStorage.removeItem("cart"); // Optional: Keep local cart or clear it? Usually clear.
+    localStorage.removeItem("cart"); 
     
-    // 2. Clear Context (UI Updates immediately)
     setCartItems([]);
     setWishListItems([]);
 
     // 3. Update State & Navigate
     setIsLoggedIn(false);
     onClose();
-    navigate("/"); // Go to Home
-    window.location.reload(); // Optional: Force refresh to ensure all states are clean
+    navigate("/"); 
+    window.location.reload(); 
   };
 
   // --- LOGIN LOGIC ---
@@ -82,14 +78,12 @@ const Profile = ({ onClose }) => {
   );
 
   return (
-    // Overlay Backdrop
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm transition-opacity duration-300">
       
-      {/* Sidebar Container (Slide from LEFT) */}
       <div
         className="
           fixed inset-y-0 left-0
-          w-[85vw] sm:w-[400px]
+          w-[85vw] sm:w-100
           bg-[#FFF8F0]/95 backdrop-blur-xl
           shadow-2xl
           flex flex-col
@@ -97,7 +91,6 @@ const Profile = ({ onClose }) => {
           animate-in slide-in-from-left duration-300
         "
       >
-        {/* --- HEADER --- */}
         <div 
           className="relative px-6 py-6 border-b border-[#68232B]/10 flex justify-between items-center bg-white/50"
           style={{ backgroundImage: `url(${footerBg})`}}
@@ -121,11 +114,9 @@ const Profile = ({ onClose }) => {
           </button>
         </div>
 
-        {/* --- SCROLLABLE CONTENT --- */}
         <div className="flex-1 overflow-y-auto p-6 bg-[#FFCB85]/70 backdrop-blur-md">
           
           <div className="space-y-1">
-            {/* My Orders (Only visible if logged in? Or redirects to login?) */}
             <NavItem 
               icon={Package} 
               label="My Orders" 
@@ -136,7 +127,6 @@ const Profile = ({ onClose }) => {
               }} 
             />
 
-            {/* My Profile */}
             <NavItem 
               icon={UserCircle} 
               label="My Profile" 
@@ -147,7 +137,6 @@ const Profile = ({ onClose }) => {
               }} 
             />
 
-            {/* About Us */}
             <NavItem 
               icon={Info} 
               label="About Us" 
@@ -161,13 +150,11 @@ const Profile = ({ onClose }) => {
 
         </div>
 
-        {/* --- FOOTER (DYNAMIC BUTTON) --- */}
         <div 
           className="p-6 border-t border-[#68232B]/10 bg-white/50 backdrop-blur-md" 
           style={{ backgroundImage: `url(${footerBg})`}}
         >
           {isLoggedIn ? (
-            // LOGOUT BUTTON
             <button
               onClick={handleLogout}
               className="
@@ -175,7 +162,7 @@ const Profile = ({ onClose }) => {
                 rounded-full
                 font-bold text-lg text-white
                 shadow-lg shadow-red-900/20
-                bg-gradient-to-r from-red-400 to-red-600
+                bg-linear-to-r from-red-400 to-red-600
                 hover:brightness-110
                 active:scale-95
                 transition-all duration-300
@@ -187,7 +174,6 @@ const Profile = ({ onClose }) => {
               Logout
             </button>
           ) : (
-            // LOGIN BUTTON
             <button
               onClick={handleLogin}
               className="
@@ -195,7 +181,7 @@ const Profile = ({ onClose }) => {
                 rounded-full
                 font-bold text-lg text-white
                 shadow-lg shadow-orange-900/20
-                bg-gradient-to-r from-[#FEDB87] to-[#BD7923]
+                bg-linear-to-r from-[#FEDB87] to-[#BD7923]
                 hover:brightness-110
                 active:scale-95
                 transition-all duration-300

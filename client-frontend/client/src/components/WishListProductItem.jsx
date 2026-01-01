@@ -6,6 +6,8 @@ function WishListProductItem({ item, index, onRemove, onMoveToCart }) {
     onRemove(e, index);
   };
 
+  const imageSrc = item.image1 || item.image_url || item.image || item.product_image || "https://placehold.co/100";
+
   // const addToCartOperation = (e) => {
   //   e.stopPropagation();
   //   // Logic placeholder
@@ -16,9 +18,9 @@ function WishListProductItem({ item, index, onRemove, onMoveToCart }) {
     <div className="flex gap-4 p-3 group hover:bg-white/40 transition-colors duration-300 rounded-xl">
       
       {/* --- IMAGE SECTION --- */}
-      <div className="w-20 h-24 flex-shrink-0 rounded-xl overflow-hidden border border-white/50 shadow-sm bg-white">
+      <div className="w-20 h-24 shrink-0 rounded-xl overflow-hidden border border-white/50 shadow-sm bg-white">
         <img
-          src={item.image1}
+          src={imageSrc}
           alt={item.name}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
         />

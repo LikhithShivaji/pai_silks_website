@@ -10,6 +10,7 @@ function ProductCard({
   discounted_price,
   image1,
   onAddToCart,
+  showToast
 }) {
   const navigate = useNavigate();
 
@@ -20,6 +21,7 @@ function ProductCard({
   const addToCart = (e) => {
     e.stopPropagation();
     onAddToCart();
+    showToast("Added to Cart", "cart");
   };
 
   return (
@@ -49,7 +51,7 @@ function ProductCard({
       <div
         className="
           w-full
-          aspect-[3/4]
+          aspect-3/4
           overflow-hidden
           rounded-[1.2rem]
           mb-3
@@ -75,7 +77,7 @@ function ProductCard({
       <h4
         className="
           mt-0
-          mb-[4px]
+          mb-1
           px-1
           h-[3em]
           flex
@@ -112,8 +114,8 @@ function ProductCard({
         <button
           onClick={addToCart}
           className="
-            w-[42px]
-            h-[42px]
+            w-10.5
+            h-10.5
             bg-[#68232B]/10
             bg-center
             bg-cover

@@ -9,50 +9,41 @@ export const CartProvider = ({ children }) => {
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
-  // 1. INITIAL LOAD (Database or LocalStorage?)
   useEffect(() => {
     const userId = localStorage.getItem("user_id");
 
     if (userId) {
-      // --- LOGGED IN: Fetch from API ---
       const fetchUserData = async () => {
         try {
-          // A. Fetch Cart
           const cartRes = await fetch(`https://pai-silks-website-1.onrender.com/api/cart/cart-data?user_id=${userId}`);
           const cartData = await cartRes.json();
           
+          // console.log("RAW CART DATA FROM API:", cartData);
           if (cartData.success) {
-            // --- FIX: NORMALIZE DATA ---
-            // We map the DB response to ensure 'discounted_price' always exists
             const safeCart = cartData.data.map(item => ({
                 ...item,
-                // If DB sends 'price' or 'selling_price', we copy it to 'discounted_price'
-                discounted_price: item.discounted_price || item.price || item.selling_price || 0,
-                // Ensure ID is consistent
                 id: item.id || item.product_id,
-                // Ensure Image is consistent
-                image1: item.image1 || item.image || item.product_image || "https://placehold.co/100"
+                image1: item.image1 || item.image || item.product_image || item.image_url || "https://placehold.co/100"
             }));
             
-            console.log("Normalized Cart Data:", safeCart); // Debug log
+            // console.log("Normalized Cart Data:", safeCart);
             setCartItems(safeCart); 
           }
 
-          // B. Fetch Wishlist
           const wishRes = await fetch(`https://pai-silks-website-1.onrender.com/api/wishlist/${userId}`);
           const wishData = await wishRes.json();
+          // console.log("RAW CART DATA FROM API:", cartData); // Fixed copy-paste typo in label
           if (wishData.success) {
-            // NORMALIZE WISHLIST DATA
             const safeWishlist = wishData.data.map(item => ({
                 ...item,
-                // Ensure ID and Image match what your UI expects
                 id: item.id || item.product_id,
-                image1: item.image1 || item.image || item.product_image || "https://placehold.co/100",
+                // Added image_url fallback here as well
+                image1: item.image1 || item.image || item.product_image || item.image_url || "https://placehold.co/100",
                 discounted_price: item.discounted_price || item.price || item.selling_price || 0,
                 name: item.name || item.product_name
             }));
             
-            console.log("Normalized Wishlist:", safeWishlist);
+            // console.log("Normalized Wishlist:", safeWishlist);
             setWishListItems(safeWishlist);
           }
         } catch (error) {
@@ -86,10 +77,7 @@ export const CartProvider = ({ children }) => {
   // 3. ADD TO CART HANDLER (Hybrid)
   const handleAddToCart = async (product) => {
     const userId = localStorage.getItem("user_id");
-
-    // A. Immediate UI Update (Optimistic)
     setCartItems((prev) => {
-      // Prevent duplicates based on ID
       if (prev.some((item) => (item.id || item.product_id) === (product.id || product.product_id))) return prev;
       return [...prev, product];
     });
@@ -140,27 +128,46 @@ export const CartProvider = ({ children }) => {
   };
 
   // -----------------------------------------------------------
-  // 5. REMOVE FROM CART HANDLER (Hybrid) - NEW!
+  // 5. REMOVE FROM WISHLIST HANDLER (Hybrid) - NEW!
   // -----------------------------------------------------------
-  const handleRemoveFromCart = async (productId) => {
+  const handleRemoveFromWishList = async (productId) => {
     const userId = localStorage.getItem("user_id");
 
     // A. Immediate UI Update (Optimistic)
-    // Filters out the item from the local state instantly
-    setCartItems((prev) => prev.filter((item) => (item.id || item.product_id) !== productId));
+    setWishListItems((prev) => prev.filter((item) => (item.id || item.product_id) !== productId));
 
     // B. If Logged In -> Call API to remove from DB
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/cart/remove", {
-          method: "DELETE", // Standard practice is DELETE. Check your API docs if it's POST.
+        await fetch("https://pai-silks-website-1.onrender.com/api/wishlist/remove", {
+          method: "DELETE", // Assuming DELETE method based on typical API standards
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: userId,
             product_id: productId
           }),
         });
-        console.log("Removed from DB Cart");
+        // console.log("Removed from DB Wishlist");
+      } catch (error) {
+        console.error("Error removing from DB Wishlist:", error);
+      }
+    }
+  };
+
+  const handleRemoveFromCart = async (productId) => {
+    const userId = localStorage.getItem("user_id");
+    setCartItems((prev) => prev.filter((item) => String(item.id || item.product_id) !== String(productId)));
+
+    if (userId) {
+      try {
+        await fetch("https://pai-silks-website-1.onrender.com/api/cart/remove", {
+          method: "DELETE", 
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            product_id: productId
+          }),
+        });
       } catch (error) {
         console.error("Error removing from DB Cart:", error);
       }
@@ -175,7 +182,8 @@ export const CartProvider = ({ children }) => {
       total, setTotal,
       handleAddToCart, 
       handleAddToWishList,
-      handleRemoveFromCart // <--- EXPORTED HERE
+      handleRemoveFromWishList, // <--- EXPORTED HERE
+      handleRemoveFromCart 
     }}>
       {children}
     </CartContext.Provider>
