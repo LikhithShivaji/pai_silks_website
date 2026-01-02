@@ -1,13 +1,13 @@
 import React, { useContext, useEffect, useState } from "react";
-import { CartContext } from "@/CartContext.jsx"; 
-import CheckOutItem from "@/components/CheckOutItem.jsx"; 
+import { CartContext } from "@/CartContext.jsx";
+import CheckOutItem from "@/components/CheckOutItem.jsx";
 import logo from "@/assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 import {
   Form,
@@ -23,7 +23,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
-
 const checkoutSchema = z.object({
   email: z.string().email(),
   firstName: z.string().min(1, "First Name is required"),
@@ -36,7 +35,6 @@ const checkoutSchema = z.object({
   paymentMethod: z.literal("razorpay"),
   rememberMe: z.boolean().optional(),
 });
-
 
 export default function Checkout() {
   const { cartItems, setCartItems } = useContext(CartContext);
@@ -65,16 +63,16 @@ export default function Checkout() {
   useEffect(() => {
     const newTotal = cartItems.reduce((acc, item) => {
       // 👇 FIX: Check all 4 possible names for price
-      const price = 
-        Number(item.discounted_price) || 
-        Number(item.selling_price) || 
-        Number(item.price) || 
-        Number(item.amount) || 
+      const price =
+        Number(item.discounted_price) ||
+        Number(item.selling_price) ||
+        Number(item.price) ||
+        Number(item.amount) ||
         0;
 
       const qty = Number(item.quantity) || 1;
-      
-      return acc + (price * qty);
+
+      return acc + price * qty;
     }, 0);
 
     setLocalTotal(newTotal);
@@ -127,41 +125,44 @@ export default function Checkout() {
         user_id: userId,
         customer_name: `${data.firstName} ${data.lastName}`,
         email: data.email,
-        phone_number: data.phone || "9999999999", 
+        phone_number: data.phone || "9999999999",
         shipping_address: `${data.address}, ${data.city}, ${data.state} - ${data.pincode}`,
         total_amount: localTotal + 99,
         payment_status: "Paid",
         payment_method: "UPI",
         order_status: "Pending",
-        items: cartItems.map(item => ({
-            product_id: item.id || item.product_id,
-            quantity: item.quantity || 1,
-            price: Number(item.discounted_price || item.selling_price || item.price)
-        }))
+        items: cartItems.map((item) => ({
+          product_id: item.id || item.product_id,
+          quantity: item.quantity || 1,
+          price: Number(
+            item.discounted_price || item.selling_price || item.price
+          ),
+        })),
       };
 
       // console.log("Creating Order:", orderPayload);
 
-      const response = await fetch("https://pai-silks-website-1.onrender.com/api/orders/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(orderPayload),
-      });
+      const response = await fetch(
+        "https://pai-silks-website-1.onrender.com/api/orders/create",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(orderPayload),
+        }
+      );
 
       const result = await response.json();
       // console.log("Order Result:", result);
 
       if (result.success || result.order_id || result.id) {
-        setCartItems([]); 
+        setCartItems([]);
         localStorage.removeItem("cart");
-        
 
         alert("Order Placed Successfully!");
         navigate("/my-orders");
       } else {
         alert("Failed to place order: " + (result.message || "Unknown error"));
       }
-
     } catch (error) {
       console.error("Order Error:", error);
       alert("Something went wrong. Please try again.");
@@ -172,11 +173,17 @@ export default function Checkout() {
 
   return (
     <>
-      <header className="h-20 bg-white shadow flex justify-center items-center">
+      <header className="relative h-20 bg-white shadow flex justify-center items-center">
+        <button
+          onClick={() => navigate("/")}
+          className="absolute top-0 left-0 z-1 flex m-4 px-2 rounded-4xl bg-[#68232B] text-[#FEDB87] cursor-pointer font-bold justify-center gap-1 md:gap-3 items-center p-3 w-20 text-xs md:text-lg md:w-50 hover:shadow-xl hover:border-[#68232B]/20 hover:-translate-y-0.5"
+        >
+          <ArrowLeft size={15} /> <p>Back</p>
+        </button>
         <img src={logo} alt="Logo" className="h-16" />
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 min-h-screen bg-white px-5 lg:px-30 font-['Poppins']">
+      <div className="grid grid-cols-1 lg:grid-cols-2 min-h-screen bg-white px-0 lg:px-30 font-['Poppins']">
         {/* LEFT – FORM */}
         <div className="bg-white p-10 animate-in slide-in-from-left duration-500">
           <Form {...form}>
@@ -212,7 +219,7 @@ export default function Checkout() {
                     <FormItem>
                       <FormLabel>First Name</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} placeholder="Ex: Swapna" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -226,7 +233,7 @@ export default function Checkout() {
                     <FormItem>
                       <FormLabel>Last Name</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} placeholder="Ex: Kumari" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -250,34 +257,61 @@ export default function Checkout() {
 
               <FormField
                 control={form.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Ex: 9876543210" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="apartment"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Apartment (optional)</FormLabel>
                     <FormControl>
-                      <Input {...field} />
+                      <Input {...field} placeholder="Hiranandani flat" />
                     </FormControl>
                   </FormItem>
                 )}
               />
 
               <div className="grid grid-cols-3 gap-4">
-                {["city", "state", "pincode"].map((name) => (
-                  <FormField
-                    key={name}
-                    control={form.control}
-                    name={name}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="capitalize">{name}</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ))}
+                {["city", "state", "pincode"].map((name) => {
+                  // Define your placeholders here
+                  const placeholders = {
+                    city: "Ex: Bengaluru",
+                    state: "Ex: Karnataka",
+                    pincode: "Ex: 560001",
+                  };
+
+                  return (
+                    <FormField
+                      key={name}
+                      control={form.control}
+                      name={name}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="capitalize">{name}</FormLabel>
+                          <FormControl>
+                            {/* Use the map to get the correct placeholder */}
+                            <Input
+                              {...field}
+                              placeholder={placeholders[name]}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  );
+                })}
               </div>
 
               <h2 className="text-xl font-semibold">Payment</h2>

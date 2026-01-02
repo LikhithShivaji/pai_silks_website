@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Sparkles,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 
 const SignupPage = () => {
@@ -63,6 +64,12 @@ const SignupPage = () => {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#FFF8F0] relative overflow-hidden font-['Poppins'] py-10">
+      <button
+          onClick={() => navigate("/")}
+          className="absolute top-0 left-0 z-1 flex m-4 px-2 rounded-4xl bg-[#68232B] text-[#FEDB87] cursor-pointer font-bold justify-center gap-1 md:gap-3 items-center p-3 w-20 text-xs md:text-lg md:w-50 hover:shadow-xl hover:border-[#68232B]/20 hover:-translate-y-0.5"
+        >
+          <ArrowLeft /> <p>Back</p>
+        </button>
       
       {/* Background Texture */}
       <div
@@ -78,7 +85,7 @@ const SignupPage = () => {
       <div
         className="
           relative z-10
-          w-full max-w-lg mx-4
+          w-full max-w-lg mx-4 my-10
           bg-white/60 backdrop-blur-xl
           border border-white/40
           rounded-[2.5rem]

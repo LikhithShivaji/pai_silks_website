@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useContext } from "react";
-import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag } from "lucide-react";
+import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag, ArrowLeft } from "lucide-react";
 
 import { CartContext } from "@/CartContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const OrderCard = ({ order }) => {
   const status = order.order_status || order.status || "Pending";
@@ -109,6 +110,7 @@ const OrderCard = ({ order }) => {
 // --- Main Component ---
 const MyOrders = () => {
   const { cartItems, setCartItems, wishListItems, setWishListItems } = useContext(CartContext);
+  const navigate = useNavigate();
   
   const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
   const updateWishList = (dynamicWishListItem) => setWishListItems(dynamicWishListItem);
@@ -208,6 +210,13 @@ const MyOrders = () => {
         
         {/* Decorative Top Bar */}
         <div className="h-2 w-full bg-[#68232B]" />
+
+        <button
+          onClick={() => navigate("/")}
+          className="hidden md:flex m-4 px-2 rounded-4xl bg-[#68232B] text-[#FEDB87] cursor-pointer font-bold justify-center gap-3 items-center p-3 w-50 hover:shadow-xl hover:border-[#68232B]/20 hover:-translate-y-0.5"
+        >
+          <ArrowLeft /> <p>Back</p>
+        </button>
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           
