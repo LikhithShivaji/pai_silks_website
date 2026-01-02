@@ -250,7 +250,7 @@ const MyProfile = () => {
                   </div>
 
                   {/* DOB Field */}
-                  <div className="hidden flex-col md:flex-row md:items-center justify-between py-4 border-b border-gray-100">
+                  {/* <div className="hidden flex-col md:flex-row md:items-center justify-between py-4 border-b border-gray-100">
                     <div className="flex items-center gap-4 text-gray-500 mb-2 md:mb-0">
                       <CalendarIcon className="w-5 h-5 text-[#68232B]" />
                       <span className="font-medium text-gray-600">Date of Birth</span>
@@ -297,7 +297,7 @@ const MyProfile = () => {
                         />
                       </PopoverContent>
                     </Popover>
-                  </div>
+                  </div> */}
                 </div>
               )}
 
