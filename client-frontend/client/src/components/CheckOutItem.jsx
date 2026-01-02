@@ -23,9 +23,8 @@ function CheckOutItem({ item, quantity }) {
       key={item.id}
       className="
         relative
-        grid
-        grid-cols-[30%_55%_15%]
-        border-b border-gray-100 pb-2 mb-2
+        flex flex-col md:flex-row justify-between items-center
+        pb-2 mb-2
       "
     >
       {/* IMAGE + QUANTITY */}
@@ -35,8 +34,8 @@ function CheckOutItem({ item, quantity }) {
           flex
           items-center
           justify-center
-          h-[12vh]
-          w-[6vw]
+          h-[100px]
+          w-[100px]
           overflow-hidden
           m-2
           rounded-[10px]
@@ -47,7 +46,7 @@ function CheckOutItem({ item, quantity }) {
           src={imageSrc} 
           alt={item.name}
           className="
-            w-full
+            w-[100px]
             h-full
             object-cover
             rounded-[10px]
@@ -74,7 +73,7 @@ function CheckOutItem({ item, quantity }) {
       </div>
 
       {/* DESCRIPTION */}
-      <div className="flex items-center px-2">
+      <div className="flex items-center px-2 w-fit md:w-[250px]">
         <p className="text-sm font-medium text-gray-700 line-clamp-2 leading-tight">
           {item.name}
         </p>

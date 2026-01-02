@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Sparkles,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 
 const LoginPage = () => {
@@ -160,7 +161,14 @@ const LoginPage = () => {
   };
 
   return (
+    
     <div className="min-h-screen w-full flex items-center justify-center bg-[#FFF8F0] relative overflow-hidden font-['Poppins']">
+      <button
+          onClick={() => navigate("/")}
+          className="absolute top-0 left-0 z-1 flex m-4 px-2 rounded-4xl bg-[#68232B] text-[#FEDB87] cursor-pointer font-bold justify-center gap-1 md:gap-3 items-center p-3 w-20 text-xs md:text-lg md:w-50 hover:shadow-xl hover:border-[#68232B]/20 hover:-translate-y-0.5"
+        >
+          <ArrowLeft /> <p>Back</p>
+        </button>
       <div
         className="absolute inset-0 opacity-[0.03] pointer-events-none bg-repeat"
         style={{ backgroundImage: `url(${footerBg})` }}
@@ -170,7 +178,7 @@ const LoginPage = () => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-[#FFCB85]/10 rounded-full blur-[100px]" />
       <div
         className="
-          relative z-10
+          relative z-10 my-20
           w-full max-w-md mx-4
           bg-white/60 backdrop-blur-xl
           border border-white/40

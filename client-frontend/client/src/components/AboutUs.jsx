@@ -9,13 +9,16 @@ import call from "../assets/call.svg";
 import maps from "../assets/map-trifold.svg";
 
 import { CartContext } from "../CartContext";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // Using the pattern as a subtle texture overlay instead of a heavy background
 import footerBgPattern from "@/assets/footerbgimage.webp";
+import { ArrowLeft } from "lucide-react";
 
 const AboutUs = () => {
   const { cartItems, setCartItems, wishListItems, setWishListItems } =
     useContext(CartContext);
+    const navigate = useNavigate();
 
   const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
   const updateWishList = (dynamicWishListItem) =>
@@ -29,7 +32,7 @@ const AboutUs = () => {
   ];
 
   return (
-    <div className="min-h-screen backdrop-blur-md font-['Poppins']">
+    <div className="font-['Poppins']">
       <Header
         cartItems={cartItems}
         onUpdate={updateCart}
@@ -38,16 +41,18 @@ const AboutUs = () => {
       />
 
         <div className="h-2 w-full bg-[#68232B]" />
+
+        <button
+          onClick={() => navigate("/")}
+          className="flex m-4 px-2 rounded-4xl bg-[#68232B] text-[#FEDB87] cursor-pointer font-bold justify-center gap-3 items-center p-3 w-50 hover:shadow-xl hover:border-[#68232B]/20 hover:-translate-y-0.5"
+        >
+          <ArrowLeft /> <p>Back</p>
+        </button>
       {/* --- Main Content Wrapper with subtle pattern overlay --- */}
       <div 
-        className="relative w-full py-16 md:py-24 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center"
+        className="relative w-full py-5 md:py-16 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-center"
       >
-        
-         {/* Subtle Texture Overlay */}
-         <div 
-            className="absolute inset-0 opacity-[0.03] bg-center bg-repeat pointer-events-none"
-            style={{ backgroundImage: `url(${footerBgPattern})` }}
-         />
+         
         {/* --- Premium Glassmorphism About Card --- */}
         <div
           className="
@@ -123,7 +128,7 @@ const AboutUs = () => {
         </div>
 
         {/* --- REACH US SECTION --- */}
-        <div className="text-center text-[#68232B] mt-20 relative z-10">
+        <div className="text-center text-[#68232B] mt-20 relative">
           <h2 className="text-3xl font-bold mb-10">
             Reach Us At
           </h2>
