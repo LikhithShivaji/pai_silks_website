@@ -35,6 +35,17 @@ async function loginCustomerUser(userData) {
   }
 }
 
+// customerManager.js
+const getUserProfile = async (user_id) => {
+  try {
+    return await dbCmds.getUserById(user_id);
+  } catch (err) {
+    console.error("Error in getUserProfile manager:", err);
+    throw err;
+  }
+};
+
 module.exports = {
   loginCustomerUser,
+  getUserProfile
 };

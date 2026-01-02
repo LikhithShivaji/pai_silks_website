@@ -83,6 +83,21 @@ async insertCustomerUser(userData) {
     }
   }
 
+
+  // dbCmds.js
+async getUserById(user_id) {
+  try {
+    const [rows] = await pool.query(
+      sqlqueries.login.getUserById, 
+      [user_id]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  } catch (err) {
+    console.error("Error in getUserById dbCmd:", err);
+    throw err;
+  }
+}
+
   // Update customer session token
   async updateCustomerToken(token, sid) {
     try {
