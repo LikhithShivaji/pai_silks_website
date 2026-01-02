@@ -175,6 +175,34 @@ exports.customerLogin = async (req, res) => {
 };
 
 
+
+// customerController.js
+exports.getUserDetails = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const userData = await customerLoginManager.getUserProfile(user_id);
+
+    if (!userData) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Mapping based on your exact column names:
+    return res.status(200).json({
+      success: true,
+      data: {
+        name: userData.user_name || "",
+        email: userData.pri_email || "",
+        phone: userData.phone_number || "", // Changed from pri_mobile to phone_number
+        address: userData.address || ""
+      }
+    });
+
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 exports.getAllCollections = async (req, res) => {
   try {
     const collections = await productManager.getAllCollections();

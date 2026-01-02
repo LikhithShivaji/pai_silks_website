@@ -10,6 +10,9 @@ router.post('/signup', customerController.customerSignup);
 // Customer login
 router.post('/customer-login', customerController.customerLogin);
 
+// router.js
+router.get('/get-user-details/:user_id', customerController.getUserDetails);
+
 
 // To get the collection
 router.get('/collections', customerController.getAllCollections);
