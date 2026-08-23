@@ -1,6 +1,7 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CartContext } from "./CartContext";
+import { CLIENT_API } from "@/config/api";
 import footerBg from "@/assets/footerbgimage.webp";
 import {
   Mail,
@@ -39,7 +40,7 @@ const LoginPage = () => {
     const guestCart = [...cartItems];
 
     try {
-      const response = await fetch("https://pai-silks-website-1.onrender.com/api/customer-login", {
+      const response = await fetch(`${CLIENT_API}/api/customer-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -65,7 +66,7 @@ const LoginPage = () => {
             if (guestCart.length > 0) {
               guestCart.forEach(item => {
                 syncPromises.push(
-                    fetch("https://pai-silks-website-1.onrender.com/api/cart/add", {
+                    fetch(`${CLIENT_API}/api/cart/add`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -82,7 +83,7 @@ const LoginPage = () => {
             if (wishListItems.length > 0) {
                 wishListItems.forEach(item => {
                     syncPromises.push(
-                        fetch("https://pai-silks-website-1.onrender.com/api/wishlist/add", {
+                        fetch(`${CLIENT_API}/api/wishlist/add`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
@@ -97,7 +98,7 @@ const LoginPage = () => {
             await Promise.all(syncPromises);
 
             // Fetch final server data
-            const finalCartRes = await fetch(`https://pai-silks-website-1.onrender.com/api/cart/cart-data?user_id=${userId}`);
+            const finalCartRes = await fetch(`${CLIENT_API}/api/cart/cart-data?user_id=${userId}`);
             const finalCartData = await finalCartRes.json();
 
             if(finalCartData.success) {
@@ -133,7 +134,7 @@ const LoginPage = () => {
             }
 
             // Wishlist fetch...
-            const finalWishRes = await fetch(`https://pai-silks-website-1.onrender.com/api/wishlist/${userId}`);
+            const finalWishRes = await fetch(`${CLIENT_API}/api/wishlist/${userId}`);
             const finalWishData = await finalWishRes.json();
             if(finalWishData.success) setWishListItems(finalWishData.data);
 

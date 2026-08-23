@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Trash } from "lucide-react";
+import { ADMIN_API } from "@/config/api";
 
 const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct }) => {
   const [products, setProducts] = useState([]);
@@ -11,7 +12,7 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
       try {
         setLoading(true);
 
-        const res = await fetch("https://pai-silks-website.onrender.com/api/get-all-product-details");
+        const res = await fetch(`${ADMIN_API}/api/get-all-product-details`);
         const apiResponse = await res.json();
         console.log("api response is",apiResponse)
         
@@ -74,7 +75,7 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
 
     try {
       // ✅ FIX: Add the ID to the URL using template literals `${productId}`
-      const res = await fetch(`https://pai-silks-website.onrender.com/api/delete-product/${productId}`, {
+      const res = await fetch(`${ADMIN_API}/api/delete-product/${productId}`, {
         method: "DELETE", // Usually route parameters use DELETE, but if this fails, try "POST"
         headers: {
           "Content-Type": "application/json",

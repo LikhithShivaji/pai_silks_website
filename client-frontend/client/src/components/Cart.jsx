@@ -2,6 +2,7 @@ import React, { useEffect, useContext } from "react";
 import CartItem from "./CartItem";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";
+import { CLIENT_API } from "@/config/api";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, ShoppingBag } from "lucide-react";
 
@@ -44,7 +45,7 @@ const Cart = ({ onClose }) => {
     if (userId) {
       try {
         await fetch(
-          "https://pai-silks-website-1.onrender.com/api/cart/update",
+          `${CLIENT_API}/api/cart/update`,
           {
             method: "POST", // Check if your API uses POST or PUT
             headers: { "Content-Type": "application/json" },

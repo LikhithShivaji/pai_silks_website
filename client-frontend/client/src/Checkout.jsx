@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { CartContext } from "@/CartContext.jsx";
 import CheckOutItem from "@/components/CheckOutItem.jsx";
+import { CLIENT_API } from "@/config/api";
 import logo from "@/assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 
@@ -86,7 +87,7 @@ export default function Checkout() {
 
     if (userId) {
       fetch(
-        `https://pai-silks-website-1.onrender.com/api/orders/user/${userId}`
+        `${CLIENT_API}/api/orders/user/${userId}`
       )
         .then((res) => res.json())
         .then((response) => {
@@ -143,7 +144,7 @@ export default function Checkout() {
       // console.log("Creating Order:", orderPayload);
 
       const response = await fetch(
-        "https://pai-silks-website-1.onrender.com/api/orders/create",
+        `${CLIENT_API}/api/orders/create`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

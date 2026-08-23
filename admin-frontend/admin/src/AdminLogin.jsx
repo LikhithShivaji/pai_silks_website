@@ -1,6 +1,7 @@
 import { useState } from "react"; // Removed useContext and ContextApp
 import { useNavigate } from "react-router-dom";
-import "./AdminLogin.css"; 
+import { ADMIN_API } from "@/config/api";
+import "./AdminLogin.css";
 import logo from "./assets/pai-silks-logo.png";
 import { Loader2 } from "lucide-react";
 
@@ -39,7 +40,7 @@ function AdminLogin() {
 
     try {
       const response = await fetch(
-        "https://pai-silks-website.onrender.com/api/admin-login", // URL from your Postman
+        `${ADMIN_API}/api/admin-login`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

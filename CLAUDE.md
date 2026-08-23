@@ -145,6 +145,40 @@ pai_silks_website/
 
 ---
 
+## PHASE 0.5 — API base URL configuration ✅ DONE
+
+**Why this had to come before Phase 1:** both frontends had the Render production
+URLs hardcoded in 39 places with no env layer. Running them locally meant the
+browser bypassed `localhost:9032/9034` entirely and hit **live production** — so
+nothing was testable locally, and clicking around the local admin panel mutated
+real customer data.
+
+**What was done:**
+
+| | |
+|---|---|
+| New | `src/config/api.js` in both frontends, exporting `ADMIN_API` + `CLIENT_API` from `VITE_*` vars with `localhost` fallbacks |
+| New | `.env` (gitignored), `.env.production` (committed), `.env.example` (committed) in both frontends |
+| Changed | 39 URL literals across 16 files → template strings (14 admin, 25 client) |
+| Removed | dead `const API_BASE` at `AdminHomePage.jsx:36` |
+| Changed | both frontend `.gitignore` files — ignore `.env`/`.env.*`, keep `.env.production` + `.env.example` tracked |
+| New | `DEPLOYMENT.md` — documents build-time substitution, why `.env` is never uploaded to Hostinger, and where backend env vars actually live |
+
+**Verified:** both apps build clean; `dist/` contains the Render URLs and zero
+`localhost` occurrences; `git check-ignore` confirms `.env` ignored and the other
+two tracked.
+
+**Deliberately unchanged (pure refactor, zero behaviour change):**
+- Every call still targets the same backend it did before, including the
+  cross-calls (`AF-07`, `CF-22`). Re-pointing is Phase 5.
+- No `credentials: 'include'` added — that is Phase 2.3, blocked behind the CORS
+  allowlist. See [CONSTRAINT 1](#2-hard-ordering-constraints).
+
+**Closes:** `AF-07`, `CF-49` · **Partially:** `AF-36` (repo-root and both backend
+`.gitignore` files still outstanding under `SEC-01`).
+
+---
+
 ## PHASE 1 — Stop the bleeding
 
 Small, safe, high-impact. These stop active money loss and active over-billing. **None of them
@@ -534,7 +568,7 @@ personal ngrok hostname is committed in `client-frontend/vite.config.js:16`.
 |---|---|---|---|---|
 | **AF-03** | `AdminLogin.jsx:54`; `AdminHomePage.jsx:106, 118, 121, 152, 172`; `AllProducts.jsx:16, 19`; `UpdateProduct.jsx:65, 137, 139, 143, 157`; `AddProduct.jsx:110, 136, 139, 165, 171`; `DisplayOrderPage.jsx:21` | **18 `console.log`/`warn` sites leaking full order and customer PII plus product payloads** (of 31 total `console.*` calls). `AdminLogin.jsx:54` logs the entire login response including the token. | Delete all 18. Keep only guarded `console.error` for genuine failures. | TODO |
 | **AF-06** | `AdminHomePage.jsx:468` | `<button className="bg-[]">Logout</button>` — **no `onClick`, no handler anywhere.** There is no way to log out; `admin_auth` persists forever on a shared machine. `bg-[]` is also an invalid Tailwind arbitrary value that emits no class. | Wire it: call the new logout endpoint, clear localStorage, navigate to `/`. Fix the class. | TODO |
-| **AF-07** | `AdminHomePage.jsx:36, :86`; `AddProduct.jsx:61` | **Two hardcoded backend origins and no config layer.** 10 calls to `pai-silks-website.onrender.com`, 2 to `pai-silks-website-1.onrender.com` — i.e. **the admin panel calls the *client* backend** for bestsellers and collections (a real cross-service dependency, not a typo). `const API_BASE` at :36 is declared and **never used**. No `.env`, no `import.meta.env` anywhere (verified). Changing a domain requires editing 12 files. | Introduce `VITE_ADMIN_API_BASE` and `VITE_CLIENT_API_BASE`; replace all 12 literals. Decide whether the admin panel *should* call the client backend at all. | TODO |
+| **AF-07** | `AdminHomePage.jsx:36, :86`; `AddProduct.jsx:61` | **Two hardcoded backend origins and no config layer.** 10 calls to `pai-silks-website.onrender.com`, 2 to `pai-silks-website-1.onrender.com` — i.e. **the admin panel calls the *client* backend** for bestsellers and collections (a real cross-service dependency, not a typo). `const API_BASE` at :36 is declared and **never used**. No `.env`, no `import.meta.env` anywhere (verified). Changing a domain requires editing 12 files. | Introduce `VITE_ADMIN_API_BASE` and `VITE_CLIENT_API_BASE`; replace all 12 literals. Decide whether the admin panel *should* call the client backend at all. | **DONE** — all 14 URLs now via `src/config/api.js`; dead `API_BASE` removed. Cross-call to client backend preserved deliberately (behaviour unchanged); re-pointing is `CF-22`, Phase 5. |
 | **AF-08** | `AddProduct.jsx:190`; `UpdateProduct.jsx:199` | `localStorage.setItem("categoryProducts", …)` is a **write-only cache** — nothing reads it anywhere (`AdminHomePage.jsx:79` is only a comment noting the reader was removed). Product data with prices and stock accumulates unbounded with no invalidation. | Delete both writes. | TODO |
 | **AF-11** | `components/ImageUpload.jsx:18-33` | **Entirely fake progress bar.** A `setInterval` increments a counter 0→100 over ~3 s with **zero network activity**, then calls `onImageUpload(file)`. The real upload happens later in the parent. Consequences: "Upload Complete ✅" is a lie; a user who submits within 3 s **silently loses images**; the `interval` is never cleared on unmount → leak + setState-after-unmount. | Drive the bar from a real `XMLHttpRequest` `upload.onprogress`, or remove it and show an indeterminate spinner. Clear the interval in cleanup. | TODO |
 | **AF-12** | `AddProduct.jsx:43-47`; `UpdateProduct.jsx:79` | **Blob URL revoked while still rendered.** The cleanup is keyed on `previewUrls`, so it fires on **every change**, revoking the *previous* array's URLs — which are still rendered at `:458-467`. Add image #2 and image #1's thumbnail breaks. `UpdateProduct` has the mirror bug: it calls `createObjectURL` and **never** revokes → unbounded blob leak. | Revoke only on unmount, or track and revoke individual removed URLs. | TODO |
@@ -561,7 +595,7 @@ personal ngrok hostname is committed in `client-frontend/vite.config.js:16`.
 | **AF-33** | `eslint.config.js:26` and 9 sites | **`npm run lint` cannot be passing.** `'no-unused-vars': ['error', …]` with standing violations: `AdminHomePage.jsx:5` (`productData.json` — a 2-line `{"categories": []}` stub that still ships), `:36` (`API_BASE`), `:24` (`categoryProducts`), `RecentOrders.jsx:4`, `AddProduct.jsx:7` and `:150`, `UpdateProduct.jsx:5`, `App.jsx:1-3`, `Data-table.jsx:14`. | Fix the violations; add lint to CI. | TODO |
 | **AF-34** | `package.json` | Unused: `@radix-ui/react-icons` (the app uses `lucide-react` exclusively). Redundant: `autoprefixer` + `postcss` alongside `@tailwindcss/postcss` (v3-era leftover — Tailwind v4 prefixes internally). No `react-scripts` leftovers (clean). Versions are current-generation with no obviously vulnerable pins. | Remove the two unused/redundant entries. Run `npm audit`. | TODO |
 | **AF-35** | `index.html:5, :6` | No CSP meta tag, no `referrer` policy. Favicon points at a `./src/` path. Google Fonts loaded from a third-party origin with no SRI and no `preconnect`. | Add CSP + referrer policy; move the favicon to `public/`. | TODO |
-| **AF-36** | `.gitignore` | **Has no `.env` entry**, and there is **no repo-root `.gitignore`**. `*.local` catches `.env.local` by luck of the glob, but `.env`, `.env.production` and `.env.development` are unprotected. This is the exact gap that leaked the Cloudinary secret, still armed. | `SEC-01` step 3. | TODO |
+| **AF-36** | `.gitignore` | **Has no `.env` entry**, and there is **no repo-root `.gitignore`**. `*.local` catches `.env.local` by luck of the glob, but `.env`, `.env.production` and `.env.development` are unprotected. This is the exact gap that leaked the Cloudinary secret, still armed. | `SEC-01` step 3. | **PARTIAL** — `admin-frontend/admin/.gitignore` now ignores `.env` / `.env.*` while keeping `.env.production` + `.env.example` tracked (verified with `git check-ignore`). **Repo-root `.gitignore` and both backend `.gitignore` files still TODO under `SEC-01`.** |
 | **AF-37** | dead files | `App.jsx`, `App.css`, `adminDetails.js`, `components/OrderedProducts/*`, `productData.json`, `RecentOrders.js`, `AdminLogin.css` (imported but its selectors match no element), `tailwind.confing.js`, and 8 unreferenced assets (`assets/svg/AllProducts.svg`, `DashBoard.svg`, `delete.svg`, `Notifications.svg`, `OrderList.svg`, `SareeImage.png`, `UpperArrowMark.svg`, `assets/png/DemoSaree.png`). | Delete. | TODO |
 
 #### Crash-on-undefined (admin frontend)
@@ -655,7 +689,7 @@ personal ngrok hostname is committed in `client-frontend/vite.config.js:16`.
 | **CF-46** | `LoginPage.jsx:57-59` | `user_id`, `user_name`, `user_email` in localStorage. The email is not sensitive on its own — the issue is that it sits next to the `user_id` that **is** the credential. | Removed by Phase 2.3 step 3. | TODO |
 | **CF-47** | `index.html:1-14, :5, :6` | No `<meta name="description">`, no Open Graph tags, no `theme-color`, no CSP — on a commercial storefront. Declares `type="image/svg+xml"` for a **`.png`** favicon. Google Fonts loaded blocking with no `preconnect`. | Add the meta tags and CSP; fix the favicon type; `preconnect` + `display=swap`. | TODO |
 | **CF-48** | `vite.config.js:14-18` | `server.allowedHosts: ['fleshly-succulently-jona.ngrok-free.dev']` — **a developer's personal ngrok tunnel committed into the repo.** Dev-server only, but it is a leaked internal endpoint. Combined with `vite@7.0.6` (which predates the 7.0.7+ dev-server file-serving patches), a developer running `npm run dev` behind that tunnel exposes a patchable dev server to the internet. | Delete the entry; move to a local `.env`. Bump Vite to the latest 7.x. | TODO |
-| **CF-49** | `.gitignore:1-24` | **No `.env` entry.** `*.local` catches `.env.local` by luck of the glob, but `.env`, `.env.production` and `.env.development` are unignored. Given a sibling backend already leaked one, the first developer to add Vite env vars here will commit them. | `SEC-01` step 3. | TODO |
+| **CF-49** | `.gitignore:1-24` | **No `.env` entry.** `*.local` catches `.env.local` by luck of the glob, but `.env`, `.env.production` and `.env.development` are unignored. Given a sibling backend already leaked one, the first developer to add Vite env vars here will commit them. | `SEC-01` step 3. | **DONE** — ignores `.env` / `.env.*`, keeps `.env.production` + `.env.example` tracked (verified with `git check-ignore`). |
 | **CF-50** | dead code | **19 of 20 CSS files are dead** — only `index.css` is imported (`main.jsx:6`). `App.css`, `Checkout.css`, `Homepage.css`, `MyOrders.css`, `MyProfile.css` and all 14 `components/*.css` are referenced by no `import`. A full pre-Tailwind stylesheet layer left in place, guaranteeing the next person to edit `components/Cart.css` will wonder why nothing changes. Also dead: `components/Pageloader.jsx` (superseded by `PeacockLoader`, and the **sole** reason `lottie-react` + `assets/lottie/animation.json` are installed), `components/ui/card.jsx` (101 lines), `components/ui/textarea.jsx`, `src/userOrder.js` (fabricated data, no real PII), and `src/products.js` (**328 lines of mock products with fake prices**, imported at `Homepage.jsx:9` solely to feed `topFourProducts` at `:42`, which is never rendered — tree-shaken, but one careless line away from being displayed as real). | Delete all of it. | TODO |
 | **CF-51** | `package.json` | **8 unused dependencies** (verified zero imports): `@tanstack/react-table`, `@radix-ui/react-dropdown-menu`, `@radix-ui/react-progress`, `@radix-ui/react-icons`, `@tailwindcss/vite` (installed but **not** wired in `vite.config.js` — two competing Tailwind pipelines declared, one used), `date-fns`, `lottie-react` (only `Pageloader.jsx`, which is dead), `react-day-picker` (only via the commented-out DOB field — see `CF-40`). Also `zod@4`: `Checkout.jsx:27` uses `z.string().email()`, soft-deprecated in v4 in favour of `z.email()`. | Remove all 8; run `npm audit`; migrate the Zod call. | TODO |
 | **CF-52** | `eslint.config.js:8, :11-15` | **`npm run lint` fails with 22 errors, and the config itself is broken.** It omits `eslint-plugin-react`, so JSX identifier usage isn't tracked — producing **false** `no-unused-vars` errors (e.g. `ProfileSection.jsx:51` reports `'Icon' is defined but never used` when it *is* used at `:69`). The output cannot be trusted as-is, which is presumably why 22 errors accumulated. It also fails to ignore config files, hence two `no-undef` errors. **Genuine** dead code it catches: `Homepage.jsx:42` (`topFourProducts`), `Homepage.jsx:48, 66` and `ViewProductPage.jsx:54, 60` (leftover heart-toggle state), `Header.jsx:3-5` (three unused SVG imports), `AboutUs.jsx:15`, `MyProfile.jsx:40`, `WishList.jsx:13`, and `useLocation` imported-unused in three files. | Add `eslint-plugin-react` with `jsx-uses-vars`, ignore config files, then fix the real ~15 and gate CI on lint. | TODO |

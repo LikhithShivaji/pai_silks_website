@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
+import { ADMIN_API, CLIENT_API } from "@/config/api";
 
 import {
   Select,
@@ -58,7 +59,7 @@ const AddProduct = ({
   }, [loadingCollections]);
 
   useEffect(() => {
-    fetch("https://pai-silks-website-1.onrender.com/api/collections")
+    fetch(`${CLIENT_API}/api/collections`)
       .then((res) => res.json())
       .then((data) => data.success && setCollections(data.data))
       .finally(() => setLoadingCollections(false));
@@ -109,7 +110,7 @@ const AddProduct = ({
     try {
       console.log("Step 1: Creating Product...", payload);
       const res = await fetch(
-        "https://pai-silks-website.onrender.com/api/create-product",
+        `${ADMIN_API}/api/create-product`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -152,7 +153,7 @@ const AddProduct = ({
         });
 
         const imgRes = await fetch(
-          "https://pai-silks-website.onrender.com/api/insert-image",
+          `${ADMIN_API}/api/insert-image`,
           {
             method: "POST",
             body: formData,

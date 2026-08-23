@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Local env. .env.production and .env.example MUST stay tracked —
+# .env.production is what `npm run build` reads for the deployed URLs.
+.env
+.env.*
+!.env.production
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

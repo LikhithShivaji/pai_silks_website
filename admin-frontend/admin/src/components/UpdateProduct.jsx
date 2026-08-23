@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
+import { ADMIN_API } from "@/config/api";
 
 const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProductDetails }) => {
   
@@ -143,7 +144,7 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
       console.log("🚀 Sending Unified Update Request (Text + Images)...");
       
       // ✅ SINGLE CALL: PUT to /api/update-product with FormData
-      const res = await fetch("https://pai-silks-website.onrender.com/api/update-product", {
+      const res = await fetch(`${ADMIN_API}/api/update-product`, {
         method: "PUT",
         body: formData, // No "Content-Type" header allowed for FormData!
       });

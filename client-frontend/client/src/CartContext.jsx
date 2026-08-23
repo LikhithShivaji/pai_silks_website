@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from "react";
+import { CLIENT_API } from "@/config/api";
 
 export const CartContext = createContext();
 
@@ -15,7 +16,7 @@ export const CartProvider = ({ children }) => {
     if (userId) {
       const fetchUserData = async () => {
         try {
-          const cartRes = await fetch(`https://pai-silks-website-1.onrender.com/api/cart/cart-data?user_id=${userId}`);
+          const cartRes = await fetch(`${CLIENT_API}/api/cart/cart-data?user_id=${userId}`);
           const cartData = await cartRes.json();
           
           // console.log("RAW CART DATA FROM API:", cartData);
@@ -30,7 +31,7 @@ export const CartProvider = ({ children }) => {
             setCartItems(safeCart); 
           }
 
-          const wishRes = await fetch(`https://pai-silks-website-1.onrender.com/api/wishlist/${userId}`);
+          const wishRes = await fetch(`${CLIENT_API}/api/wishlist/${userId}`);
           const wishData = await wishRes.json();
           // console.log("RAW CART DATA FROM API:", cartData); // Fixed copy-paste typo in label
           if (wishData.success) {
@@ -85,7 +86,7 @@ export const CartProvider = ({ children }) => {
     // B. If Logged In -> Sync to DB
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/cart/add", {
+        await fetch(`${CLIENT_API}/api/cart/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -113,7 +114,7 @@ export const CartProvider = ({ children }) => {
     // B. If Logged In -> Sync to DB
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/wishlist/add", {
+        await fetch(`${CLIENT_API}/api/wishlist/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -139,7 +140,7 @@ export const CartProvider = ({ children }) => {
     // B. If Logged In -> Call API to remove from DB
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/wishlist/remove", {
+        await fetch(`${CLIENT_API}/api/wishlist/remove`, {
           method: "DELETE", // Assuming DELETE method based on typical API standards
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -160,7 +161,7 @@ export const CartProvider = ({ children }) => {
 
     if (userId) {
       try {
-        await fetch("https://pai-silks-website-1.onrender.com/api/cart/remove", {
+        await fetch(`${CLIENT_API}/api/cart/remove`, {
           method: "DELETE", 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { CLIENT_API } from "@/config/api";
 import footerBg from "@/assets/footerbgimage.webp";
 import {
   User,
@@ -38,7 +39,7 @@ const SignupPage = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("https://pai-silks-website-1.onrender.com/api/signup", {
+      const response = await fetch(`${CLIENT_API}/api/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

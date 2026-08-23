@@ -5,6 +5,7 @@ import Header from "./components/Header";
 import ProductCard from "./components/ProductCard";
 import FilterAndSort from "./components/FilterandSort";
 import Footer from "./components/Footer";
+import { ADMIN_API } from "@/config/api";
 
 import { CartContext } from "./CartContext";
 
@@ -45,7 +46,7 @@ const App = () => {
 
   /* ---------------- FETCH PRODUCTS ---------------- */
   useEffect(() => {
-    fetch("https://pai-silks-website.onrender.com/api/get-all-product-details")
+    fetch(`${ADMIN_API}/api/get-all-product-details`)
       .then((res) => res.json())
       .then((res) => {
         const data = res.data || (res.success ? res.data : []);

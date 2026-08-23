@@ -11,6 +11,7 @@ import AddProduct from "./components/AddProduct";
 import DisplayOrderPage from "./components/DisplayOrderPage";
 import UpdateProduct from "./components/UpdateProduct";
 import { Menu, X, Trash, Bell } from "lucide-react";
+import { ADMIN_API, CLIENT_API } from "@/config/api";
 
 const AdminHomePage = () => {
   const notifications = 3;
@@ -31,9 +32,6 @@ const AdminHomePage = () => {
   const [updateProductDetails, setUpdateProductDetails] = useState(null);
   const containerRef = useRef(null);
   const [bestSellers, setBestSellers] = useState([]);
-
-  // Base URL for API calls
-  const API_BASE = "https://pai-silks-website.onrender.com";
 
   const handleGoToDashBoardPage = () => {
     setCurrentView("dashboard");
@@ -66,7 +64,7 @@ const AdminHomePage = () => {
   // --- 1. NEW LOGIC: Fetch Categories from Database ---
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`https://pai-silks-website.onrender.com/api/getcategory`);
+      const res = await fetch(`${ADMIN_API}/api/getcategory`);
       const data = await res.json();
       if (data.success) {
         setCategories(data.data || []);
@@ -83,7 +81,7 @@ const AdminHomePage = () => {
 
 
   useEffect(() => {
-    fetch("https://pai-silks-website-1.onrender.com/api/bestsellers")
+    fetch(`${CLIENT_API}/api/bestsellers`)
       .then(async (res) => {
         const data = await res.json();
 
@@ -112,7 +110,7 @@ const AdminHomePage = () => {
   }, []);
 
   useEffect(() => {
-    fetch("https://pai-silks-website.onrender.com/api/get-order-detils")
+    fetch(`${ADMIN_API}/api/get-order-detils`)
       .then((res) => res.json())
       .then((res) => {
         console.log("🔥 FRESH DATA FROM DB:", res);
@@ -153,7 +151,7 @@ const AdminHomePage = () => {
 
     try {
       const res = await fetch(
-        "https://pai-silks-website.onrender.com/api/update-order-status",
+        `${ADMIN_API}/api/update-order-status`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -254,7 +252,7 @@ const AdminHomePage = () => {
     if (newCategory.trim() === "") return;
     
     try {
-      const res = await fetch(`https://pai-silks-website.onrender.com/api/addcategory`, {
+      const res = await fetch(`${ADMIN_API}/api/addcategory`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCategory }),
@@ -284,7 +282,7 @@ const AdminHomePage = () => {
     if (!window.confirm("Are you sure you want to delete this category?")) return;
 
     try {
-      const res = await fetch(`https://pai-silks-website.onrender.com/api/categories/${id}`, {
+      const res = await fetch(`${ADMIN_API}/api/categories/${id}`, {
         method: "DELETE",
       });
 

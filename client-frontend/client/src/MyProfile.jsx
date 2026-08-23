@@ -5,6 +5,7 @@ import { User, Mail, Phone, Calendar as CalendarIcon, Save, Edit3, MapPinHouse, 
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import { CartContext } from "./CartContext";
+import { CLIENT_API } from "@/config/api";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // Shadcn Imports
@@ -24,7 +25,7 @@ const MyProfile = () => {
   const navigate = useNavigate();
 
   // API Base URL
-  const API_BASE = "https://pai-silks-website-1.onrender.com";
+  const API_BASE = CLIENT_API;
 
   // --- State ---
   const [loading, setLoading] = useState(true);

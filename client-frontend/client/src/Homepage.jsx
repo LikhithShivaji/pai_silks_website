@@ -4,6 +4,7 @@ import ProductCard from "./components/ProductCard";
 import CategoryCard from "./components/Categorycard.jsx";
 import ReviewCard from "./components/ReviewCard.jsx";
 import { useNavigate } from "react-router-dom";
+import { CLIENT_API, ADMIN_API } from "@/config/api";
 import frame from "./assets/heroframe.svg";
 import finisher from "./assets/finisher.svg";
 import trendingProducts from "./products.js";
@@ -106,7 +107,7 @@ function Homepage() {
 
   /* Collections */
   useEffect(() => {
-    fetch("https://pai-silks-website-1.onrender.com/api/collections")
+    fetch(`${CLIENT_API}/api/collections`)
       .then((res) => res.json())
       .then((data) => data.success && setCollections(data.data))
       .finally(() => setLoadingCollections(false));
@@ -114,7 +115,7 @@ function Homepage() {
 
   /* Best sellers */
   useEffect(() => {
-    fetch("https://pai-silks-website-1.onrender.com/api/bestsellers")
+    fetch(`${CLIENT_API}/api/bestsellers`)
       .then((res) => res.json())
       .then((res) => res.success && setBestSellers(res.data))
       .finally(() => setLoadingBestSellers(false));
@@ -134,7 +135,7 @@ function Homepage() {
     const fetchProducts = async () => {
       try {
         const response = await fetch(
-          "https://pai-silks-website.onrender.com/api/get-all-product-details"
+          `${ADMIN_API}/api/get-all-product-details`
         );
         const result = await response.json();
         if (result.success) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { CLIENT_API } from "@/config/api";
 
 import frame from "../assets/heroframe.svg";
 import bgImage from "../assets/backgroundimagenew.jpg";
@@ -65,7 +66,7 @@ function ViewProductPage() {
     window.scrollTo(0, 0);
     setLoading(true);
 
-    fetch(`https://pai-silks-website-1.onrender.com/api/${productId}`)
+    fetch(`${CLIENT_API}/api/${productId}`)
       .then((res) => res.json())
       .then((res) => {
         if (res.success) {
@@ -102,7 +103,7 @@ function ViewProductPage() {
     if (!product?.category) return;
 
     fetch(
-      `https://pai-silks-website-1.onrender.com/api/products/${product.category}`
+      `${CLIENT_API}/api/products/${product.category}`
     )
       .then((res) => res.json())
       .then((res) => {

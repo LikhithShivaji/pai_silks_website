@@ -3,6 +3,7 @@ import WishListProductItem from "./WishListProductItem";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, Heart, ShoppingBag } from "lucide-react";
 import { CartContext } from "../CartContext"; // <--- IMPORT CONTEXT
+import { CLIENT_API } from "@/config/api";
 
 const WishList = ({ onClose }) => {
   // Use Context instead of local props for single source of truth
@@ -38,7 +39,7 @@ const WishList = ({ onClose }) => {
     if (userId) {
       try {
         await fetch(
-          "https://pai-silks-website-1.onrender.com/api/wishlist/remove",
+          `${CLIENT_API}/api/wishlist/remove`,
           {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
@@ -95,7 +96,7 @@ const WishList = ({ onClose }) => {
         await Promise.all(
           dynamicWishListItem.map((item) =>
             fetch(
-              "https://pai-silks-website-1.onrender.com/api/wishlist/remove",
+              `${CLIENT_API}/api/wishlist/remove`,
               {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
