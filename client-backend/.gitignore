@@ -13,10 +13,21 @@
 
 # misc
 .DS_Store
+
+# env — a bare `.env` was not covered here. The sibling admin-backend had
+# its Cloudinary credentials committed for exactly this reason (CLAUDE.md
+# SEC-01). Backend env vars belong in the Render dashboard, never in git.
+.env
+.env.*
+!.env.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+# database dumps (customer PII, password hashes)
+*.sql
+*.dump
 
 npm-debug.log*
 yarn-debug.log*

@@ -1,0 +1,40 @@
+# Repo-root ignores. Each app also has its own .gitignore; this is the
+# backstop so a secret or a database dump can never be committed from
+# anywhere in the tree.
+#
+# Context: admin-backend/.env — containing live Cloudinary credentials —
+# was committed in 8f8cb01 because no .gitignore covered a bare `.env`.
+# See CLAUDE.md SEC-01.
+
+# --- Secrets ---
+.env
+.env.*
+!.env.production
+!.env.example
+
+# --- Database dumps (customer PII, password hashes) ---
+*.sql
+*.dump
+*.sql.gz
+
+# --- Dependencies / build output ---
+node_modules/
+dist/
+dist-ssr/
+build/
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- OS / editor ---
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo

@@ -1,7 +1,6 @@
 import React from "react"
 import { DataTable } from "../RecentOrders/Data-table"
 import {columns} from "./columns"
-import { RecentOrders as recentOrdersData } from "@/RecentOrders";
 
 export default function RecentOrders({orders, displayOrderPage}) {
   return (

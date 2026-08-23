@@ -138,10 +138,10 @@ pai_silks_website/
 
 | ID | Severity | What | Action |
 |---|---|---|---|
-| **SEC-01** | **CRITICAL** | **Cloudinary API secret committed to a public GitHub repo.** `admin-backend/.env` is tracked in git (`git ls-files` confirms). Introduced in commit `8f8cb01 "Image url"`. Contains `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, all populated. Root cause: `admin-backend/.gitignore:16-19` is stock CRA boilerplate that ignores `.env.local` and `.env.*.local` but **not bare `.env`**. | 1. Rotate the Cloudinary API secret in the Cloudinary dashboard.<br>2. `git rm --cached admin-backend/.env`<br>3. Add `.env` + `.env.*` + `!.env.example` to `.gitignore` in all four app folders **and** create a repo-root `.gitignore` (there is none).<br>4. Purge from history (`git filter-repo` or BFG), force-push, notify anyone who cloned.<br>5. Assume the old key is compromised — audit Cloudinary usage logs. |
-| **SEC-02** | **CRITICAL** | **Working production admin password committed to a public repo.** `admin-frontend/admin/src/adminDetails.js:1-3` contains `paisilks@gmail.com` / `paisilks@123`. The backend bcrypt-verifies this against `master_user`, so it opens the live admin panel. File is tracked in git. | 1. Change the admin password in the database (bcrypt hash, cost ≥ 12).<br>2. Delete `src/adminDetails.js` — it is imported by nothing, deletion is safe.<br>3. Purge from git history.<br>4. Never store credentials in frontend source again. |
+| **SEC-01** | **CRITICAL** — ⚠️ **STILL LIVE** | **Cloudinary API secret committed to a public GitHub repo.** `admin-backend/.env` is tracked in git (`git ls-files` confirms). Introduced in commit `8f8cb01 "Image url"`. Contains `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, all populated. Root cause: `admin-backend/.gitignore:16-19` is stock CRA boilerplate that ignores `.env.local` and `.env.*.local` but **not bare `.env`**. | 1. Rotate the Cloudinary API secret in the Cloudinary dashboard.<br>2. `git rm --cached admin-backend/.env`<br>3. Add `.env` + `.env.*` + `!.env.example` to `.gitignore` in all four app folders **and** create a repo-root `.gitignore` (there is none).<br>4. Purge from history (`git filter-repo` or BFG), force-push, notify anyone who cloned.<br>5. Assume the old key is compromised — audit Cloudinary usage logs. |
+| **SEC-02** | **CRITICAL** | **Working production admin password committed to a public repo.** `admin-frontend/admin/src/adminDetails.js:1-3` contains `paisilks@gmail.com` / `paisilks@123`. The backend bcrypt-verifies this against `master_user`, so it opens the live admin panel. File is tracked in git. | 1. Delete `src/adminDetails.js` — it is imported by nothing, deletion is safe.<br>2. Purge from git history.<br>3. Never store credentials in frontend source again.<br>**Note:** the actual password *rotation* is **`SEC-02b`, moved to Phase 2** — it belongs with the credential/JWT work and with the production deploy, not here. Deleting the file does **not** revoke the password. |
 | **SEC-03** | **HIGH** | **Production PII dump sitting on disk.** `/Users/likhith/personal-lab/pai-silks-repo/u863032788_db.sql` contains 25 real customers' names, emails, phone numbers, full postal addresses, and bcrypt hashes, plus all orders and sessions. It is one directory *above* the git root so it is **not** committed — but it is unencrypted, and the `u863032788_` prefix identifies the live Hostinger database. | Move it out of the repo tree entirely, or encrypt it. Add `*.sql`, `*.dump` to the root `.gitignore` before that file ever moves inside. Do not commit database dumps. |
-| **SEC-04** | **MEDIUM** | **Real phone numbers in committed mock data.** `admin-frontend/admin/src/RecentOrders.js:1-80` contains what appear to be real Indian mobile numbers (`8073706012`, `8073706010`, `8073706008`, `8073706006`, `8073706024`) and a real-looking name. Reachable from the module graph via `OrderedProducts/OrderedProducts.jsx:10`. | Delete the file (see `AF-14`). Replace with a real API fetch or an empty array. Purge from history alongside SEC-01/02. |
+| **SEC-04** | ~~MEDIUM~~ **LOW** | **Downgraded** — user confirmed the phone numbers in `admin-frontend/admin/src/RecentOrders.js:1-80` are dummy, not real customer data. Remains dead-code cleanup rather than a PII leak. | **DONE** — deleted `src/RecentOrders.js`, removed the unused import at `RecentOrders/RecentOrders.jsx:4`, and deleted the dead `components/OrderedProducts/` folder (its only other consumer). No history purge needed. |
 
 ---
 
@@ -254,6 +254,38 @@ Affected handlers (all in `client-backend/src/controllers/customerController.js`
 
 `user_id` values are sequential (`master_user` AUTO_INCREMENT = 26). Full customer PII scrape in 25
 requests, unauthenticated.
+
+### 2.0 Credential hardening — `SEC-02b`, `DB-08`, `CB-28` (partial)
+
+Moved here from Phase 0. Password hashing belongs with the credential layer, and
+the production half has to ship alongside the code + DB deploy rather than on its
+own.
+
+```
+1. Add a password-hashing helper (bcrypt cost 12) used by BOTH:
+     - the admin password rotation below
+     - the signup path (the code-side half of CB-28, Phase 3)
+   The plaintext must never reach a shell history, a transcript, or this repo —
+   read it from a hidden prompt.
+
+2. SEC-02b — rotate the admin password (paisilks@gmail.com):
+     - regenerate at cost 12
+     - apply to LOCAL db
+     - apply to Hostinger production  ← separate database; local does not affect it
+     - the current password `paisilks@123` stays live until this lands
+
+3. DB-08 — master_user rows 1, 2, 3 share an identical bcrypt hash (a seeded or
+   shared password). Force-reset all three.
+
+4. Raise the bcrypt cost from 10 to 12 in the signup path (customerController.js:21).
+```
+
+> **Deploy coupling:** the production password change must go out **with** the
+> code + DB migration, not before. Rotating production early while the old code is
+> still deployed is safe for login, but the user has chosen to move code and
+> database together to avoid a partially-migrated production state. Respect that.
+
+---
 
 ### 2.3 Frontend — after 2.1 and 2.2 are live
 
@@ -545,7 +577,7 @@ personal ngrok hostname is committed in `client-frontend/vite.config.js:16`.
 
 | ID | Location | Problem | Fix | Status |
 |---|---|---|---|---|
-| **AF-01** | `adminDetails.js:1-3` | **Working production admin credentials in plaintext in a public repo.** See `SEC-02`. Note: the file is **never imported anywhere** — it is not a client-side auth mechanism, just a leaked secret. | `SEC-02`. Deleting the file is safe; **rotation is the actual fix.** | TODO |
+| **AF-01** | `adminDetails.js:1-3` | **Working production admin credentials in plaintext in a public repo.** See `SEC-02`. Note: the file is **never imported anywhere** — it is not a client-side auth mechanism, just a leaked secret. | `SEC-02`. Deleting the file is safe; **rotation is the actual fix.** | **PARTIAL** — file deleted (build verified). ⚠️ The password `paisilks@123` is **still live and still in git history**. Rotation is `SEC-02b` (Phase 2); history purge is pending. |
 | **AF-02** | `ProtectedAdminRoute.jsx:6-14` | **The only authorization gate in the app is `localStorage.getItem("admin_auth")`.** Typing `localStorage.setItem("admin_auth","true")` in DevTools grants the full admin UI. Combined with `AB-01`, the gate is purely cosmetic. | Phase 2.3 step 4 — verify against the backend. | TODO |
 | **AF-15** | all 13 fetch sites | **No `Authorization` header and no `credentials: 'include'` on any request.** Verified by grep. Every admin API call is anonymous. | Phase 2.3 step 1 — **only after** `AB-01` and `AB-02`. See [CONSTRAINT 1](#2-hard-ordering-constraints). | TODO |
 
@@ -587,7 +619,7 @@ personal ngrok hostname is committed in `client-frontend/vite.config.js:16`.
 |---|---|---|---|---|
 | **AF-26** | `AdminLogin.jsx:138` | "Keep me logged in" `<Checkbox defaultChecked />` has no `name`, no `checked`, no `onChange`, and is not referenced in `loginCheck`. Purely decorative and misleading. | Wire it or remove it. | TODO |
 | **AF-27** | `App.jsx:2` | Imports `./assets/react.svg`, **which does not exist**. Dead today (no importer), but the build dies if it is ever imported. `useState`, `reactLogo`, `viteLogo` are all unused. | Delete `App.jsx` and `App.css`. | TODO |
-| **AF-28** | `components/OrderedProducts/*` (3 files) | Dead — never imported. If mounted, `Data-table.jsx:117` would throw `displayOrderPage is not a function` (the prop is never passed) and `alert(row.original)` renders `[object Object]`. | Delete the folder. | TODO |
+| **AF-28** | `components/OrderedProducts/*` (3 files) | Dead — never imported. If mounted, `Data-table.jsx:117` would throw `displayOrderPage is not a function` (the prop is never passed) and `alert(row.original)` renders `[object Object]`. | Delete the folder. | **DONE** in Phase 0 — pulled forward because it was the only other importer of `src/RecentOrders.js`, so `SEC-04` could not be completed without it. |
 | **AF-29** | `DisplayOrderPage.jsx:20-22` | `useEffect(() => { console.log("order is", order); }, [])` reads `order` with an empty dep array — a stale closure logging only the first order ever selected. | Delete the effect. | TODO |
 | **AF-30** | `AdminHomePage.jsx:16, :459, :463`; `AddProduct.jsx:494`; `RecentOrders/Columns.jsx:192-193`; `DashBoard.jsx:137-139`; `DisplayOrderPage.jsx:226, :39` | **Non-functional UI shipped as if it worked:** `notifications = 3` hardcoded driving a permanent red badge; bell `onClick={() => alert("Go to OrderSection")}`; an "Update" button whose handler is `alert("Update logic not implemented yet")`; "View customer"/"View payment details" menu items with no `onClick`; "View All" is a `<div>` with no handler; `colSpan={6}` under an 8-column table misaligns the Total row; a heading that literally reads `OrderDetails2`. | Implement or remove each. Do not ship dead affordances. | TODO |
 | **AF-31** | `AddProduct.jsx:49-58` | A child component writes `document.body.style.overflow` directly, fighting the app shell's own scroll containers (`AdminHomePage.jsx:471-474`). On an early unmount it can leave the page permanently scroll-locked. | Lift to the shell, or guarantee restoration in cleanup. | TODO |
@@ -801,8 +833,8 @@ anything done on the strength of a code change alone.
 - [ ] `SEC-01` Cloudinary secret rotated in the dashboard
 - [ ] `SEC-01` `admin-backend/.env` untracked; `.env` + `.env.*` ignored in all four apps **and** at the repo root
 - [ ] `SEC-01` git history purged; force-pushed
-- [ ] `SEC-02` admin password changed in the DB (bcrypt cost ≥ 12)
 - [ ] `SEC-02` `adminDetails.js` deleted and purged from history
+      *(password rotation itself is `SEC-02b` — see Phase 2)*
 - [ ] `SEC-03` `u863032788_db.sql` moved out of the repo tree or encrypted; `*.sql` ignored
 - [ ] `SEC-04` `RecentOrders.js` mock data with real phone numbers deleted and purged
 
@@ -821,6 +853,9 @@ anything done on the strength of a code change alone.
 - [ ] `AF-03` Zero PII-leaking `console.*` calls remain in any of the four apps
 
 ### Phase 2 — Auth
+- [ ] `SEC-02b` admin password rotated at bcrypt cost 12 — **local AND Hostinger production**
+- [ ] `DB-08` the three accounts sharing one bcrypt hash force-reset
+- [ ] bcrypt cost raised 10 → 12 in the signup path
 - [ ] `JWT_SECRET` set in both `.env` files; both `.env` files exist and are complete
 - [ ] `AB-24` / `CB-24` `genToken` replaced — **shipped in the same commit as the middleware**
 - [ ] `AB-01` All 15 admin routes reject an unauthenticated request with 401 — **each verified by curl**
