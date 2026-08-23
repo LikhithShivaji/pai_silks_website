@@ -2,7 +2,7 @@ import React, { useEffect, useContext } from "react";
 import CartItem from "./CartItem";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, SHIPPING_FEE } from "@/config/api";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, ShoppingBag } from "lucide-react";
 
@@ -185,11 +185,11 @@ const Cart = ({ onClose }) => {
                 </div>
                 <div className="flex justify-between mb-2 text-sm">
                   <span className="opacity-80">Delivery Fee</span>
-                  <span className="font-semibold text-green-700">₹ 99</span>
+                  <span className="font-semibold text-green-700">₹ {SHIPPING_FEE}</span>
                 </div>
                 <div className="flex justify-between mt-4 pt-3 border-t border-[#68232B]/20">
                   <span className="font-bold text-lg">Grand Total</span>
-                  <span className="font-bold text-lg">₹ {total + 99}</span>
+                  <span className="font-bold text-lg">₹ {total + SHIPPING_FEE}</span>
                 </div>
               </div>
             </>

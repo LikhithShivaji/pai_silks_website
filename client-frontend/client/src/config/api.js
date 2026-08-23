@@ -16,3 +16,14 @@ export const CLIENT_API =
 // one-line change when we get there.
 export const ADMIN_API =
   import.meta.env.VITE_ADMIN_API_BASE ?? "http://localhost:9032";
+
+// Flat shipping fee, in rupees — FOR DISPLAY ONLY.
+//
+// The server owns the real value (client-backend appDefines.SHIPPING_FEE)
+// and adds it to total_amount itself. This constant exists so the cart and
+// checkout can show the customer what they will be charged before the order
+// is created. If the two ever drift, the SERVER value is what gets billed.
+//
+// Keep this in sync with client-backend/src/constants/appDefines.js.
+// See CLAUDE.md CF-03.
+export const SHIPPING_FEE = 100;

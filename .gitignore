@@ -17,6 +17,11 @@
 *.dump
 *.sql.gz
 
+# ...but schema migrations MUST be tracked — they have to reach production.
+# They contain DDL only, never customer data.
+!migrations/
+!migrations/*.sql
+
 # --- Dependencies / build output ---
 node_modules/
 dist/

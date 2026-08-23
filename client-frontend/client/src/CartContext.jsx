@@ -3,6 +3,28 @@ import { CLIENT_API } from "@/config/api";
 
 export const CartContext = createContext();
 
+/**
+ * Read a JSON array from localStorage, tolerating anything that is not one.
+ *
+ * Returns [] and discards the key on corrupt data, so a bad value cannot
+ * survive a reload and brick the site on every subsequent visit.
+ * See CLAUDE.md CF-10.
+ */
+const readStoredArray = (key) => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    console.error(`Discarding corrupt localStorage key "${key}".`);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // localStorage unavailable (private browsing) — nothing further to do.
+    }
+    return [];
+  }
+};
+
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [wishListItems, setWishListItems] = useState([]);
@@ -58,10 +80,12 @@ export const CartProvider = ({ children }) => {
 
     } else {
       // --- GUEST: Fetch from LocalStorage ---
-      const savedCart = JSON.parse(localStorage.getItem("cart")) || [];
-      const savedWishList = JSON.parse(localStorage.getItem("wishlist")) || [];
-      setCartItems(savedCart);
-      setWishListItems(savedWishList);
+      // JSON.parse throws on malformed input, and this runs inside the
+      // provider that wraps the whole app — an unguarded throw here blanked
+      // every route, permanently, because the bad value survived reloads.
+      // A corrupt key now self-heals instead. See CLAUDE.md CF-10.
+      setCartItems(readStoredArray("cart"));
+      setWishListItems(readStoredArray("wishlist"));
       setLoaded(true);
     }
   }, []);
@@ -78,10 +102,23 @@ export const CartProvider = ({ children }) => {
   // 3. ADD TO CART HANDLER (Hybrid)
   const handleAddToCart = async (product) => {
     const userId = localStorage.getItem("user_id");
+    const productId = product.id || product.product_id;
+
+    // Decide BEFORE touching state whether this is a genuine addition.
+    // The POST below used to fire on every call, outside the de-dup guard, so
+    // N clicks created N cart rows in the database while the UI showed one.
+    // Checkout bills from the database, so the customer was charged N times
+    // what the screen showed. See CLAUDE.md CF-02.
+    const alreadyInCart = cartItems.some(
+      (item) => (item.id || item.product_id) === productId
+    );
+
     setCartItems((prev) => {
-      if (prev.some((item) => (item.id || item.product_id) === (product.id || product.product_id))) return prev;
+      if (prev.some((item) => (item.id || item.product_id) === productId)) return prev;
       return [...prev, product];
     });
+
+    if (alreadyInCart) return;
 
     // B. If Logged In -> Sync to DB
     if (userId) {
@@ -104,12 +141,21 @@ export const CartProvider = ({ children }) => {
   // 4. ADD TO WISHLIST HANDLER (Hybrid)
   const handleAddToWishList = async (product) => {
     const userId = localStorage.getItem("user_id");
+    const productId = product.id || product.product_id;
+
+    // Same de-dup guard as handleAddToCart — the POST previously fired on
+    // every call regardless of whether the item was already saved. See CF-02.
+    const alreadyInWishList = wishListItems.some(
+      (item) => (item.id || item.product_id) === productId
+    );
 
     // A. Immediate UI Update
     setWishListItems((prev) => {
-      if (prev.some((item) => (item.id || item.product_id) === (product.id || product.product_id))) return prev;
+      if (prev.some((item) => (item.id || item.product_id) === productId)) return prev;
       return [...prev, product];
     });
+
+    if (alreadyInWishList) return;
 
     // B. If Logged In -> Sync to DB
     if (userId) {

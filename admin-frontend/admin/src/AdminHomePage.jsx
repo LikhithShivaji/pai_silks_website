@@ -101,7 +101,6 @@ const AdminHomePage = () => {
           });
 
           setBestSellers(cleanData);
-          console.log("clean data is", cleanData);
         }
       })
       .catch((err) => {
@@ -113,10 +112,8 @@ const AdminHomePage = () => {
     fetch(`${ADMIN_API}/api/get-order-detils`)
       .then((res) => res.json())
       .then((res) => {
-        console.log("🔥 FRESH DATA FROM DB:", res);
         if (res.success) {
           setOrders(normalizeOrders(res.data));
-          console.log("response is ", res);
         }
       })
       .catch(console.error);
@@ -147,7 +144,6 @@ const AdminHomePage = () => {
       prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status: newStatus } : o))
     );
 
-    console.log("📤 Sending Update for ID:", orderId, "Status:", newStatus);
 
     try {
       const res = await fetch(
@@ -167,7 +163,6 @@ const AdminHomePage = () => {
       );
 
       const data = await res.json();
-      console.log("📥 Backend Response:", data);
 
       if (!res.ok) {
         console.error("Update failed on backend");

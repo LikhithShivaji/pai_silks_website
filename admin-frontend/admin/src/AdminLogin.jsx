@@ -52,7 +52,6 @@ function AdminLogin() {
       );
 
       const data = await response.json();
-      console.log("API Response:", data); // Check console to be sure
 
       // 👇 FIX: Check 'validSession' instead of 'success'
       if (data.validSession) {

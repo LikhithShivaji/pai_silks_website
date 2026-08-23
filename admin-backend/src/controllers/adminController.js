@@ -93,13 +93,14 @@ exports.adminLogin = async (req, res) => {
         }
       ];
 
+      // appDefines.expiryTime.* are already in milliseconds. This previously
+      // ran the non-token cookies through convertDaysToMsec as well, which
+      // multiplied them by 86,400,000 a second time — session_id, role_id and
+      // pri_email were being issued with an expiry in the year 238,581.
+      // See CLAUDE.md AB-05.
       cookieSettings.forEach(({ key, value, expiryTime }) => {
         if (value) {
-          const calculatedExpiryTime =
-            key === CookiesKey.token
-              ? expiryTime
-              : utils.convertDaysToMsec(expiryTime);
-          utils.setCookies(res, key, value, calculatedExpiryTime);
+          utils.setCookies(res, key, value, expiryTime);
         }
       });
 

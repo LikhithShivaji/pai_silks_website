@@ -108,7 +108,6 @@ const AddProduct = ({
     };
 
     try {
-      console.log("Step 1: Creating Product...", payload);
       const res = await fetch(
         `${ADMIN_API}/api/create-product`,
         {
@@ -134,13 +133,6 @@ const AddProduct = ({
         (created.data && created.data.insertId) ||
         (created.data && created.data.product_id);
 
-      console.log(
-        `Product Created (ID: ${newProductId}). Step 2: Uploading Images...`
-      );
-      console.log(
-        `Product Created new release is set to: ${newProduct.isNewRelease}). Step 2: Uploading Images...`
-      );
-
       let finalImagesForUI = previewUrls; 
 
       if (imageFiles.length > 0 && newProductId) {
@@ -163,13 +155,12 @@ const AddProduct = ({
         const imgData = await imgRes.json();
 
         if (imgData.success === "true" || imgData.success === true) {
-          console.log("✅ Images Uploaded!", imgData);
 
           if (imgData.images && Array.isArray(imgData.images)) {
             finalImagesForUI = imgData.images.map((img) => img.image_url);
           }
         } else {
-          console.warn("Image upload warning:", imgData);
+          console.warn("Image upload did not report success.");
           alert("Product created, but check image upload status.");
         }
       }

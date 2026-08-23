@@ -173,10 +173,21 @@ getNewReleaseProducts: `
     SELECT * FROM cart WHERE user_id = ? AND product_id = ?;
   `,
   
-  // Add product to cart (default quantity 1)
+  // Add product to cart.
+  //
+  // "Add to cart" means "ensure this product is in the cart" — it is NOT a
+  // quantity increment. Repeating it is a deliberate no-op, which matches the
+  // storefront, where clicking add on an item already in the cart changes
+  // nothing. Quantity changes go through updateCartQuantity.
+  //
+  // The ON DUPLICATE KEY clause depends on the unique index added in
+  // migrations/001_cart_unique_user_product.sql. Without it this was a bare
+  // INSERT, so every click created another row and checkout — which bills from
+  // the database — charged the customer once per click. See CLAUDE.md CB-22.
   addToCart: `
     INSERT INTO cart (user_id, product_id, quantity, added_at)
-    VALUES (?, ?, 1, NOW());
+    VALUES (?, ?, 1, NOW())
+    ON DUPLICATE KEY UPDATE quantity = quantity;
   `,
 
  getCart: `

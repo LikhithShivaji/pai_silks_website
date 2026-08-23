@@ -63,7 +63,6 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
     setPreviewUrls(cleanUrls);
     setImageFiles([]); 
 
-    console.log("🔥 DEBUG DATA CHECK:", updateProductDetails);
 
   }, [updateProductDetails]);
 
@@ -135,14 +134,8 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
         });
     }
 
-    console.log("--- DEBUGGING FORM DATA ---");
-    for (var pair of formData.entries()) {
-        console.log(pair[0] + ', ' + pair[1]); 
-    }
-
     try {
-      console.log("🚀 Sending Unified Update Request (Text + Images)...");
-      
+
       // ✅ SINGLE CALL: PUT to /api/update-product with FormData
       const res = await fetch(`${ADMIN_API}/api/update-product`, {
         method: "PUT",
@@ -155,7 +148,6 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
       }
 
       const responseData = await res.json();
-      console.log("✅ Success:", responseData);
 
       // --- STEP B: Update UI ---
       // We grab new image URLs if the backend sends them back

@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { CartContext } from "@/CartContext.jsx";
 import CheckOutItem from "@/components/CheckOutItem.jsx";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, SHIPPING_FEE } from "@/config/api";
 import logo from "@/assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 
@@ -128,10 +128,11 @@ export default function Checkout() {
         email: data.email,
         phone_number: data.phone || "9999999999",
         shipping_address: `${data.address}, ${data.city}, ${data.state} - ${data.pincode}`,
-        total_amount: localTotal + 99,
-        payment_status: "Paid",
+        // total_amount, payment_status and order_status are NOT sent. The
+        // server computes the total from its own product prices, adds its own
+        // shipping fee, and assigns the statuses. A client cannot set its own
+        // price or declare its own order paid. See CF-01, CF-03, CB-03.
         payment_method: "UPI",
-        order_status: "Pending",
         items: cartItems.map((item) => ({
           product_id: item.id || item.product_id,
           quantity: item.quantity || 1,
@@ -376,12 +377,12 @@ export default function Checkout() {
 
               <div className="flex justify-between text-gray-600">
                 <span>Shipping</span>
-                <span className="text-green-600">₹ 99</span>
+                <span className="text-green-600">₹ {SHIPPING_FEE}</span>
               </div>
 
               <div className="flex justify-between font-bold text-2xl text-[#68232B] pt-2">
                 <span>Total</span>
-                <span>₹ {localTotal + 99}</span>
+                <span>₹ {localTotal + SHIPPING_FEE}</span>
               </div>
             </div>
           </div>

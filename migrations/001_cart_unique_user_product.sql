@@ -1,0 +1,49 @@
+-- Migration 001 — enforce one cart row per (user, product)
+--
+-- Fixes: CLAUDE.md DB-02 (schema half of the CF-02 / CB-22 over-billing bug)
+--
+-- WHY
+-- The `cart` table had no unique constraint on (user_id, product_id), while
+-- `wishlist` correctly did. Combined with an `addToCart` query that was a bare
+-- INSERT with no upsert, every click of "add to cart" created a NEW ROW.
+--
+-- The storefront de-duplicated in local state, so the customer saw one line
+-- item — but checkout bills from the database. Five clicks meant five rows and
+-- a customer charged five times what the screen showed.
+--
+-- This constraint makes that structurally impossible, independent of any
+-- application bug.
+--
+-- PRE-FLIGHT
+-- This will FAIL if duplicate pairs already exist. Check first:
+--
+--   SELECT user_id, product_id, COUNT(*)
+--   FROM cart GROUP BY user_id, product_id HAVING COUNT(*) > 1;
+--
+-- If it returns rows, collapse them before running this migration:
+--
+--   -- keep the lowest cart_id per pair, sum the quantities into it
+--   UPDATE cart c
+--     JOIN (SELECT user_id, product_id, MIN(cart_id) AS keep_id,
+--                  SUM(quantity) AS total_qty
+--           FROM cart GROUP BY user_id, product_id HAVING COUNT(*) > 1) d
+--       ON c.cart_id = d.keep_id
+--     SET c.quantity = d.total_qty;
+--
+--   DELETE c FROM cart c
+--     JOIN (SELECT user_id, product_id, MIN(cart_id) AS keep_id
+--           FROM cart GROUP BY user_id, product_id HAVING COUNT(*) > 1) d
+--       ON c.user_id = d.user_id AND c.product_id = d.product_id
+--    WHERE c.cart_id <> d.keep_id;
+--
+-- Verified clean on local at time of writing: 23 rows, 23 distinct pairs.
+--
+-- APPLY
+--   local:      mysql -u root -p db < migrations/001_cart_unique_user_product.sql
+--   production: run in Hostinger phpMyAdmin against u863032788_db
+--
+-- ROLLBACK
+--   ALTER TABLE cart DROP INDEX uniq_cart_user_product;
+
+ALTER TABLE cart
+  ADD UNIQUE KEY uniq_cart_user_product (user_id, product_id);

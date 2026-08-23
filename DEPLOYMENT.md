@@ -8,13 +8,16 @@ Render (Node services)      ←  git push       ←  backends
 Hostinger MySQL             ←  live database
 ```
 
-| Component | Hosted on | Deploy method |
-|---|---|---|
-| `admin-frontend/admin` | Hostinger | upload `dist/` |
-| `client-frontend/client` | Hostinger | upload `dist/` |
-| `admin-backend` | Render | git push |
-| `client-backend` | Render | git push |
-| Database | Hostinger MySQL | — |
+| Component | Domain | Hosted on | Deploy method |
+|---|---|---|---|
+| `client-frontend/client` | `paisilks.com` | Hostinger | upload `dist/` |
+| `admin-frontend/admin` | `admin.paisilks.com` | Hostinger | upload `dist/` |
+| `client-backend` | `pai-silks-website-1.onrender.com` | Render | git push |
+| `admin-backend` | `pai-silks-website.onrender.com` | Render | git push |
+| Database | — | Hostinger MySQL | — |
+
+> Note the backend naming is counter-intuitive: `pai-silks-website` (no suffix)
+> is the **admin** backend, and `pai-silks-website-1` is the **customer** one.
 
 ---
 
@@ -98,8 +101,45 @@ DB_NAME
 DB_PORT       3306
 NODE_ENV      production
 PORT          (Render provides this — read it, don't hardcode)
+CORS_ORIGINS  see below
 JWT_SECRET    (added in Phase 2)
 ```
+
+`admin-backend` additionally needs the three `CLOUDINARY_*` keys.
+
+> **The backends now refuse to start if any `DB_*` variable is missing.** That
+> is deliberate — they previously fell back to `root`/`admin123` silently. If a
+> Render deploy crashes on boot, check the logs for
+> `Missing required environment variable`.
+
+### CORS_ORIGINS — exact production values
+
+Both services must allow **both** domains, because both frontends call both
+backends:
+
+**client-backend** (`pai-silks-website-1`):
+```
+CORS_ORIGINS=https://paisilks.com,https://admin.paisilks.com
+```
+
+**admin-backend** (`pai-silks-website`):
+```
+CORS_ORIGINS=https://admin.paisilks.com,https://paisilks.com
+```
+
+Why each needs the other's domain:
+- the admin panel reads bestsellers and collections from client-backend (`AF-07`)
+- the storefront reads its product catalogue from admin-backend (`CF-22` — once
+  that is re-pointed in Phase 5, `https://paisilks.com` can be dropped from
+  admin-backend's list)
+
+Add `https://www.paisilks.com` as well if the site is served from `www` rather
+than redirecting to the apex domain.
+
+> **If `CORS_ORIGINS` is not set in Render, the live site breaks.** The built-in
+> default is localhost only, so browsers will block every API call from
+> production. This fails silently from the server's point of view — you will
+> see CORS errors in the browser console, not in the Render logs.
 
 `admin-backend` additionally needs:
 
@@ -111,6 +151,48 @@ CLOUDINARY_API_SECRET
 
 > Hostinger MySQL must permit remote connections from Render's IPs, otherwise
 > the backend cannot reach the database.
+
+---
+
+---
+
+## Database migrations
+
+`migrations/*.sql` holds schema changes that must be applied to **both** local
+and production. They are tracked in git (the root `.gitignore` ignores `*.sql`
+generally but has an explicit `!migrations/` exception, so dumps stay out while
+migrations stay in).
+
+Apply in numeric order:
+
+```bash
+# local
+mysql -u root -p db < migrations/001_cart_unique_user_product.sql
+
+# production — run the file's contents in Hostinger phpMyAdmin
+```
+
+### Pending for the next production deploy
+
+| Migration | Status | Note |
+|---|---|---|
+| `001_cart_unique_user_product.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live** — `addToCart` now relies on `ON DUPLICATE KEY UPDATE`, which needs this unique index. |
+
+> Migration 001 will **fail** if production has accumulated duplicate
+> `(user_id, product_id)` cart rows — which is likely, since that is exactly the
+> bug it fixes. Local was clean; production may not be. The migration file's
+> header contains a pre-flight query and the SQL to collapse duplicates first.
+
+### Deploy order
+
+```
+1. Run pending migrations against Hostinger MySQL
+2. Deploy the backends to Render (with env vars set)
+3. Build and upload the frontends to Hostinger
+```
+
+Backends before frontends, and migrations before backends — each step depends
+on the previous one being live.
 
 ---
 

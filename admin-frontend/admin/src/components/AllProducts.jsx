@@ -14,10 +14,8 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
 
         const res = await fetch(`${ADMIN_API}/api/get-all-product-details`);
         const apiResponse = await res.json();
-        console.log("api response is",apiResponse)
         
         const productList = apiResponse.data || [];
-        console.log("productList is",productList)
         
         const filtered = productList.filter((p) => {
             if (!p.category || !categoryName) return false;

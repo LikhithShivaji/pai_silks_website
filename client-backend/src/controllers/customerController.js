@@ -141,13 +141,14 @@ exports.customerLogin = async (req, res) => {
         },
       ];
 
+      // appDefines.expiryTime.* are already in milliseconds. This previously
+      // ran the non-token cookies through convertDaysToMsec as well, which
+      // multiplied them by 86,400,000 a second time — session_id, role_id and
+      // pri_email were being issued with an expiry in the year 238,581.
+      // See CLAUDE.md CB-05.
       cookieSettings.forEach(({ key, value, expiryTime }) => {
         if (value) {
-          const calculatedExpiryTime =
-            key === CookiesKey.token
-              ? expiryTime
-              : utils.convertDaysToMsec(expiryTime);
-          utils.setCookies(res, key, value, calculatedExpiryTime);
+          utils.setCookies(res, key, value, expiryTime);
         }
       });
 
@@ -578,11 +579,20 @@ exports.addToCart = async (req, res) => {
 
 exports.createOrder = async (req, res) => {
   try {
-    const { user_id, shipping_address, payment_method, payment_status, status } = req.body;
+    // payment_status and status are deliberately NOT read from the request.
+    // A client must never be able to declare its own order paid. See
+    // CLAUDE.md CB-03 / CF-01.
+    const { user_id, shipping_address, payment_method } = req.body;
 
     if (!user_id || !shipping_address || !payment_method) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
+
+    // Server-assigned. Until a payment gateway is integrated, every order is
+    // created unpaid and pending. payment_status may only become 'Paid' via a
+    // verified gateway callback — never from a client request body.
+    const payment_status = "Unpaid";
+    const status = "Pending";
 
     // 1️⃣ Fetch cart
     const cartItems = await productManager.getCart(user_id);
@@ -601,7 +611,13 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "No valid items in cart" });
     }
 
-    const total_amount = mappedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const subtotal = mappedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+    // Shipping is added server-side from a server-owned constant. It is never
+    // read from the request — the client cannot choose its own shipping fee.
+    // See CLAUDE.md CF-03.
+    const shipping_fee = appDefines.SHIPPING_FEE;
+    const total_amount = subtotal + shipping_fee;
 
     // 3️⃣ Validate stock
     for (const item of mappedItems) {
@@ -630,7 +646,16 @@ exports.createOrder = async (req, res) => {
     // 6️⃣ Clear cart
     await productManager.clearCart(user_id);
 
-    return res.status(200).json({ success: true, message: "Order created successfully", order_id });
+    // Return the authoritative amounts the server actually charged, so the
+    // client can display them rather than recomputing its own figure.
+    return res.status(200).json({
+      success: true,
+      message: "Order created successfully",
+      order_id,
+      subtotal,
+      shipping_fee,
+      total_amount
+    });
 
   } catch (err) {
     console.error("Error in createOrder:", err);

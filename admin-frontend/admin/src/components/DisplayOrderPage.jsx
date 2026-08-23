@@ -18,7 +18,6 @@ export default function DisplayOrderPage({
   onChangeStatus,
 }) {
   useEffect(() => {
-    console.log("order is", order);
   }, []);
 
   if (!order) {

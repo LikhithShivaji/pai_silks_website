@@ -1,14 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customerController');
+const { loginLimiter, signupLimiter } = require('../middlewares/rateLimiters');
 
 
-// Customer signup
-router.post('/signup', customerController.customerSignup);
+// Customer signup — 10 requests per IP per 15 min, limits bulk account
+// creation. See CLAUDE.md CB-11.
+router.post('/signup', signupLimiter, customerController.customerSignup);
 
 
-// Customer login
-router.post('/customer-login', customerController.customerLogin);
+// Customer login — 10 FAILED attempts per IP per 15 min. Successful logins are
+// not counted, so normal use never locks anyone out. Also mitigates the bcrypt
+// CPU-exhaustion DoS on the single Node thread. See CLAUDE.md CB-11.
+router.post('/customer-login', loginLimiter, customerController.customerLogin);
 
 // router.js
 router.get('/get-user-details/:user_id', customerController.getUserDetails);
