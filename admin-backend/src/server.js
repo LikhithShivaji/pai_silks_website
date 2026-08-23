@@ -22,5 +22,5 @@ app.post('/api/admin-login', controllers.adminLogin);
 // Routes
 app.use('/api', adminRoutes); // Prefix routes with /api
 
-const PORT = 3006;
+const PORT = 9032;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

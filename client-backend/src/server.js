@@ -25,5 +25,5 @@ app.use(cookieParser());
 // New customer routes
 app.use('/api', customerRoutes);
 
-const PORT = 3007;
+const PORT = 9034;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
