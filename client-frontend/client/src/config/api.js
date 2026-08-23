@@ -27,3 +27,22 @@ export const ADMIN_API =
 // Keep this in sync with client-backend/src/constants/appDefines.js.
 // See CLAUDE.md CF-03.
 export const SHIPPING_FEE = 100;
+
+/**
+ * fetch() that always sends cookies.
+ *
+ * Every call in this app used bare fetch(), which defaults to
+ * credentials:'same-origin'. Because the API is on a different origin, the
+ * browser DISCARDED the Set-Cookie headers at login and never sent a cookie
+ * afterwards — the entire session mechanism was inert, and identity fell back
+ * to a plaintext user_id in localStorage. See CLAUDE.md CF-04.
+ *
+ * A wrapper rather than 26 hand-edited call sites: forgetting the option on one
+ * new call would silently log that request out, and nothing would fail loudly
+ * enough to notice. Safe by default is the point.
+ *
+ * Callers can still override anything, including credentials, since `options`
+ * is spread last.
+ */
+export const apiFetch = (url, options = {}) =>
+  fetch(url, { credentials: "include", ...options });

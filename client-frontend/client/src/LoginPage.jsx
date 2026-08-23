@@ -1,7 +1,7 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CartContext } from "./CartContext";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, apiFetch } from "@/config/api";
 import footerBg from "@/assets/footerbgimage.webp";
 import {
   Mail,
@@ -40,7 +40,7 @@ const LoginPage = () => {
     const guestCart = [...cartItems];
 
     try {
-      const response = await fetch(`${CLIENT_API}/api/customer-login`, {
+      const response = await apiFetch(`${CLIENT_API}/api/customer-login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,11 +66,10 @@ const LoginPage = () => {
             if (guestCart.length > 0) {
               guestCart.forEach(item => {
                 syncPromises.push(
-                    fetch(`${CLIENT_API}/api/cart/add`, {
+                    apiFetch(`${CLIENT_API}/api/cart/add`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            user_id: userId,
                             product_id: item.id || item.product_id,
                             quantity: item.quantity || 1
                         })
@@ -83,11 +82,10 @@ const LoginPage = () => {
             if (wishListItems.length > 0) {
                 wishListItems.forEach(item => {
                     syncPromises.push(
-                        fetch(`${CLIENT_API}/api/wishlist/add`, {
+                        apiFetch(`${CLIENT_API}/api/wishlist/add`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                user_id: userId,
                                 product_id: item.id || item.product_id
                             })
                         })
@@ -98,7 +96,7 @@ const LoginPage = () => {
             await Promise.all(syncPromises);
 
             // Fetch final server data
-            const finalCartRes = await fetch(`${CLIENT_API}/api/cart/cart-data?user_id=${userId}`);
+            const finalCartRes = await apiFetch(`${CLIENT_API}/api/cart/cart-data`);
             const finalCartData = await finalCartRes.json();
 
             if(finalCartData.success) {
@@ -134,7 +132,7 @@ const LoginPage = () => {
             }
 
             // Wishlist fetch...
-            const finalWishRes = await fetch(`${CLIENT_API}/api/wishlist/${userId}`);
+            const finalWishRes = await apiFetch(`${CLIENT_API}/api/wishlist`);
             const finalWishData = await finalWishRes.json();
             if(finalWishData.success) setWishListItems(finalWishData.data);
 

@@ -9,21 +9,37 @@ import Checkout from "./Checkout"
 import LoginPage from "./LoginPage";
 import PeacockLoader from "./components/PeacockLoader";
 import Signup from "./components/Signup";
+import PrivateRoute from "./components/PrivateRoute";
 
 export default function AppRouter() {
   return (
     <Router>
       <Routes>
+        {/* --- Public --- */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<Homepage />} />
         <Route path="/shop" element={<App />} />
         <Route path="/product/:productId" element={<ViewProductPage />} />
         <Route path="/about-us" element={<AboutUs />} />
-        <Route path="/my-orders" element={<MyOrders />} />
-        <Route path="/my-profile" element={<MyProfile />} />
         <Route path="/animation" element={<PeacockLoader />} />
-        <Route path="/checkout" element={<Checkout />} />
         <Route path="/signup" element={<Signup />} />
+
+        {/* --- Requires a valid session ---
+            These previously rendered for anyone. PrivateRoute asks the server,
+            not localStorage — see CLAUDE.md CF-08. It is a UX guard only; the
+            API enforces auth independently on every one of these pages' calls. */}
+        <Route
+          path="/my-orders"
+          element={<PrivateRoute><MyOrders /></PrivateRoute>}
+        />
+        <Route
+          path="/my-profile"
+          element={<PrivateRoute><MyProfile /></PrivateRoute>}
+        />
+        <Route
+          path="/checkout"
+          element={<PrivateRoute><Checkout /></PrivateRoute>}
+        />
       </Routes>
     </Router>
   );

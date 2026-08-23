@@ -99,6 +99,19 @@ const getNewReleaseProducts = async () => {
   }
 };
 
+/**
+ * Revoke a session. Scoped to user_id so one account cannot log another out.
+ * See CLAUDE.md CB-13.
+ */
+const logoutSession = async (session_id, user_id, logoutStatus) => {
+  try {
+    return await dbCmds.logoutSessionBySessionId(session_id, user_id, logoutStatus);
+  } catch (err) {
+    console.error("Error in logoutSession:", err);
+    throw err;
+  }
+};
+
 // ====== ADD PRODUCT TO WISHLIST ======
 const addToWishlist = async (user_id, product_id) => {
   try {
@@ -343,5 +356,6 @@ module.exports = {
   getOrderById,
   getOrderItems,
   getOrdersByUser,
-  getNewReleaseProducts
+  getNewReleaseProducts,
+  logoutSession
 };

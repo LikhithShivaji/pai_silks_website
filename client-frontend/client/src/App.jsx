@@ -5,7 +5,7 @@ import Header from "./components/Header";
 import ProductCard from "./components/ProductCard";
 import FilterAndSort from "./components/FilterandSort";
 import Footer from "./components/Footer";
-import { ADMIN_API } from "@/config/api";
+import { ADMIN_API, apiFetch } from "@/config/api";
 
 import { CartContext } from "./CartContext";
 
@@ -46,7 +46,7 @@ const App = () => {
 
   /* ---------------- FETCH PRODUCTS ---------------- */
   useEffect(() => {
-    fetch(`${ADMIN_API}/api/get-all-product-details`)
+    apiFetch(`${ADMIN_API}/api/get-all-product-details`)
       .then((res) => res.json())
       .then((res) => {
         const data = res.data || (res.success ? res.data : []);

@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect } from "react";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, apiFetch } from "@/config/api";
 
 export const CartContext = createContext();
 
@@ -38,7 +38,7 @@ export const CartProvider = ({ children }) => {
     if (userId) {
       const fetchUserData = async () => {
         try {
-          const cartRes = await fetch(`${CLIENT_API}/api/cart/cart-data?user_id=${userId}`);
+          const cartRes = await apiFetch(`${CLIENT_API}/api/cart/cart-data`);
           const cartData = await cartRes.json();
           
           // console.log("RAW CART DATA FROM API:", cartData);
@@ -53,7 +53,7 @@ export const CartProvider = ({ children }) => {
             setCartItems(safeCart); 
           }
 
-          const wishRes = await fetch(`${CLIENT_API}/api/wishlist/${userId}`);
+          const wishRes = await apiFetch(`${CLIENT_API}/api/wishlist`);
           const wishData = await wishRes.json();
           // console.log("RAW CART DATA FROM API:", cartData); // Fixed copy-paste typo in label
           if (wishData.success) {
@@ -123,11 +123,10 @@ export const CartProvider = ({ children }) => {
     // B. If Logged In -> Sync to DB
     if (userId) {
       try {
-        await fetch(`${CLIENT_API}/api/cart/add`, {
+        await apiFetch(`${CLIENT_API}/api/cart/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            user_id: userId,
             product_id: product.id || product.product_id,
             quantity: product.quantity || 1
           }),
@@ -160,11 +159,10 @@ export const CartProvider = ({ children }) => {
     // B. If Logged In -> Sync to DB
     if (userId) {
       try {
-        await fetch(`${CLIENT_API}/api/wishlist/add`, {
+        await apiFetch(`${CLIENT_API}/api/wishlist/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            user_id: userId,
             product_id: product.id || product.product_id
           }),
         });
@@ -186,11 +184,10 @@ export const CartProvider = ({ children }) => {
     // B. If Logged In -> Call API to remove from DB
     if (userId) {
       try {
-        await fetch(`${CLIENT_API}/api/wishlist/remove`, {
+        await apiFetch(`${CLIENT_API}/api/wishlist/remove`, {
           method: "DELETE", // Assuming DELETE method based on typical API standards
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            user_id: userId,
             product_id: productId
           }),
         });
@@ -207,11 +204,10 @@ export const CartProvider = ({ children }) => {
 
     if (userId) {
       try {
-        await fetch(`${CLIENT_API}/api/cart/remove`, {
+        await apiFetch(`${CLIENT_API}/api/cart/remove`, {
           method: "DELETE", 
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            user_id: userId,
             product_id: productId
           }),
         });

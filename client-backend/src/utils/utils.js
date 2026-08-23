@@ -1,4 +1,20 @@
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
+const appDefines = require('../constants/appDefines');
+
+/**
+ * Fail fast at startup rather than signing tokens with `undefined`, which
+ * jsonwebtoken would happily accept and which would make every token forgeable.
+ */
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error(
+        'Missing required environment variable: JWT_SECRET\n' +
+        '  Generate one with:  openssl rand -hex 32\n' +
+        '  Local dev:  add it to .env\n' +
+        '  Production: set it in the Render dashboard (Service -> Environment)'
+    );
+}
 
 class Utils {
     
@@ -46,6 +62,49 @@ class Utils {
         });
     }
 
+    /**
+     * Sign a session JWT.
+     *
+     * Replaces the previous genToken(), which was
+     * `sha256(user_id + Date.now())` — both inputs guessable. user_id is a
+     * small sequential integer and Date.now() is millisecond time, so a day's
+     * keyspace was roughly 2^27: a GPU sweeps that in well under a second.
+     * Unsalted, unkeyed, and two logins in the same millisecond produced an
+     * IDENTICAL token. See CLAUDE.md CB-24.
+     *
+     * The session_id claim is what authMiddleware uses to find the session row,
+     * so logout and device eviction take effect on the very next request.
+     *
+     * @param {{user_id:number, role_id:number, session_id:string}} payload
+     */
+    signToken({ user_id, role_id, session_id }) {
+        return jwt.sign(
+            { user_id, role_id, session_id },
+            JWT_SECRET,
+            { expiresIn: Math.floor(appDefines.expiryTime.sessionExpiryTime / 1000) }
+        );
+    }
+
+    /**
+     * Verify a session JWT. Returns the decoded payload, or null if the token
+     * is missing, malformed, expired, or signed with a different secret.
+     *
+     * Never throws — callers treat null as "not authenticated".
+     */
+    verifyToken(token) {
+        if (!token) return null;
+        try {
+            return jwt.verify(token, JWT_SECRET);
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * @deprecated Superseded by signToken(). Retained only so the legacy
+     * renewal path in customerAuthManager keeps working until Slice 4 replaces
+     * it. Do not use in new code — see the entropy problem described above.
+     */
     genToken(data) {
         return crypto.createHash('sha256').update(data + Date.now().toString()).digest('hex');
     }

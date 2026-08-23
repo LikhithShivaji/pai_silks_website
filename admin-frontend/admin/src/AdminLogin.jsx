@@ -1,6 +1,6 @@
 import { useState } from "react"; // Removed useContext and ContextApp
 import { useNavigate } from "react-router-dom";
-import { ADMIN_API } from "@/config/api";
+import { ADMIN_API, apiFetch } from "@/config/api";
 import "./AdminLogin.css";
 import logo from "./assets/pai-silks-logo.png";
 import { Loader2 } from "lucide-react";
@@ -39,7 +39,7 @@ function AdminLogin() {
     setLoading(true);
 
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `${ADMIN_API}/api/admin-login`,
         {
           method: "POST",
@@ -53,22 +53,29 @@ function AdminLogin() {
 
       const data = await response.json();
 
-      // 👇 FIX: Check 'validSession' instead of 'success'
-      if (data.validSession) {
-        
-        // Save token if it exists (your response didn't show one, but just in case)
+      // Gate on the HTTP status, not a body field.
+      //
+      // This previously checked `data.validSession`, which the backend only
+      // returned on its "a session already exists" branch. A genuine FIRST
+      // login took the other branch, had no validSession key, and fell through
+      // to the failure path — alerting "Login successful" as an ERROR while
+      // leaving the admin on this page. Logging in required clicking LOGIN
+      // twice. See CLAUDE.md AF-16.
+      //
+      // The backend now returns a consistent { success } shape and always
+      // issues a full cookie set, so response.ok is the honest signal.
+      if (response.ok && data.success) {
+        // UI hint only — the real credential is the httpOnly session cookie,
+        // which JavaScript cannot read. ProtectedAdminRoute verifies against
+        // the server, so setting this by hand grants nothing.
         localStorage.setItem("admin_auth", "true");
-        if (data.token) localStorage.setItem("admin_token", data.token);
-        
-        // Save user details if they exist
-        if (data.user || data.data) {
-             localStorage.setItem("admin_user", JSON.stringify(data.user || data.data));
+
+        if (data.user) {
+          localStorage.setItem("admin_user", JSON.stringify(data.user));
         }
 
-        alert("Log In successful!");
         navigate("/admin-home-page");
       } else {
-        // Fallback for failure
         alert(data.message || "Invalid credentials.");
       }
     } catch (error) {

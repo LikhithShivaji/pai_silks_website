@@ -18,7 +18,27 @@ exports.customerSignup = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Password policy. Previously the only check was `!password`, so "a" was a
+    // valid password. See CLAUDE.md CB-28.
+    const { MIN_LENGTH, MAX_BYTES, BCRYPT_COST } = appDefines.password;
+
+    if (typeof password !== 'string' || password.length < MIN_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: `Password must be at least ${MIN_LENGTH} characters.`,
+      });
+    }
+
+    // bcrypt silently truncates past 72 BYTES. Rejecting is honest; accepting
+    // and ignoring the remainder would give the user false confidence.
+    if (Buffer.byteLength(password, 'utf8') > MAX_BYTES) {
+      return res.status(400).json({
+        success: false,
+        message: `Password is too long (maximum ${MAX_BYTES} bytes).`,
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, BCRYPT_COST);
 
     const result = await customerSignupManager.registerCustomer({
       user_name,
@@ -56,12 +76,9 @@ exports.customerSignup = async (req, res) => {
 
 
 // customerController.js
-exports.customerLogin = async (req, res) => {
+exports.customerLogin = async (req, res, next) => {
   const { pri_email, passwd } = req.body;
-  const token = req.cookies[CookiesKey.token];
-  const session_id = req.cookies[CookiesKey.session_id];
 
-  // Step 0: Validate input
   if (!pri_email || !passwd) {
     return utils.handleMissingParams(
       res,
@@ -71,12 +88,11 @@ exports.customerLogin = async (req, res) => {
   }
 
   try {
-    // Step 1: Validate credentials and check session/token expiry
+    // Step 1: credentials only. Session handling is no longer entangled with
+    // credential checking — see the note in customerAuthManager.
     const loginResult = await customerAuthManager.validateCustomerLogin(
       pri_email,
-      passwd,
-      session_id,
-      token
+      passwd
     );
 
     if (!loginResult.success) {
@@ -86,92 +102,58 @@ exports.customerLogin = async (req, res) => {
       });
     }
 
-    // Step 2: If valid session (still within 1 day)
-    if (loginResult.validSession) {
-      if (loginResult.token) {
+    // Step 2: ALWAYS create a fresh session.
+    //
+    // Every login is a device. The old flow had a "valid session already
+    // exists" branch that returned success while setting no session_id cookie
+    // at all — so a second device was told "Login successful" and handed
+    // nothing to authenticate with. Creating a session unconditionally is what
+    // makes the 2-device policy work; the cap and eviction are enforced inside
+    // loginCustomerUser. See CLAUDE.md CB-30.
+    const result = await customerLoginManager.loginCustomerUser(
+      loginResult.userData
+    );
+
+    if (!result.success) {
+      return res.status(500).json({
+        message: 'Login failed',
+        localeStr: 'msg.error.loginFailed',
+      });
+    }
+
+    // All four cookies share the session lifetime. The token is the JWT and
+    // carries its own matching `exp`; there is no separate short token expiry
+    // any more (see appDefines).
+    const cookieSettings = [
+      { key: CookiesKey.session_id, value: result.session_id },
+      { key: CookiesKey.token, value: result.token },
+      { key: CookiesKey.role_id, value: result.role_id },
+      { key: CookiesKey.pri_email, value: result.pri_email },
+    ];
+
+    cookieSettings.forEach(({ key, value }) => {
+      if (value !== undefined && value !== null) {
         utils.setCookies(
           res,
-          CookiesKey.token,
-          loginResult.token,
-          appDefines.expiryTime.tokenExpiryTime
+          key,
+          value,
+          appDefines.expiryTime.sessionExpiryTime
         );
       }
-      return res.status(200).json({
-        message: 'Login successful',
-        user_id: loginResult.userData.user_id,
-        validSession: true,
-        localeStr: 'msg.success.loginSuccess',
-      });
-    }
+    });
 
-    // Step 3: If session expired or doesn't exist, create new session & token
-    if (loginResult.createSession) {
-      const result = await customerLoginManager.loginCustomerUser(
-        loginResult.userData
-      );
-
-      if (!result.success) {
-        return res.status(500).json({
-          message: 'Login failed',
-          localeStr: 'msg.error.loginFailed',
-        });
-      }
-
-      // Set cookies for the new session
-      const cookieSettings = [
-        {
-          key: CookiesKey.session_id,
-          value: result.session_id,
-          expiryTime: appDefines.expiryTime.sessionExpiryTime,
-        },
-        {
-          key: CookiesKey.token,
-          value: result.token,
-          expiryTime: appDefines.expiryTime.tokenExpiryTime,
-        },
-        {
-          key: CookiesKey.role_id,
-          value: result.role_id,
-          expiryTime: appDefines.expiryTime.sessionExpiryTime,
-        },
-        {
-          key: CookiesKey.pri_email,
-          value: result.pri_email,
-          expiryTime: appDefines.expiryTime.sessionExpiryTime,
-        },
-      ];
-
-      // appDefines.expiryTime.* are already in milliseconds. This previously
-      // ran the non-token cookies through convertDaysToMsec as well, which
-      // multiplied them by 86,400,000 a second time — session_id, role_id and
-      // pri_email were being issued with an expiry in the year 238,581.
-      // See CLAUDE.md CB-05.
-      cookieSettings.forEach(({ key, value, expiryTime }) => {
-        if (value) {
-          utils.setCookies(res, key, value, expiryTime);
-        }
-      });
-
-      return res.status(200).json({
-        sid: result.sid,
-        message: 'Login successful',
-        user_status_id: res.user_status_id,
-        user_id: loginResult.userData.user_id,              // ✅ important for frontend
-        pri_email: loginResult.userData.pri_email,
-        localeStr: 'msg.success.loginSuccess',
-      });
-    }
-
-    // Fallback
-    return res.status(500).json({
-      message: 'Unexpected login flow',
-      localeStr: 'msg.error.loginFailed',
+    // `sid` (the session table's auto-increment PK) is deliberately no longer
+    // returned — it exposed internal DB structure and row counts for no client
+    // benefit. See CLAUDE.md CB-20.
+    return res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      user_id: loginResult.userData.user_id,
+      pri_email: loginResult.userData.pri_email,
+      localeStr: 'msg.success.loginSuccess',
     });
   } catch (error) {
-    return res.status(error.httpCode || 500).json({
-      message: error.message || 'Login failed',
-      localeStr: 'msg.error.loginFailed',
-    });
+    return next(error);
   }
 };
 
@@ -180,7 +162,8 @@ exports.customerLogin = async (req, res) => {
 // customerController.js
 exports.getUserDetails = async (req, res) => {
   try {
-    const { user_id } = req.params;
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
     const userData = await customerLoginManager.getUserProfile(user_id);
 
     if (!userData) {
@@ -343,7 +326,9 @@ exports.getNewReleaseProducts = async (req, res) => {
 
 // ====== ADD TO WISHLIST ======
 exports.addToWishlist = async (req, res) => {
-  const { user_id, product_id } = req.body;
+  // user_id comes from the verified session, never the request. See CB-02.
+  const user_id = req.user.user_id;
+  const { product_id } = req.body;
 
   if (!user_id || !product_id) {
     return res.status(400).json({
@@ -379,7 +364,8 @@ exports.addToWishlist = async (req, res) => {
 // ====== GET WISHLIST ITEMS ======
 exports.getWishlist = async (req, res) => {
   try {
-    const user_id = req.params.user_id;
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
     if (!user_id) {
        return res.status(400).json({
         success: false,
@@ -405,7 +391,9 @@ exports.getWishlist = async (req, res) => {
 
 // ====== REMOVE FROM WISHLIST ======
 exports.removeWishlist = async (req, res) => {
-  const { user_id, product_id } = req.body;
+  // user_id comes from the verified session, never the request. See CB-02.
+  const user_id = req.user.user_id;
+  const { product_id } = req.body;
 
   if (!user_id || !product_id) {
     return res.status(400).json({
@@ -433,7 +421,8 @@ exports.removeWishlist = async (req, res) => {
 exports.checkWishlist = async (req, res) => {
   try {
 
-    const user_id = parseInt(req.query.user_id);
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
     const product_id = parseInt(req.query.product_id);
 
     if (!user_id || !product_id) {
@@ -460,7 +449,8 @@ exports.checkWishlist = async (req, res) => {
 
 exports.wishlistCount = async (req, res) => {
   try {
-    const user_id = req.params.user_id;
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
 
     if (!user_id) {
       return res.status(400).json({ success: false, message: "user_id is required" });
@@ -482,7 +472,9 @@ exports.wishlistCount = async (req, res) => {
 
 exports.moveWishlistToCart = async (req, res) => {
   try {
-    const { user_id, product_id } = req.body;
+    // user_id comes from the verified session, never the request. See CB-02.
+  const user_id = req.user.user_id;
+  const { product_id } = req.body;
 
     if (!user_id || !product_id) {
       return res.status(400).json({
@@ -507,7 +499,8 @@ exports.moveWishlistToCart = async (req, res) => {
 
 exports.getCart = async (req, res) => {
   try {    
-    const user_id = req.query.user_id;
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
     const cartItems = await productManager.getCart(user_id);
 
     return res.status(200).json({
@@ -528,7 +521,9 @@ exports.getCart = async (req, res) => {
 // PUT /api/cart/update
 exports.updateCartQuantity = async (req, res) => {
   try {
-    const { user_id, product_id, quantity } = req.body;
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
+    const { product_id, quantity } = req.body;
     const result = await productManager.updateCartQuantity(user_id, product_id, quantity);
     res.status(200).json(result);
   } catch (err) {
@@ -539,7 +534,9 @@ exports.updateCartQuantity = async (req, res) => {
 // DELETE /api/cart/remove
 exports.removeFromCart = async (req, res) => {
   try {
-    const { user_id, product_id } = req.body;
+    // user_id comes from the verified session, never the request. See CB-02.
+  const user_id = req.user.user_id;
+  const { product_id } = req.body;
     const result = await productManager.removeFromCart(user_id, product_id);
     res.status(200).json(result);
   } catch (err) {
@@ -552,7 +549,9 @@ exports.removeFromCart = async (req, res) => {
 
 exports.addToCart = async (req, res) => {
   try {
-    const { user_id, product_id } = req.body;
+    // user_id comes from the verified session, never the request. See CB-02.
+  const user_id = req.user.user_id;
+  const { product_id } = req.body;
 
     if (!user_id || !product_id) {
       return res.status(400).json({
@@ -582,7 +581,9 @@ exports.createOrder = async (req, res) => {
     // payment_status and status are deliberately NOT read from the request.
     // A client must never be able to declare its own order paid. See
     // CLAUDE.md CB-03 / CF-01.
-    const { user_id, shipping_address, payment_method } = req.body;
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
+    const { shipping_address, payment_method } = req.body;
 
     if (!user_id || !shipping_address || !payment_method) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
@@ -680,7 +681,21 @@ exports.getOrderById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
-    // 2️⃣ Get all items of this order
+    // 2️⃣ OWNERSHIP CHECK. This route has to keep :order_id — you are
+    // addressing a specific order — so the guard lives here instead. Without
+    // it any authenticated customer could read any order's total, shipping
+    // address and payment status just by incrementing the id. See CB-02.
+    //
+    // 404 rather than 403: a 403 would confirm the order exists, letting an
+    // attacker map valid order ids.
+    if (Number(order.user_id) !== Number(req.user.user_id)) {
+      console.warn(
+        `[authz] order ownership denied: user=${req.user.user_id} order=${order_id}`
+      );
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    // 3️⃣ Get all items of this order
     const items = await productManager.getOrderItems(order_id);
 
     // 3️⃣ Return combined data
@@ -698,23 +713,17 @@ exports.getOrderById = async (req, res) => {
 
 exports.getOrdersByUser = async (req, res) => {
   try {
-    const { user_id } = req.params;
-
-    if (!user_id) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is required"
-      });
-    }
+    // user_id comes from the verified session, never the request. See CB-02.
+    const user_id = req.user.user_id;
 
     // Fetch orders for the user
     const orders = await productManager.getOrdersByUser(user_id);
 
+    // An empty order history is a valid state, not an error. This previously
+    // returned 404, which forced the client to treat "no orders yet" as a
+    // failure and leaked whether an account had ever ordered. See CB-34.
     if (!orders || orders.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "No orders found for this user"
-      });
+      return res.status(200).json({ success: true, orders: [] });
     }
 
     // Attach items to each order
@@ -737,28 +746,79 @@ exports.getOrdersByUser = async (req, res) => {
   }
 };
 
-exports.addOrderItem = async (req, res) => {
+// REMOVED: exports.addOrderItem (POST /api/order/add-item)
+//
+// It read { order_id, product_id, quantity, price } from the body and inserted
+// them verbatim into order_items — no ownership check on order_id, no product
+// lookup, no stock reduction, and orders.total_amount was never recalculated.
+// Anyone could attach any product to any order at price 0.01.
+//
+// The storefront never called it (verified by grep), so an attacker had to hit
+// the API directly — but with no auth in front of it, that was trivial.
+//
+// Order items are now only ever created inside createOrder, which prices every
+// line from the product table. The productManager.addOrderItem helper it uses
+// internally is retained; only the public HTTP entry point is gone.
+// See CLAUDE.md CB-04.
+
+// ---------------------------------------------------------------------------
+// Phase 2 auth endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/logout
+ *
+ * There was previously no logout endpoint at all. SESSION_LOGOUT was written in
+ * exactly one place — the *expiry* branch of login — so a session could only
+ * end by ageing out. Combined with the cookie bug fixed in Phase 1 Slice 8,
+ * which set cookies to expire in the year 238,581, a stolen cookie was
+ * effectively permanent. See CLAUDE.md CB-13.
+ *
+ * Requires authMiddleware: revoking a session needs to know whose it is, and
+ * the scoped UPDATE means one account can never log another out.
+ */
+exports.logout = async (req, res, next) => {
   try {
-    const { order_id, product_id, quantity, price } = req.body;
+    await productManager.logoutSession(
+      req.user.session_id,
+      req.user.user_id,
+      appDefines.SESSION_STATES.SESSION_LOGOUT
+    );
 
-    if (!order_id || !product_id || !quantity || !price) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required fields",
-      });
-    }
+    // Clear cookies with the SAME attributes they were set with. A mismatch on
+    // path or sameSite leaves the browser holding a stale cookie.
+    const isProduction = process.env.NODE_ENV === 'production';
+    const clearOpts = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      path: '/',
+    };
+    [CookiesKey.token, CookiesKey.session_id, CookiesKey.role_id, CookiesKey.pri_email]
+      .forEach((key) => res.clearCookie(key, clearOpts));
 
-    // Call productManager.addOrderItem which now returns result
-    const result = await productManager.addOrderItem(order_id, product_id, quantity, price);
-
-    return res.status(200).json({
-      success: true,
-      message: "Item added to order successfully",
-      data: result, // contains insertId, order_id, product_id, quantity, price
-    });
-
+    return res.status(200).json({ success: true, message: 'Logged out.' });
   } catch (err) {
-    console.error("Error in addOrderItem:", err);
-    return res.status(500).json({ success: false, message: err.message });
+    return next(err);
   }
+};
+
+/**
+ * GET /api/verify-token
+ *
+ * Lets the frontend ask "is my session still valid?" without guessing from
+ * localStorage. authMiddleware has already done the work by the time this
+ * runs — reaching the handler at all means the session is good.
+ *
+ * Returns only non-sensitive identity fields.
+ */
+exports.verifyToken = async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    user: {
+      user_id: req.user.user_id,
+      pri_email: req.user.pri_email,
+      role_id: req.user.role_id,
+    },
+  });
 };

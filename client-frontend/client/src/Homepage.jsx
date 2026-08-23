@@ -4,7 +4,7 @@ import ProductCard from "./components/ProductCard";
 import CategoryCard from "./components/Categorycard.jsx";
 import ReviewCard from "./components/ReviewCard.jsx";
 import { useNavigate } from "react-router-dom";
-import { CLIENT_API, ADMIN_API } from "@/config/api";
+import { CLIENT_API, ADMIN_API, apiFetch } from "@/config/api";
 import frame from "./assets/heroframe.svg";
 import finisher from "./assets/finisher.svg";
 import trendingProducts from "./products.js";
@@ -107,7 +107,7 @@ function Homepage() {
 
   /* Collections */
   useEffect(() => {
-    fetch(`${CLIENT_API}/api/collections`)
+    apiFetch(`${CLIENT_API}/api/collections`)
       .then((res) => res.json())
       .then((data) => data.success && setCollections(data.data))
       .finally(() => setLoadingCollections(false));
@@ -115,7 +115,7 @@ function Homepage() {
 
   /* Best sellers */
   useEffect(() => {
-    fetch(`${CLIENT_API}/api/bestsellers`)
+    apiFetch(`${CLIENT_API}/api/bestsellers`)
       .then((res) => res.json())
       .then((res) => res.success && setBestSellers(res.data))
       .finally(() => setLoadingBestSellers(false));
@@ -134,7 +134,7 @@ function Homepage() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           `${ADMIN_API}/api/get-all-product-details`
         );
         const result = await response.json();

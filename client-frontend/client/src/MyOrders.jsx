@@ -2,7 +2,7 @@ import React, { useEffect, useState, useContext } from "react";
 import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag, ArrowLeft } from "lucide-react";
 
 import { CartContext } from "@/CartContext";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, apiFetch } from "@/config/api";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -136,7 +136,7 @@ const MyOrders = () => {
 
       try {
         // ✅ Keeping your correct -1 URL
-        const response = await fetch(`${CLIENT_API}/api/orders/user/${userId}`);
+        const response = await apiFetch(`${CLIENT_API}/api/orders/mine`);
         
         if (!response.ok) {
            throw new Error(`Server Error: ${response.status}`);

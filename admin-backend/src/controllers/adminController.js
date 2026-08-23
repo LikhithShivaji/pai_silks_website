@@ -11,12 +11,9 @@ const admindb = require('../dbOps/adminDbOps'); // adjust path if needed
 // adminController.js
 
 // adminController.js
-exports.adminLogin = async (req, res) => {
+exports.adminLogin = async (req, res, next) => {
   const { pri_email, passwd } = req.body;
-  const token = req.cookies[CookiesKey.token];
-  const session_id = req.cookies[CookiesKey.session_id];
 
-  // Step 0: Validate input
   if (!pri_email || !passwd) {
     return utils.handleMissingParams(
       res,
@@ -26,103 +23,76 @@ exports.adminLogin = async (req, res) => {
   }
 
   try {
-    // Step 1: Validate credentials and check session/token expiry
+    // Step 1: credentials only. Session handling is no longer entangled with
+    // credential checking — see the note in adminAuthManager.
     const loginResult = await adminAuthManager.validateAdminLogin(
       pri_email,
-      passwd,
-      session_id,
-      token
+      passwd
     );
 
     if (!loginResult.success) {
       return res.status(401).json({
+        success: false,
         message: 'Invalid credentials',
         localeStr: 'msg.error.loginFailed'
       });
     }
 
-    // Step 2: If valid session (still within 1 day)
-    if (loginResult.validSession) {
-      // If new token was generated, set it in cookies
-      if (loginResult.token) {
+    // Step 2: ALWAYS create a fresh session.
+    //
+    // The old flow had a "valid session already exists" branch that returned
+    // `{ validSession: true }` while setting no session_id cookie — so a second
+    // device was told "Login successful" and handed nothing to authenticate
+    // with (AB-28).
+    //
+    // It also caused AF-16: the frontend gated on `data.validSession`, which
+    // only appeared on that branch. A genuine FIRST login fell through to the
+    // failure path and alerted "Login successful" as an error, so the admin had
+    // to click LOGIN twice. Returning a consistent shape fixes both ends.
+    const result = await adminLoginManager.loginAdminUser(loginResult.userData);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Login failed',
+        localeStr: 'msg.error.loginFailed'
+      });
+    }
+
+    // All four cookies share the session lifetime. The token is the JWT and
+    // carries its own matching `exp`.
+    const cookieSettings = [
+      { key: CookiesKey.session_id, value: result.session_id },
+      { key: CookiesKey.token, value: result.token },
+      { key: CookiesKey.role_id, value: result.role_id },
+      { key: CookiesKey.pri_email, value: result.pri_email }
+    ];
+
+    cookieSettings.forEach(({ key, value }) => {
+      if (value !== undefined && value !== null) {
         utils.setCookies(
           res,
-          CookiesKey.token,
-          loginResult.token,
-          appDefines.expiryTime.tokenExpiryTime
+          key,
+          value,
+          appDefines.expiryTime.sessionExpiryTime
         );
       }
-      return res.status(200).json({
-        message: 'Login successful',
-        validSession: true,
-        localeStr: 'msg.success.loginSuccess'
-      });
-    }
-
-    // Step 3: If session expired or doesn't exist, create new session & token
-    if (loginResult.createSession) {
-      const result = await adminLoginManager.loginAdminUser(loginResult.userData);
-      if (!result.success) {
-        return res.status(500).json({
-          message: 'Login failed',
-          localeStr: 'msg.error.loginFailed'
-        });
-      }
-
-      // Set cookies for the new session
-      const cookieSettings = [
-        {
-          key: CookiesKey.session_id,
-          value: result.session_id,
-          expiryTime: appDefines.expiryTime.sessionExpiryTime
-        },
-        {
-          key: CookiesKey.token,
-          value: result.token,
-          expiryTime: appDefines.expiryTime.tokenExpiryTime
-        },
-        {
-          key: CookiesKey.role_id,
-          value: result.role_id,
-          expiryTime: appDefines.expiryTime.sessionExpiryTime
-        },
-        {
-          key: CookiesKey.pri_email,
-          value: result.pri_email,
-          expiryTime: appDefines.expiryTime.sessionExpiryTime
-        }
-      ];
-
-      // appDefines.expiryTime.* are already in milliseconds. This previously
-      // ran the non-token cookies through convertDaysToMsec as well, which
-      // multiplied them by 86,400,000 a second time — session_id, role_id and
-      // pri_email were being issued with an expiry in the year 238,581.
-      // See CLAUDE.md AB-05.
-      cookieSettings.forEach(({ key, value, expiryTime }) => {
-        if (value) {
-          utils.setCookies(res, key, value, expiryTime);
-        }
-      });
-
-      return res.status(200).json({
-        sid: result.sid,
-        message: 'Login successful',
-        user_status_id: result.user_status_id,
-        localeStr: 'msg.success.loginSuccess'
-      });
-    }
-
-    // Fallback (should not reach here)
-    return res.status(500).json({
-      message: 'Unexpected login flow',
-      localeStr: 'msg.error.loginFailed'
     });
 
+    // `sid` (the session table's auto-increment PK) is no longer returned — it
+    // exposed internal DB structure for no client benefit (AB-26).
+    return res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        user_id: loginResult.userData.user_id,
+        pri_email: loginResult.userData.pri_email,
+        role_id: loginResult.userData.role_id
+      },
+      localeStr: 'msg.success.loginSuccess'
+    });
   } catch (error) {
-    return res.status(error.httpCode || 500).json({
-      message: error.message || 'Login failed',
-      localeStr: 'msg.error.loginFailed'
-    });
+    return next(error);
   }
 };
 
@@ -424,6 +394,67 @@ exports.deleteCategory = async (req, res) => {
       message: error.message,
     });
   }
+};
+
+// ---------------------------------------------------------------------------
+// Phase 2 auth endpoints
+// ---------------------------------------------------------------------------
+
+const dbCmds = require('../dbOps/adminDbOps');
+
+/**
+ * POST /api/logout
+ *
+ * There was previously no logout endpoint. SESSION_LOGOUT was written in
+ * exactly one place — the *expiry* branch of login — so a session could only
+ * end by ageing out, and the Logout button in the admin UI had no onClick at
+ * all (AF-06). See CLAUDE.md AB-07.
+ *
+ * Requires authMiddleware: revoking a session needs to know whose it is, and
+ * the scoped UPDATE means one account can never log another out.
+ */
+exports.logout = async (req, res, next) => {
+  try {
+    await dbCmds.logoutSessionBySessionId(
+      req.user.session_id,
+      req.user.user_id,
+      appDefines.SESSION_STATES.SESSION_LOGOUT
+    );
+
+    // Clear cookies with the SAME attributes they were set with. A mismatch on
+    // path or sameSite leaves the browser holding a stale cookie.
+    const isProduction = process.env.NODE_ENV === 'production';
+    const clearOpts = {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
+      path: '/',
+    };
+    [CookiesKey.token, CookiesKey.session_id, CookiesKey.role_id, CookiesKey.pri_email]
+      .forEach((key) => res.clearCookie(key, clearOpts));
+
+    return res.status(200).json({ success: true, message: 'Logged out.' });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+/**
+ * GET /api/verify-token
+ *
+ * Lets the admin panel ask the server whether the session is real, instead of
+ * trusting `localStorage.admin_auth` — which anyone can set in DevTools
+ * (AF-02). Reaching this handler at all means authMiddleware passed.
+ */
+exports.verifyToken = async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    user: {
+      user_id: req.user.user_id,
+      pri_email: req.user.pri_email,
+      role_id: req.user.role_id,
+    },
+  });
 };
 
 

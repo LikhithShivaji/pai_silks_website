@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { CartContext } from "@/CartContext.jsx";
 import CheckOutItem from "@/components/CheckOutItem.jsx";
-import { CLIENT_API, SHIPPING_FEE } from "@/config/api";
+import { CLIENT_API, SHIPPING_FEE, apiFetch } from "@/config/api";
 import logo from "@/assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 
@@ -86,8 +86,8 @@ export default function Checkout() {
     if (userEmail) form.setValue("email", userEmail);
 
     if (userId) {
-      fetch(
-        `${CLIENT_API}/api/orders/user/${userId}`
+      apiFetch(
+        `${CLIENT_API}/api/orders/mine`
       )
         .then((res) => res.json())
         .then((response) => {
@@ -123,7 +123,6 @@ export default function Checkout() {
 
     try {
       const orderPayload = {
-        user_id: userId,
         customer_name: `${data.firstName} ${data.lastName}`,
         email: data.email,
         phone_number: data.phone || "9999999999",
@@ -144,7 +143,7 @@ export default function Checkout() {
 
       // console.log("Creating Order:", orderPayload);
 
-      const response = await fetch(
+      const response = await apiFetch(
         `${CLIENT_API}/api/orders/create`,
         {
           method: "POST",

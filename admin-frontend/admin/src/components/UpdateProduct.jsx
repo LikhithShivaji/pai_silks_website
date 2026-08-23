@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
-import { ADMIN_API } from "@/config/api";
+import { ADMIN_API, apiFetch } from "@/config/api";
 
 const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProductDetails }) => {
   
@@ -137,7 +137,7 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
     try {
 
       // ✅ SINGLE CALL: PUT to /api/update-product with FormData
-      const res = await fetch(`${ADMIN_API}/api/update-product`, {
+      const res = await apiFetch(`${ADMIN_API}/api/update-product`, {
         method: "PUT",
         body: formData, // No "Content-Type" header allowed for FormData!
       });

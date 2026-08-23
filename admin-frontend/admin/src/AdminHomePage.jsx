@@ -11,7 +11,7 @@ import AddProduct from "./components/AddProduct";
 import DisplayOrderPage from "./components/DisplayOrderPage";
 import UpdateProduct from "./components/UpdateProduct";
 import { Menu, X, Trash, Bell } from "lucide-react";
-import { ADMIN_API, CLIENT_API } from "@/config/api";
+import { ADMIN_API, CLIENT_API, apiFetch } from "@/config/api";
 
 const AdminHomePage = () => {
   const notifications = 3;
@@ -32,6 +32,33 @@ const AdminHomePage = () => {
   const [updateProductDetails, setUpdateProductDetails] = useState(null);
   const containerRef = useRef(null);
   const [bestSellers, setBestSellers] = useState([]);
+
+  /**
+   * Log out.
+   *
+   * The button previously had no onClick at all — it was inert, and
+   * `admin_auth` persisted forever. On a shared machine the next person to open
+   * the browser was still "logged in". See CLAUDE.md AF-06.
+   *
+   * The server call is what actually matters: it flips the session row to
+   * LOGOUT and clears the httpOnly cookies, so the session is dead even if this
+   * tab never reloads. Clearing localStorage only tidies the UI hint.
+   */
+  const handleLogout = async () => {
+    try {
+      await apiFetch(`${ADMIN_API}/api/logout`, { method: "POST" });
+    } catch (err) {
+      // Even if the network call fails, still clear locally and send the user
+      // to the login page — leaving them on an authenticated-looking panel
+      // would be worse.
+      console.error("Logout request failed:", err);
+    } finally {
+      localStorage.removeItem("admin_auth");
+      localStorage.removeItem("admin_user");
+      localStorage.removeItem("admin_token"); // legacy key, never read
+      window.location.href = "/";
+    }
+  };
 
   const handleGoToDashBoardPage = () => {
     setCurrentView("dashboard");
@@ -64,7 +91,7 @@ const AdminHomePage = () => {
   // --- 1. NEW LOGIC: Fetch Categories from Database ---
   const fetchCategories = async () => {
     try {
-      const res = await fetch(`${ADMIN_API}/api/getcategory`);
+      const res = await apiFetch(`${ADMIN_API}/api/getcategory`);
       const data = await res.json();
       if (data.success) {
         setCategories(data.data || []);
@@ -81,7 +108,7 @@ const AdminHomePage = () => {
 
 
   useEffect(() => {
-    fetch(`${CLIENT_API}/api/bestsellers`)
+    apiFetch(`${CLIENT_API}/api/bestsellers`)
       .then(async (res) => {
         const data = await res.json();
 
@@ -109,7 +136,7 @@ const AdminHomePage = () => {
   }, []);
 
   useEffect(() => {
-    fetch(`${ADMIN_API}/api/get-order-detils`)
+    apiFetch(`${ADMIN_API}/api/get-order-detils`)
       .then((res) => res.json())
       .then((res) => {
         if (res.success) {
@@ -146,7 +173,7 @@ const AdminHomePage = () => {
 
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${ADMIN_API}/api/update-order-status`,
         {
           method: "PUT",
@@ -247,7 +274,7 @@ const AdminHomePage = () => {
     if (newCategory.trim() === "") return;
     
     try {
-      const res = await fetch(`${ADMIN_API}/api/addcategory`, {
+      const res = await apiFetch(`${ADMIN_API}/api/addcategory`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newCategory }),
@@ -277,7 +304,7 @@ const AdminHomePage = () => {
     if (!window.confirm("Are you sure you want to delete this category?")) return;
 
     try {
-      const res = await fetch(`${ADMIN_API}/api/categories/${id}`, {
+      const res = await apiFetch(`${ADMIN_API}/api/categories/${id}`, {
         method: "DELETE",
       });
 
@@ -458,7 +485,12 @@ const AdminHomePage = () => {
                     </span>
                     )}
                 </div>
-                <button className="bg-[]">Logout</button>
+                <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 rounded-md border border-[#68232B] text-[#68232B] font-medium hover:bg-[#68232B] hover:text-white transition cursor-pointer"
+                >
+                    Logout
+                </button>
             </div>
         </div>
         <div

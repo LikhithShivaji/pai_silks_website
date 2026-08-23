@@ -1,0 +1,41 @@
+-- Migration 002 — widen session.token for JWTs
+--
+-- Supports: CLAUDE.md AB-24 / CB-24 (Phase 2 Slice 1)
+--
+-- WHY
+-- session.token was VARCHAR(255), sized for the old sha256 hex digest (64
+-- chars). From Phase 2 it stores a signed JWT, which measures 224 characters
+-- with the current claims { user_id, role_id, session_id, iat, exp }.
+--
+-- That fits, but leaves only 31 characters of headroom. Adding one claim, or a
+-- longer session_id, would overflow — and the failure mode depends on the
+-- server's SQL mode:
+--
+--   strict mode  -> ERROR 1406 Data too long, login breaks loudly
+--   non-strict   -> the token is SILENTLY TRUNCATED and every subsequent
+--                   jwt.verify() fails, so users appear logged out at random
+--
+-- The second is far worse. 512 gives comfortable room without reaching for
+-- TEXT, which would be stored off-page and lose the option of indexing.
+--
+-- NOTE ON token_created_time
+-- The application reads `lastSession.token_created_time` in both
+-- *AuthManager.js files, but that column DOES NOT EXIST in this schema. The
+-- read yields undefined, `now - new Date(undefined)` is NaN, and the token-age
+-- comparison silently always fails. It is deliberately NOT added here: from
+-- Phase 2 the JWT carries its own `exp` claim, making a separate DB timestamp
+-- redundant. The code paths that read it are removed in Slices 4 and 5.
+--
+-- APPLY
+--   local:      mysql -u root -p db < migrations/002_session_token_widen.sql
+--   production: run in Hostinger phpMyAdmin against u863032788_db
+--
+-- SAFETY
+-- Widening a VARCHAR is non-destructive — no existing value can be too long
+-- for the larger type. Safe to run on a live table.
+--
+-- ROLLBACK (only if no JWT has been written yet)
+--   ALTER TABLE session MODIFY COLUMN token VARCHAR(255) NOT NULL;
+
+ALTER TABLE session
+  MODIFY COLUMN token VARCHAR(512) NOT NULL;

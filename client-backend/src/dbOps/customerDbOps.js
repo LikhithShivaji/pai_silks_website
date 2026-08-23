@@ -118,6 +118,64 @@ async getUserById(user_id) {
     }
   }
 
+  // --- Phase 2 auth ------------------------------------------------------
+
+  /**
+   * Fetch an ACTIVE, unexpired session by session_id, joined to its user.
+   * Returns null if the session is missing, logged out, expired, or the
+   * account has been soft-deleted (is_delete is checked by the caller).
+   *
+   * Called on every authenticated request — see CLAUDE.md CB-01.
+   */
+  async getActiveSessionById(session_id, activeStatus, maxAgeSeconds) {
+    try {
+      const [rows] = await pool.query(
+        sqlqueries.login.getActiveSessionById,
+        [session_id, activeStatus, maxAgeSeconds]
+      );
+      return rows[0] || null;
+    } catch (err) {
+      console.error("Error in getActiveSessionById:", err);
+      throw err;
+    }
+  }
+
+  /**
+   * All ACTIVE, unexpired sessions for a user, OLDEST FIRST.
+   * Used to enforce the 2-device cap at login.
+   */
+  async getActiveSessionsForUser(user_id, activeStatus, maxAgeSeconds) {
+    try {
+      const [rows] = await pool.query(
+        sqlqueries.login.getActiveSessionsForUser,
+        [user_id, activeStatus, maxAgeSeconds]
+      );
+      return rows;
+    } catch (err) {
+      console.error("Error in getActiveSessionsForUser:", err);
+      throw err;
+    }
+  }
+
+  /**
+   * Revoke a session by session_id. Scoped to user_id so one account can never
+   * terminate another's session.
+   *
+   * @returns {number} rows affected — 0 means nothing matched
+   */
+  async logoutSessionBySessionId(session_id, user_id, logoutStatus) {
+    try {
+      const [result] = await pool.query(
+        sqlqueries.login.logoutSessionBySessionId,
+        [logoutStatus, session_id, user_id]
+      );
+      return result.affectedRows;
+    } catch (err) {
+      console.error("Error in logoutSessionBySessionId:", err);
+      throw err;
+    }
+  }
+
 
   // get collections
   async getAllCollections() {

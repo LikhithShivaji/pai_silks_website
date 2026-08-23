@@ -64,6 +64,59 @@ class Cmds {
         }
     }
 
+    // --- Phase 2 auth --------------------------------------------------
+
+    /**
+     * Fetch an ACTIVE, unexpired session by session_id, joined to its user.
+     * Called on every authenticated request — see CLAUDE.md AB-01.
+     */
+    async getActiveSessionById(session_id, activeStatus, maxAgeSeconds) {
+        try {
+            const [rows] = await pool.query(
+                sqlqueries.login.getActiveSessionById,
+                [session_id, activeStatus, maxAgeSeconds]
+            );
+            return rows[0] || null;
+        } catch (err) {
+            console.error("Error in getActiveSessionById:", err);
+            throw err;
+        }
+    }
+
+    /**
+     * All ACTIVE, unexpired sessions for a user, OLDEST FIRST.
+     * Used to enforce the 2-device cap at login.
+     */
+    async getActiveSessionsForUser(user_id, activeStatus, maxAgeSeconds) {
+        try {
+            const [rows] = await pool.query(
+                sqlqueries.login.getActiveSessionsForUser,
+                [user_id, activeStatus, maxAgeSeconds]
+            );
+            return rows;
+        } catch (err) {
+            console.error("Error in getActiveSessionsForUser:", err);
+            throw err;
+        }
+    }
+
+    /**
+     * Revoke a session by session_id, scoped to its owner.
+     * @returns {number} rows affected — 0 means nothing matched
+     */
+    async logoutSessionBySessionId(session_id, user_id, logoutStatus) {
+        try {
+            const [result] = await pool.query(
+                sqlqueries.login.logoutSessionBySessionId,
+                [logoutStatus, session_id, user_id]
+            );
+            return result.affectedRows;
+        } catch (err) {
+            console.error("Error in logoutSessionBySessionId:", err);
+            throw err;
+        }
+    }
+
     async createProduct(productData) {
         try {
 

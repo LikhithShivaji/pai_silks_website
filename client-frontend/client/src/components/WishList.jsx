@@ -3,7 +3,7 @@ import WishListProductItem from "./WishListProductItem";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, Heart, ShoppingBag } from "lucide-react";
 import { CartContext } from "../CartContext"; // <--- IMPORT CONTEXT
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, apiFetch } from "@/config/api";
 
 const WishList = ({ onClose }) => {
   // Use Context instead of local props for single source of truth
@@ -38,13 +38,12 @@ const WishList = ({ onClose }) => {
     // B. API Call if User
     if (userId) {
       try {
-        await fetch(
+        await apiFetch(
           `${CLIENT_API}/api/wishlist/remove`,
           {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              user_id: userId,
               product_id: itemToRemove.id || itemToRemove.product_id,
             }),
           }
@@ -95,7 +94,7 @@ const WishList = ({ onClose }) => {
       try {
         await Promise.all(
           dynamicWishListItem.map((item) =>
-            fetch(
+            apiFetch(
               `${CLIENT_API}/api/wishlist/remove`,
               {
                 method: "DELETE",

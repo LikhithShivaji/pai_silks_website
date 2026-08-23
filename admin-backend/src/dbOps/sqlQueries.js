@@ -3,8 +3,55 @@ const sqlqueries = {
         getUserDetails: `SELECT * FROM master_user WHERE pri_email = ?`,
         getSessionDetails: `SELECT * FROM session WHERE pri_email = ? ORDER BY login_date_time DESC LIMIT 1`,
         createNewSession: `INSERT INTO session (session_id, user_id, pri_email, token, status) VALUES (?,?,?,?,?)`,
+        // NOTE: there is no `token_created_time` column in this database —
+        // adminAuthManager.js:29 reads it and always gets undefined, so
+        // `now - new Date(undefined)` is NaN and the token-age check silently
+        // never passes. AB-11 assumed the column existed but was NULL; it does
+        // not exist at all.
+        //
+        // Not adding it: from Phase 2 the JWT carries its own `exp` claim, so a
+        // separate DB timestamp is redundant. The renewal path that reads it is
+        // replaced in Slice 5. See CLAUDE.md AB-11.
         updateToken: `UPDATE session SET token = ? WHERE sid = ?`,
-        updateSessionStatus: `UPDATE session SET status = ?, logout_date_time = ? WHERE sid = ?`
+        updateSessionStatus: `UPDATE session SET status = ?, logout_date_time = ? WHERE sid = ?`,
+
+        // --- Phase 2 auth ---------------------------------------------------
+
+        // Called by authMiddleware on EVERY authenticated request. Joins the
+        // user so one query answers all of: is the session active, is it
+        // unexpired, is the account soft-deleted, and what is the real role.
+        //
+        // Expiry is enforced in SQL rather than JS so clock skew or a missed
+        // check cannot let a stale session through.
+        getActiveSessionById: `
+            SELECT s.sid, s.session_id, s.user_id, s.pri_email, s.status,
+                   s.login_date_time, u.role_id, u.is_delete
+            FROM session s
+            JOIN master_user u ON u.user_id = s.user_id
+            WHERE s.session_id = ?
+              AND s.status = ?
+              AND s.login_date_time > (NOW() - INTERVAL ? SECOND)
+            LIMIT 1
+        `,
+
+        // Active, unexpired sessions for a user, oldest first — used to enforce
+        // the 2-device cap. Oldest first so the head of the list is evicted.
+        getActiveSessionsForUser: `
+            SELECT sid, session_id, login_date_time
+            FROM session
+            WHERE user_id = ?
+              AND status = ?
+              AND login_date_time > (NOW() - INTERVAL ? SECOND)
+            ORDER BY login_date_time ASC
+        `,
+
+        // Revoke by session_id (logout). Scoped to the owning user so one
+        // account can never terminate another's session.
+        logoutSessionBySessionId: `
+            UPDATE session
+            SET status = ?, logout_date_time = NOW()
+            WHERE session_id = ? AND user_id = ?
+        `
     },
 
     product: {

@@ -5,7 +5,7 @@ import { User, Mail, Phone, Calendar as CalendarIcon, Save, Edit3, MapPinHouse, 
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import { CartContext } from "./CartContext";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, apiFetch } from "@/config/api";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // Shadcn Imports
@@ -52,7 +52,7 @@ const MyProfile = () => {
       }
 
       try {
-        const response = await fetch(`${API_BASE}/api/get-user-details/${userId}`);
+        const response = await apiFetch(`${API_BASE}/api/me`);
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -101,13 +101,12 @@ const MyProfile = () => {
     if (!userId) return;
 
     try {
-      const response = await fetch(`${API_BASE}/api/update-profile`, {
+      const response = await apiFetch(`${API_BASE}/api/update-profile`, {
         method: "PUT", // Usually update is PUT, but check your backend if it needs POST
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            user_id: userId, // Pass ID so backend knows who to update
             ...user
         }),
       });

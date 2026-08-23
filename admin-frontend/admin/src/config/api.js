@@ -14,3 +14,21 @@ export const ADMIN_API =
 // backend (bestsellers, collections). See CLAUDE.md AF-07.
 export const CLIENT_API =
   import.meta.env.VITE_CLIENT_API_BASE ?? "http://localhost:9034";
+
+/**
+ * fetch() that always sends cookies.
+ *
+ * Every call in this app used bare fetch(), which defaults to
+ * credentials:'same-origin'. Because the API is on a different origin, the
+ * browser DISCARDED the Set-Cookie headers at login and never sent a cookie
+ * afterwards — the entire session mechanism was inert. See CLAUDE.md AF-15.
+ *
+ * A wrapper rather than 13 hand-edited call sites: forgetting the option on one
+ * new call would silently log that request out, and nothing would fail loudly
+ * enough to notice. Safe by default is the point.
+ *
+ * Callers can still override anything, including credentials, since `options`
+ * is spread last.
+ */
+export const apiFetch = (url, options = {}) =>
+  fetch(url, { credentials: "include", ...options });

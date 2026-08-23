@@ -177,6 +177,21 @@ mysql -u root -p db < migrations/001_cart_unique_user_product.sql
 | Migration | Status | Note |
 |---|---|---|
 | `001_cart_unique_user_product.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live** — `addToCart` now relies on `ON DUPLICATE KEY UPDATE`, which needs this unique index. |
+| `002_session_token_widen.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live.** `session.token` was `VARCHAR(255)`; a JWT measures 243 characters. Without this, MySQL either errors on login or — in non-strict mode — silently truncates the token, which breaks verification and logs users out at random. |
+| `003_remove_shared_password_accounts.sql` | local ✅ · production ❌ | Deletes `customer1@gmail.com` and `abcd234@gmail.com`, which shared the **admin's** password hash. Safe to run at any point. Does **not** fix the admin password — see below. |
+
+### ⚠️ Also required at deploy: rotate the admin password
+
+Migration 003 removes the other two holders of the shared hash, but
+`admin123@gmail.com` still uses it. Rotate separately:
+
+```bash
+node scripts/set-password.js admin123@gmail.com
+```
+
+It prompts for a password (hidden — never in shell history) and prints an
+`UPDATE`. Run that statement against **both** local and Hostinger production.
+This is `SEC-02b` in `CLAUDE.md`.
 
 > Migration 001 will **fail** if production has accumulated duplicate
 > `(user_id, product_id)` cart rows — which is likely, since that is exactly the

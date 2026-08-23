@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
-import { ADMIN_API, CLIENT_API } from "@/config/api";
+import { ADMIN_API, CLIENT_API, apiFetch } from "@/config/api";
 
 import {
   Select,
@@ -59,7 +59,7 @@ const AddProduct = ({
   }, [loadingCollections]);
 
   useEffect(() => {
-    fetch(`${CLIENT_API}/api/collections`)
+    apiFetch(`${CLIENT_API}/api/collections`)
       .then((res) => res.json())
       .then((data) => data.success && setCollections(data.data))
       .finally(() => setLoadingCollections(false));
@@ -108,7 +108,7 @@ const AddProduct = ({
     };
 
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `${ADMIN_API}/api/create-product`,
         {
           method: "POST",
@@ -144,7 +144,7 @@ const AddProduct = ({
           formData.append("images", file);
         });
 
-        const imgRes = await fetch(
+        const imgRes = await apiFetch(
           `${ADMIN_API}/api/insert-image`,
           {
             method: "POST",

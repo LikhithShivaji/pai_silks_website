@@ -1,0 +1,52 @@
+-- Migration 003 — remove the two test accounts that share the admin's password
+--
+-- Fixes: CLAUDE.md DB-08
+--
+-- WHY
+-- Three accounts shared one identical bcrypt hash:
+--
+--   user_id 1  admin123@gmail.com    role_id 0   <-- THE ADMIN
+--   user_id 2  customer1@gmail.com   role_id 1
+--   user_id 3  abcd234@gmail.com     role_id 1
+--
+-- The plan recorded this as "a seeded/shared password". It is worse than that:
+-- the ADMIN account has the same password as two customer test accounts, so
+-- anyone ever given the customer1 login already holds admin access.
+--
+-- Rows 2 and 3 are leftovers. Verified before deletion — neither has any
+-- orders, cart rows or wishlist rows:
+--
+--   user_id 2: 0 orders, 0 cart, 0 wishlist, 6 stale session rows
+--   user_id 3: 0 orders, 0 cart, 0 wishlist, 0 sessions
+--
+-- They are also the ONLY two accounts with role_id = 1, an undocumented legacy
+-- role. Signup hardcodes role_id 2, so after this migration role 1 is unused
+-- and the roles are cleanly 0 = admin, 2 = customer.
+--
+-- Authorised by the repository owner on 2026-08-24: all data is dummy and the
+-- site is not yet open to the public.
+--
+-- Sessions are deleted first. There are no foreign keys in this schema
+-- (DB-01), so nothing cascades — orphan session rows would otherwise be left
+-- pointing at user_ids that no longer exist.
+--
+-- ⚠️  THIS DOES NOT FIX THE ADMIN PASSWORD.
+-- Deleting rows 2 and 3 removes the other holders of that hash, but the admin
+-- account still uses it. Rotate it separately — that is SEC-02b:
+--
+--     node scripts/set-password.js admin123@gmail.com
+--
+-- then run the UPDATE it prints against BOTH local and production.
+--
+-- APPLY
+--   local:      mysql -u root -p db < migrations/003_remove_shared_password_accounts.sql
+--   production: run in Hostinger phpMyAdmin against u863032788_db
+--
+-- ROLLBACK
+--   None. Deleted rows are not recoverable from this file. Take a dump first
+--   if you want a way back.
+
+DELETE FROM session     WHERE user_id IN (2, 3);
+DELETE FROM cart        WHERE user_id IN (2, 3);
+DELETE FROM wishlist    WHERE user_id IN (2, 3);
+DELETE FROM master_user WHERE user_id IN (2, 3);

@@ -2,61 +2,108 @@ const express = require('express');
 const router = express.Router();
 const customerController = require('../controllers/customerController');
 const { loginLimiter, signupLimiter } = require('../middlewares/rateLimiters');
+const authMiddleware = require('../middlewares/authMiddleware');
 
+/**
+ * ROUTE ORDERING — read before adding anything.
+ *
+ * `GET /:productId` is a catch-all for any SINGLE path segment. Express matches
+ * in registration order, so every single-segment GET must be declared ABOVE it.
+ * Declaring one below makes it silently unreachable — that already happened
+ * once with /verify-token, which returned "Product not found". See CB-39.
+ *
+ * AUTHENTICATION
+ * Routes below are split into PUBLIC and PROTECTED. Protected routes carry
+ * `authMiddleware`, which attaches req.user from the verified session.
+ *
+ * Handlers on protected routes MUST take the user's identity from req.user and
+ * never from the body, params or query. Previously every one of these accepted
+ * a client-supplied user_id, so anyone could read or modify any customer's
+ * cart, wishlist, orders and profile by changing a number. IDs are sequential,
+ * so all 25 customers could be scraped in 25 requests. See CB-02.
+ *
+ * That is also why the own-resource routes no longer take a :user_id segment —
+ * removing the parameter makes the vulnerability unexpressible rather than
+ * merely guarded.
+ */
 
-// Customer signup — 10 requests per IP per 15 min, limits bulk account
-// creation. See CLAUDE.md CB-11.
+// ===========================================================================
+// PUBLIC — no session required
+// ===========================================================================
+
+// Signup — 10 requests per IP per 15 min, limits bulk account creation (CB-11).
 router.post('/signup', signupLimiter, customerController.customerSignup);
 
-
-// Customer login — 10 FAILED attempts per IP per 15 min. Successful logins are
-// not counted, so normal use never locks anyone out. Also mitigates the bcrypt
-// CPU-exhaustion DoS on the single Node thread. See CLAUDE.md CB-11.
+// Login — 10 FAILED attempts per IP per 15 min. Successful logins are not
+// counted, so normal use never locks anyone out. Also mitigates the bcrypt
+// CPU-exhaustion DoS on the single Node thread (CB-11).
 router.post('/customer-login', loginLimiter, customerController.customerLogin);
 
-// router.js
-router.get('/get-user-details/:user_id', customerController.getUserDetails);
-
-
-// To get the collection
+// Catalogue — genuinely public, no session needed.
 router.get('/collections', customerController.getAllCollections);
-
-//To get bestseller collections
 router.get('/bestsellers', customerController.getBestSellers);
-
-//To get the categories
 router.get('/categories', customerController.getAllCategories);
 
-//To get productbyID
+// ===========================================================================
+// PROTECTED — single-segment, MUST stay above /:productId
+// ===========================================================================
+
+router.post('/logout', authMiddleware, customerController.logout);
+router.get('/verify-token', authMiddleware, customerController.verifyToken);
+
+// Replaces GET /get-user-details/:user_id. The caller can only ever read their
+// own profile now — there is no parameter to tamper with.
+router.get('/me', authMiddleware, customerController.getUserDetails);
+
+// SINGLE-segment, so it must live above the catch-all. Its multi-segment
+// siblings (/wishlist/add, /wishlist/count, ...) are declared further down and
+// are unaffected — but this one is not. It returned "Product not found" until
+// it was moved here. CB-39, twice in one phase.
+router.get('/wishlist', authMiddleware, customerController.getWishlist);
+
+// ===========================================================================
+// ⚠️  CATCH-ALL — nothing single-segment may be declared below this line
+// ===========================================================================
 router.get('/:productId', customerController.getProductById);
 
-router.get('/products/new-releases', customerController.getNewReleaseProducts);
+// ===========================================================================
+// PUBLIC — multi-segment (unaffected by the catch-all)
+// ===========================================================================
 
-// get products by category
+router.get('/products/new-releases', customerController.getNewReleaseProducts);
 router.get('/products/:category', customerController.getProductsByCategory);
 
+// ===========================================================================
+// PROTECTED — multi-segment
+// ===========================================================================
 
+// Wishlist. :user_id segments removed — the owner comes from the session.
+router.get('/wishlist/check-test', authMiddleware, customerController.checkWishlist);
+router.get('/wishlist/count', authMiddleware, customerController.wishlistCount);
+router.post('/wishlist/add', authMiddleware, customerController.addToWishlist);
+router.delete('/wishlist/remove', authMiddleware, customerController.removeWishlist);
+router.post('/wishlist/move-to-cart', authMiddleware, customerController.moveWishlistToCart);
+// NOTE: GET /wishlist itself is declared ABOVE the catch-all, not here.
 
-// add product to wishlistt and get roduct in the wish list and remove product from wish list
-router.get('/wishlist/check-test', customerController.checkWishlist);
-router.post('/wishlist/add', customerController.addToWishlist);
-router.get('/wishlist/:user_id', customerController.getWishlist);
-router.delete('/wishlist/remove', customerController.removeWishlist);
-router.get('/wishlist/count/:user_id', customerController.wishlistCount);
-router.post("/wishlist/move-to-cart", customerController.moveWishlistToCart);
+// Cart. The ?user_id= query parameter is gone for the same reason.
+router.get('/cart/cart-data', authMiddleware, customerController.getCart);
+router.post('/cart/update', authMiddleware, customerController.updateCartQuantity);
+router.delete('/cart/remove', authMiddleware, customerController.removeFromCart);
+router.post('/cart/add', authMiddleware, customerController.addToCart);
 
+// Orders.
+router.post('/orders/create', authMiddleware, customerController.createOrder);
+router.get('/orders/mine', authMiddleware, customerController.getOrdersByUser);
 
-router.get("/cart/cart-data", customerController.getCart);
-router.post("/cart/update", customerController.updateCartQuantity);
-router.delete("/cart/remove", customerController.removeFromCart);
-router.post("/cart/add", customerController.addToCart);
+// :order_id has to stay — you are addressing a specific order — so the handler
+// verifies the order actually belongs to req.user before returning it.
+router.get('/order/:order_id', authMiddleware, customerController.getOrderById);
 
-// ORDER APIs
-router.post('/orders/create', customerController.createOrder);
-router.get('/order/:order_id', customerController.getOrderById);
-router.get('/orders/user/:user_id', customerController.getOrdersByUser);
-router.post('/order/add-item', customerController.addOrderItem);
-
-
+// REMOVED: POST /order/add-item
+// It accepted { order_id, product_id, quantity, price } and inserted them
+// verbatim — no ownership check, no product lookup, no stock reduction, and
+// orders.total_amount was never recalculated. Anyone could attach any product
+// to any order at any price. Order items are only ever created inside
+// createOrder, which prices them from the product table. See CB-04.
 
 module.exports = router;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { CLIENT_API } from "@/config/api";
+import { CLIENT_API, apiFetch } from "@/config/api";
 
 import frame from "../assets/heroframe.svg";
 import bgImage from "../assets/backgroundimagenew.jpg";
@@ -66,7 +66,7 @@ function ViewProductPage() {
     window.scrollTo(0, 0);
     setLoading(true);
 
-    fetch(`${CLIENT_API}/api/${productId}`)
+    apiFetch(`${CLIENT_API}/api/${productId}`)
       .then((res) => res.json())
       .then((res) => {
         if (res.success) {
@@ -102,7 +102,7 @@ function ViewProductPage() {
   useEffect(() => {
     if (!product?.category) return;
 
-    fetch(
+    apiFetch(
       `${CLIENT_API}/api/products/${product.category}`
     )
       .then((res) => res.json())
