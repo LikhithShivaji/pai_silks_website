@@ -3,6 +3,7 @@ const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const customerRoutes = require('./routes/customerRoutes');
 const cors = require('cors');
+const { sanitizeError } = require('./utils/safeError');
 // Loaded explicitly. This previously happened only as a side effect of
 // requiring config/db.js — so a change in require order would have silently
 // dropped every environment variable. See CLAUDE.md CB-37.
@@ -95,7 +96,7 @@ app.use((req, res) => {
 //
 // The stack is logged server-side and never sent to the client.
 app.use((err, req, res, next) => {
-  console.error(`[error] ${req.method} ${req.originalUrl}`, err);
+  console.error(`[error] ${req.method} ${req.originalUrl}`, sanitizeError(err));
 
   if (res.headersSent) return next(err);
 

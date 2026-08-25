@@ -1,5 +1,6 @@
 const dbCmds = require('../../dbOps/adminDbOps');
 const cloudinary = require('../../config/cloudinary');
+const { sanitizeError } = require('../../utils/safeError');
 
 
 
@@ -172,7 +173,7 @@ const getAllCategories = async () => {
     // Return the result to the controller
     return categories; 
   } catch (err) {
-    console.error("Error in productManager.getAllCategories:", err);
+    console.error("Error in productManager.getAllCategories:", sanitizeError(err));
     throw err;
   }
 };

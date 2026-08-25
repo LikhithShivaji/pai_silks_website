@@ -6,6 +6,7 @@ const CookiesKey = require('../constants/cookieKeys');
 const productManager = require('../components/productManager/productManager')
 const customerSignupManager = require('../components/customerLoginManager/customerSignupManager');
 const bcrypt = require('bcrypt');
+const { sanitizeError } = require('../utils/safeError');
 
 exports.customerSignup = async (req, res) => {
   try {
@@ -55,7 +56,7 @@ exports.customerSignup = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error in customerSignup:', error);
+    console.error('Error in customerSignup:', sanitizeError(error));
 
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({
@@ -182,7 +183,7 @@ exports.getUserDetails = async (req, res) => {
     });
 
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -197,10 +198,10 @@ exports.getAllCollections = async (req, res) => {
       message: "Collections fetched successfully",
     });
   } catch (error) {
-    console.error("Error in getAllCollections Controller:", error);
+    console.error("Error in getAllCollections Controller:", sanitizeError(error));
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch collections",
+      message: 'Something went wrong. Please try again.' || "Failed to fetch collections",
     });
   }
 };
@@ -216,10 +217,10 @@ exports.getBestSellers = async (req, res) => {
       message: 'Bestsellers fetched successfully',
     });
   } catch (error) {
-    console.error('Error in getBestSellers Controller:', error);
+    console.error('Error in getBestSellers Controller:', sanitizeError(error));
     return res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch bestsellers',
+      message: 'Something went wrong. Please try again.' || 'Failed to fetch bestsellers',
     });
   }
 };
@@ -235,10 +236,10 @@ exports.getAllCategories = async (req, res) => {
       message: "Categories fetched successfully",
     });
   } catch (error) {
-    console.error("Error in getAllCategories Controller:", error);
+    console.error("Error in getAllCategories Controller:", sanitizeError(error));
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch categories",
+      message: 'Something went wrong. Please try again.' || "Failed to fetch categories",
     });
   }
 };
@@ -265,10 +266,10 @@ exports.getProductById = async (req, res) => {
       message: 'Product fetched successfully',
     });
   } catch (error) {
-    console.error('Error in getProductById Controller:', error);
+    console.error('Error in getProductById Controller:', sanitizeError(error));
     return res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch product',
+      message: 'Something went wrong. Please try again.' || 'Failed to fetch product',
     });
   }
 };
@@ -294,10 +295,10 @@ exports.getProductsByCategory = async (req, res) => {
       message: "Products fetched successfully"
     });
   } catch (error) {
-    console.error("Error in getProductsByCategory Controller:", error);
+    console.error("Error in getProductsByCategory Controller:", sanitizeError(error));
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch products"
+      message: 'Something went wrong. Please try again.' || "Failed to fetch products"
     });
   }
 };
@@ -315,10 +316,10 @@ exports.getNewReleaseProducts = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in getNewReleaseProducts Controller:", error);
+    console.error("Error in getNewReleaseProducts Controller:", sanitizeError(error));
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch new release products"
+      message: 'Something went wrong. Please try again.' || "Failed to fetch new release products"
     });
   }
 };
@@ -353,7 +354,7 @@ exports.addToWishlist = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in addToWishlist controller:", error);
+    console.error("Error in addToWishlist controller:", sanitizeError(error));
     return res.status(500).json({
       success: false,
       message: "Failed to add product to wishlist",
@@ -410,7 +411,7 @@ exports.removeWishlist = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in removeWishlist controller:", error);
+    console.error("Error in removeWishlist controller:", sanitizeError(error));
     return res.status(500).json({
       success: false,
       message: "Failed to remove from wishlist",
@@ -441,8 +442,8 @@ exports.checkWishlist = async (req, res) => {
       data: result
     });
   } catch (err) {
-    console.error("Error in checkWishlist:", err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error("Error in checkWishlist:", sanitizeError(err));
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -463,8 +464,8 @@ exports.wishlistCount = async (req, res) => {
       count: result.count,
     });
   } catch (err) {
-    console.error("Error in wishlistCount:", err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error("Error in wishlistCount:", sanitizeError(err));
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -491,7 +492,7 @@ exports.moveWishlistToCart = async (req, res) => {
       data: result
     });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -511,7 +512,7 @@ exports.getCart = async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: 'Something went wrong. Please try again.'
     });
   }
 };
@@ -527,7 +528,7 @@ exports.updateCartQuantity = async (req, res) => {
     const result = await productManager.updateCartQuantity(user_id, product_id, quantity);
     res.status(200).json(result);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -540,7 +541,7 @@ exports.removeFromCart = async (req, res) => {
     const result = await productManager.removeFromCart(user_id, product_id);
     res.status(200).json(result);
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -568,10 +569,10 @@ exports.addToCart = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error in addToCart controller:", err);
+    console.error("Error in addToCart controller:", sanitizeError(err));
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: 'Something went wrong. Please try again.'
     });
   }
 };
@@ -659,8 +660,8 @@ exports.createOrder = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error in createOrder:", err);
-    return res.status(500).json({ success: false, message: err.message });
+    console.error("Error in createOrder:", sanitizeError(err));
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -706,8 +707,8 @@ exports.getOrderById = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in getOrderById:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("Error in getOrderById:", sanitizeError(error));
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -738,10 +739,10 @@ exports.getOrdersByUser = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error in getOrdersByUser:", err);
+    console.error("Error in getOrdersByUser:", sanitizeError(err));
     return res.status(500).json({
       success: false,
-      message: err.message
+      message: 'Something went wrong. Please try again.'
     });
   }
 };

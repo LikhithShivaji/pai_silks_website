@@ -2,6 +2,7 @@
 const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 const sqlqueries = require('../dbOps/sqlQueries');
+const { sanitizeError } = require('../utils/safeError');
 
 class CustomerCmds {
 
@@ -36,7 +37,7 @@ async insertCustomerUser(userData) {
     };
 
   } catch (err) {
-    console.error("Error in insertCustomerUser:", err);
+    console.error("Error in insertCustomerUser:", sanitizeError(err));
     throw err;
   }
 }
@@ -53,7 +54,7 @@ async insertCustomerUser(userData) {
 
       return match ? user : null;
     } catch (err) {
-      console.error("Error in verifyCustomerPasswd:", err);
+      console.error("Error in verifyCustomerPasswd:", sanitizeError(err));
       throw err;
     }
   }
@@ -64,7 +65,7 @@ async insertCustomerUser(userData) {
       const [rows] = await pool.query(sqlqueries.login.getSessionDetails, [pri_email]);
       return rows[0] || null;
     } catch (err) {
-      console.error("Error in getCustomerLastSessionByEmail:", err);
+      console.error("Error in getCustomerLastSessionByEmail:", sanitizeError(err));
       throw err;
     }
   }
@@ -78,7 +79,7 @@ async insertCustomerUser(userData) {
       );
       return result.insertId || null;
     } catch (err) {
-      console.error("Error in insertNewCustomerSession:", err);
+      console.error("Error in insertNewCustomerSession:", sanitizeError(err));
       throw err;
     }
   }
@@ -93,7 +94,7 @@ async getUserById(user_id) {
     );
     return rows.length > 0 ? rows[0] : null;
   } catch (err) {
-    console.error("Error in getUserById dbCmd:", err);
+    console.error("Error in getUserById dbCmd:", sanitizeError(err));
     throw err;
   }
 }
@@ -103,7 +104,7 @@ async getUserById(user_id) {
     try {
       await pool.query(sqlqueries.login.updateToken, [token, sid]);
     } catch (err) {
-      console.error("Error in updateCustomerToken:", err);
+      console.error("Error in updateCustomerToken:", sanitizeError(err));
       throw err;
     }
   }
@@ -113,7 +114,7 @@ async getUserById(user_id) {
     try {
       await pool.query(sqlqueries.login.updateSessionStatus, [status, logoutTime, sid]);
     } catch (err) {
-      console.error("Error in updateCustomerSessionStatus:", err);
+      console.error("Error in updateCustomerSessionStatus:", sanitizeError(err));
       throw err;
     }
   }
@@ -135,7 +136,7 @@ async getUserById(user_id) {
       );
       return rows[0] || null;
     } catch (err) {
-      console.error("Error in getActiveSessionById:", err);
+      console.error("Error in getActiveSessionById:", sanitizeError(err));
       throw err;
     }
   }
@@ -152,7 +153,7 @@ async getUserById(user_id) {
       );
       return rows;
     } catch (err) {
-      console.error("Error in getActiveSessionsForUser:", err);
+      console.error("Error in getActiveSessionsForUser:", sanitizeError(err));
       throw err;
     }
   }
@@ -171,7 +172,7 @@ async getUserById(user_id) {
       );
       return result.affectedRows;
     } catch (err) {
-      console.error("Error in logoutSessionBySessionId:", err);
+      console.error("Error in logoutSessionBySessionId:", sanitizeError(err));
       throw err;
     }
   }
@@ -183,7 +184,7 @@ async getUserById(user_id) {
       const [rows] = await pool.query(sqlqueries.product.getAllCollections);
       return rows;
     } catch (err) {
-      console.error("Error in getAllCollections:", err);
+      console.error("Error in getAllCollections:", sanitizeError(err));
       throw err;
     }
   }
@@ -194,7 +195,7 @@ async getUserById(user_id) {
       const [rows] = await pool.query(sqlqueries.product.getBestSellers, [limit]);
       return rows;
     } catch (err) {
-      console.error("Error in getBestSellers:", err);
+      console.error("Error in getBestSellers:", sanitizeError(err));
       throw err;
     }
   }
@@ -206,7 +207,7 @@ async getAllCategories() {
     const [rows] = await pool.query(sqlqueries.product.getAllCategories);
     return rows;
   } catch (err) {
-    console.error("Error in getAllCategories:", err);
+    console.error("Error in getAllCategories:", sanitizeError(err));
     throw err;
   }
 }
@@ -228,7 +229,7 @@ async getProductByIdWithImages(productId) {
 
     return product;
   } catch (err) {
-    console.error("Error in getProductByIdWithImages:", err);
+    console.error("Error in getProductByIdWithImages:", sanitizeError(err));
     throw err;
   }
 }
@@ -239,7 +240,7 @@ async getProductsByCategory(category) {
     const [rows] = await pool.query(sqlqueries.product.getProductsByCategory, [category]);
     return rows;
   } catch (err) {
-    console.error("Error in getProductsByCategory:", err);
+    console.error("Error in getProductsByCategory:", sanitizeError(err));
     throw err;
   }
 }
@@ -253,7 +254,7 @@ async checkWishlist(user_id, product_id) {
     ]);
     return rows;
   } catch (err) {
-    console.error("Error in checkWishlist:", err);
+    console.error("Error in checkWishlist:", sanitizeError(err));
     throw err;
   }
 }
@@ -266,7 +267,7 @@ async getNewReleaseProducts() {
     );
     return rows;
   } catch (err) {
-    console.error("Error in getNewReleaseProducts:", err);
+    console.error("Error in getNewReleaseProducts:", sanitizeError(err));
     throw err;
   }
 }
@@ -280,7 +281,7 @@ async addToWishlist(user_id, product_id) {
     ]);
     return rows;
   } catch (err) {
-    console.error("Error in addToWishlist:", err);
+    console.error("Error in addToWishlist:", sanitizeError(err));
     throw err;
   }
 }
@@ -299,7 +300,7 @@ async getWishlist(user_id) {
 
     return wishlistWithImages;
   } catch (err) {
-    console.error("Error in getWishlist:", err);
+    console.error("Error in getWishlist:", sanitizeError(err));
     throw err;
   }
 }
@@ -313,7 +314,7 @@ async removeWishlist(user_id, product_id) {
     ]);
     return rows;
   } catch (err) {
-    console.error("Error in removeWishlist:", err);
+    console.error("Error in removeWishlist:", sanitizeError(err));
     throw err;
   }
 }
@@ -328,7 +329,7 @@ async wishlistCount(user_id) {
       ]);
       return rows[0];
     } catch (err) {
-      console.error("Error in wishlistCount:", err);
+      console.error("Error in wishlistCount:", sanitizeError(err));
       throw err;
     }
   }
@@ -346,7 +347,7 @@ async getCart(user_id) {
 
     return cartWithImages;
   } catch (err) {
-    console.error("Error in getCart:", err);
+    console.error("Error in getCart:", sanitizeError(err));
     throw err;
   }
 }
@@ -360,7 +361,7 @@ async checkCart(user_id, product_id) {
       ]);
       return rows;
     } catch (err) {
-      console.error("Error in checkCart:", err);
+      console.error("Error in checkCart:", sanitizeError(err));
       throw err;
     }
 
@@ -376,7 +377,7 @@ async checkCart(user_id, product_id) {
         message: "Product added to cart",
       };
     } catch (err) {
-      console.error("Error in addToCart:", err);
+      console.error("Error in addToCart:", sanitizeError(err));
       throw err;
     }
   }
@@ -396,7 +397,7 @@ async checkCart(user_id, product_id) {
         ? { success: false, message: "Cart item not found" }
         : { success: true, message: "Quantity updated successfully" };
     } catch (err) {
-      console.error("Error in updateCartQuantity:", err);
+      console.error("Error in updateCartQuantity:", sanitizeError(err));
       throw err;
     }
   }
@@ -412,7 +413,7 @@ async checkCart(user_id, product_id) {
         ? { success: false, message: "Cart item not found" }
         : { success: true, message: "Cart item removed successfully" };
     } catch (err) {
-      console.error("Error in removeFromCart:", err);
+      console.error("Error in removeFromCart:", sanitizeError(err));
       throw err;
     }
   }
@@ -484,7 +485,7 @@ async getOrderById(order_id) {
     const [rows] = await pool.query(sqlqueries.order.getOrderById, [order_id]);
     return rows.length ? rows[0] : null;
   } catch (err) {
-    console.error("Error in getOrderById:", err);
+    console.error("Error in getOrderById:", sanitizeError(err));
     throw err;
   }
 }
@@ -495,7 +496,7 @@ async getOrderItems(order_id) {
     const [rows] = await pool.query(sqlqueries.order.getOrderItems, [order_id]);
     return rows;
   } catch (err) {
-    console.error("Error in getOrderItems:", err);
+    console.error("Error in getOrderItems:", sanitizeError(err));
     throw err;
   }
 }
@@ -508,7 +509,7 @@ async getOrdersByUser(user_id) {
       );
       return rows;
     } catch (err) {
-      console.error("Error in getOrdersByUser:", err);
+      console.error("Error in getOrdersByUser:", sanitizeError(err));
       throw err;
     }
   }

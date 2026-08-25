@@ -1,12 +1,13 @@
 // components/productManager/productManager.js
 const dbCmds = require('../../dbOps/customerDbOps');
+const { sanitizeError } = require('../../utils/safeError');
 
 const getAllCollections = async () => {
   try {
     const collections = await dbCmds.getAllCollections();
     return collections;
   } catch (err) {
-    console.error("Error in getAllCollections:", err);
+    console.error("Error in getAllCollections:", sanitizeError(err));
     throw err;
   }
 };
@@ -17,7 +18,7 @@ const getBestSellers = async () => {
     const bestSellers = await dbCmds.getBestSellers();
     return bestSellers;
   } catch (err) {
-    console.error("Error in getBestSellers:", err);
+    console.error("Error in getBestSellers:", sanitizeError(err));
     throw err;
   }
 };
@@ -30,7 +31,7 @@ const getAllCategories = async () => {
     // 2. Return the stored result
     return categories; 
   } catch (err) { // Use 'err' or 'error' for consistency, here 'err' matches the example
-    console.error("Error in productManager.getAllCategories:", err);
+    console.error("Error in productManager.getAllCategories:", sanitizeError(err));
     throw err;
   }
 };
@@ -42,7 +43,7 @@ const getProductById = async (productId) => {
     const product = await dbCmds.getProductByIdWithImages(productId);
     return product; 
   } catch (err) {
-    console.error("Error in productManager.getProductById:", err);
+    console.error("Error in productManager.getProductById:", sanitizeError(err));
     throw err;
   }
 };
@@ -84,7 +85,7 @@ const getProductsByCategory = async (category) => {
 
     return Object.values(productsMap);
   } catch (err) {
-    console.error("Error in getProductsByCategory:", err);
+    console.error("Error in getProductsByCategory:", sanitizeError(err));
     throw err;
   }
 };
@@ -94,7 +95,7 @@ const getNewReleaseProducts = async () => {
   try {
     return await dbCmds.getNewReleaseProducts();
   } catch (err) {
-    console.error("Error in getNewReleaseProducts:", err);
+    console.error("Error in getNewReleaseProducts:", sanitizeError(err));
     throw err;
   }
 };
@@ -107,7 +108,7 @@ const logoutSession = async (session_id, user_id, logoutStatus) => {
   try {
     return await dbCmds.logoutSessionBySessionId(session_id, user_id, logoutStatus);
   } catch (err) {
-    console.error("Error in logoutSession:", err);
+    console.error("Error in logoutSession:", sanitizeError(err));
     throw err;
   }
 };
@@ -125,7 +126,7 @@ const addToWishlist = async (user_id, product_id) => {
 
     return { already: false };
   } catch (err) {
-    console.error("Error in addToWishlist:", err);
+    console.error("Error in addToWishlist:", sanitizeError(err));
     throw err;
   }
 };
@@ -135,7 +136,7 @@ const getWishlist = async (user_id) => {
   try {
     return await dbCmds.getWishlist(user_id);
   } catch (err) {
-    console.error("Error in getWishlist:", err);
+    console.error("Error in getWishlist:", sanitizeError(err));
     throw err;
   }
 };
@@ -146,7 +147,7 @@ const removeWishlist = async (user_id, product_id) => {
     await dbCmds.removeWishlist(user_id, product_id);
     return true;
   } catch (err) {
-    console.error("Error in removeWishlist:", err);
+    console.error("Error in removeWishlist:", sanitizeError(err));
     throw err;
   }
 };
@@ -156,7 +157,7 @@ const checkWishlist = async (user_id, product_id) => {
   try {
     return await dbCmds.checkWishlist(user_id, product_id);
   } catch (err) {
-    console.error("Error in checkWishlist:", err);
+    console.error("Error in checkWishlist:", sanitizeError(err));
     throw err;
   }
 };
@@ -167,7 +168,7 @@ const wishlistCount = async (user_id) => {
     const result = await dbCmds.wishlistCount(user_id);
     return result;
   } catch (err) {
-    console.error("Error in wishlistCount:", err);
+    console.error("Error in wishlistCount:", sanitizeError(err));
     throw err;
   }
 };
@@ -196,7 +197,7 @@ const moveWishlistToCart = async (user_id, product_id) => {
 
     return true;
   } catch (err) {
-    console.error("Error in moveWishlistToCart:", err);
+    console.error("Error in moveWishlistToCart:", sanitizeError(err));
     throw err;
   }
 };
@@ -212,7 +213,7 @@ const getCart = async (user_id) => {
       image_url: item.image_url || 'https://via.placeholder.com/200x200?text=No+Image'
     }));
     } catch (err) {
-    console.error("Error in getCart:", err);
+    console.error("Error in getCart:", sanitizeError(err));
     throw err;
   }
 };
@@ -222,7 +223,7 @@ const updateCartQuantity = async (user_id, product_id, quantity) => {
     const result = await dbCmds.updateCartQuantity(user_id, product_id, quantity);
     return result;
   } catch (err) {
-    console.error("Error in updateCartQuantity:", err);
+    console.error("Error in updateCartQuantity:", sanitizeError(err));
     throw err;
   }
 };
@@ -233,7 +234,7 @@ const removeFromCart = async (user_id, product_id) => {
     const result = await dbCmds.removeFromCart(user_id, product_id);
     return result;
   } catch (err) {
-    console.error("Error in removeFromCart:", err);
+    console.error("Error in removeFromCart:", sanitizeError(err));
     throw err;
   }
 };
@@ -244,7 +245,7 @@ const addToCart = async (user_id, product_id) => {
     const result = await dbCmds.addToCart(user_id, product_id);
     return result; // { success: true, message: "Product added to cart" }
   } catch (err) {
-    console.error("Error in addToCart:", err);
+    console.error("Error in addToCart:", sanitizeError(err));
     throw err;
   }
 };
@@ -263,7 +264,7 @@ const createOrder = async (user_id, total_amount, shipping_address, payment_meth
     );
     return order_id;
   } catch (err) {
-    console.error("Error in createOrder:", err);
+    console.error("Error in createOrder:", sanitizeError(err));
     throw err;
   }
 };
@@ -273,7 +274,7 @@ const addOrderItem = async (order_id, product_id, quantity, price) => {
   try {
     return await dbCmds.addOrderItem(order_id, product_id, quantity, price);
   } catch (err) {
-    console.error("Error in addOrderItem:", err);
+    console.error("Error in addOrderItem:", sanitizeError(err));
     throw err;
   }
 };
@@ -283,7 +284,7 @@ const reduceStock = async (product_id, quantity) => {
   try {
     return await dbCmds.reduceStock(product_id, quantity);
   } catch (err) {
-    console.error("Error in reduceStock:", err);
+    console.error("Error in reduceStock:", sanitizeError(err));
     throw err;
   }
 };
@@ -293,7 +294,7 @@ const clearCart = async (user_id) => {
   try {
     return await dbCmds.clearCart(user_id);
   } catch (err) {
-    console.error("Error in clearCart:", err);
+    console.error("Error in clearCart:", sanitizeError(err));
     throw err;
   }
 };
@@ -307,7 +308,7 @@ const getOrderById = async (order_id) => {
   try {
     return await dbCmds.getOrderById(order_id);
   } catch (err) {
-    console.error("Error in getOrderById:", err);
+    console.error("Error in getOrderById:", sanitizeError(err));
     throw err;
   }
 };
@@ -316,7 +317,7 @@ const getOrderItems = async (order_id) => {
   try {
     return await dbCmds.getOrderItems(order_id);
   } catch (err) {
-    console.error("Error in getOrderItems:", err);
+    console.error("Error in getOrderItems:", sanitizeError(err));
     throw err;
   }
 };
@@ -325,7 +326,7 @@ const getOrdersByUser = async (user_id) => {
     try {
       return await dbCmds.getOrdersByUser(user_id);
     } catch (err) {
-      console.error("Error in getOrdersByUser:", err);
+      console.error("Error in getOrdersByUser:", sanitizeError(err));
       throw err;
     }
   }

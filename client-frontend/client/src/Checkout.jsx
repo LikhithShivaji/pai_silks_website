@@ -2,6 +2,13 @@ import React, { useContext, useEffect, useState } from "react";
 import { CartContext } from "@/CartContext.jsx";
 import CheckOutItem from "@/components/CheckOutItem.jsx";
 import { CLIENT_API, SHIPPING_FEE, apiFetch } from "@/config/api";
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  validateNationalNumber,
+  toE164,
+  fromE164,
+} from "@/config/phone";
 import logo from "@/assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 
@@ -25,17 +32,47 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const checkoutSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email("Enter a valid email address"),
   firstName: z.string().min(1, "First Name is required"),
   lastName: z.string().min(1, "Last Name is required"),
+
+  // phoneNumber was MISSING from this schema entirely. The form renders a field
+  // named `phoneNumber`, but zodResolver strips keys the schema does not
+  // declare — so it never survived parsing. onSubmit then read `data.phone`,
+  // a name that appears in neither the schema nor the form, which was always
+  // undefined and fell through to the hardcoded "9999999999".
+  //
+  // Result: EVERY order was stored with a fake phone number and the merchant
+  // could not contact any customer. See CLAUDE.md CF-06 / CF-09.
+  //
+  // The country is an explicit choice rather than something parsed out of a
+  // free-text number: "9876543210" is a valid national number in both India
+  // and the USA, so without the dropdown the stored value is ambiguous.
+  countryCode: z.enum(["IN", "US"]),
+  phoneNumber: z.string().min(1, "Phone number is required"),
+
   address: z.string().min(1, "Address is required"),
   apartment: z.string().optional(),
   city: z.string().min(1, "City is required"),
   state: z.string().min(1, "State is required"),
-  pincode: z.string().length(6, "Pincode must be 6 digits"),
+  pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   paymentMethod: z.literal("razorpay"),
   rememberMe: z.boolean().optional(),
-});
+})
+  // Cross-field: the number is only meaningful against a country, so the rule
+  // has to run after both are known. India requires 10 digits starting 6-9;
+  // the USA requires NANP format. Rules live in config/phone.js so the signup
+  // form and this one cannot drift apart.
+  .superRefine((data, ctx) => {
+    const error = validateNationalNumber(data.countryCode, data.phoneNumber);
+    if (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["phoneNumber"],
+        message: error,
+      });
+    }
+  });
 
 export default function Checkout() {
   const { cartItems, setCartItems } = useContext(CartContext);
@@ -51,6 +88,8 @@ export default function Checkout() {
       email: "",
       firstName: "",
       lastName: "",
+      countryCode: DEFAULT_COUNTRY,
+      phoneNumber: "",
       address: "",
       apartment: "",
       city: "",
@@ -91,20 +130,37 @@ export default function Checkout() {
       )
         .then((res) => res.json())
         .then((response) => {
-          if (response.success && response.data && response.data.length > 0) {
-            const lastOrder = response.data[0];
+          // The API returns { success, orders } — this block previously checked
+          // `response.data`, which is always undefined, so the entire autofill
+          // was unreachable. That is why the phone field was never populated
+          // and always fell through to the "9999999999" fallback.
+          // See CLAUDE.md CF-09.
+          const orders = response.orders;
+          if (!response.success || !Array.isArray(orders) || orders.length === 0) return;
 
-            const fullName = lastOrder.customer_name || "";
-            const nameParts = fullName.trim().split(" ");
-            const firstName = nameParts[0] || "";
-            const lastName =
-              nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+          const lastOrder = orders[0];
 
-            form.setValue("email", lastOrder.email || userEmail || "");
-            form.setValue("firstName", firstName);
-            form.setValue("lastName", lastName);
-            form.setValue("address", lastOrder.shipping_address || "");
-            form.setValue("phone", lastOrder.phone_number || "");
+          const fullName = (lastOrder.customer_name || "").trim();
+          const nameParts = fullName ? fullName.split(" ") : [];
+          const firstName = nameParts[0] || "";
+          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
+          if (lastOrder.email || userEmail) {
+            form.setValue("email", lastOrder.email || userEmail);
+          }
+          if (firstName) form.setValue("firstName", firstName);
+          if (lastName) form.setValue("lastName", lastName);
+          if (lastOrder.shipping_address) {
+            form.setValue("address", lastOrder.shipping_address);
+          }
+
+          // Was form.setValue("phone", ...) — a field that exists in neither
+          // the schema nor the form. Split the stored E.164 value back into the
+          // country and national parts the form actually uses.
+          if (lastOrder.phone_number) {
+            const { countryCode, nationalNumber } = fromE164(lastOrder.phone_number);
+            form.setValue("countryCode", countryCode);
+            form.setValue("phoneNumber", nationalNumber);
           }
         })
         .catch((err) => console.error("Failed to auto-fill details:", err));
@@ -125,7 +181,9 @@ export default function Checkout() {
       const orderPayload = {
         customer_name: `${data.firstName} ${data.lastName}`,
         email: data.email,
-        phone_number: data.phone || "9999999999",
+        // Was `data.phone || "9999999999"` — a field that never existed, so
+        // every order got the fallback. Now the real value, in E.164.
+        phone_number: toE164(data.countryCode, data.phoneNumber),
         shipping_address: `${data.address}, ${data.city}, ${data.state} - ${data.pincode}`,
         // total_amount, payment_status and order_status are NOT sent. The
         // server computes the total from its own product prices, adds its own
@@ -256,19 +314,58 @@ export default function Checkout() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="phoneNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contact Number</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Ex: 9876543210" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Country + national number.
+                  A dropdown rather than a free-text field: "9876543210" is a
+                  valid national number in both India and the USA, so without an
+                  explicit country the stored value is ambiguous and the merchant
+                  cannot reliably dial it. See CLAUDE.md CF-09. */}
+              <FormItem>
+                <FormLabel>Contact Number</FormLabel>
+                <div className="flex gap-2">
+                  <FormField
+                    control={form.control}
+                    name="countryCode"
+                    render={({ field }) => (
+                      <FormControl>
+                        <select
+                          {...field}
+                          aria-label="Country calling code"
+                          className="h-9 shrink-0 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        >
+                          {COUNTRIES.map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.flag} {c.dial}
+                            </option>
+                          ))}
+                        </select>
+                      </FormControl>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="tel"
+                          inputMode="numeric"
+                          autoComplete="tel-national"
+                          maxLength={14}
+                          placeholder={`Ex: ${
+                            COUNTRIES.find(
+                              (c) => c.code === form.watch("countryCode")
+                            )?.example ?? "9876543210"
+                          }`}
+                        />
+                      </FormControl>
+                    )}
+                  />
+                </div>
+                <FormMessage>
+                  {form.formState.errors.phoneNumber?.message}
+                </FormMessage>
+              </FormItem>
 
               <FormField
                 control={form.control}

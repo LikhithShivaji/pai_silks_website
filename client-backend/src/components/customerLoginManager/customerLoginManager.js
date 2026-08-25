@@ -2,6 +2,7 @@
 const dbCmds = require('../../dbOps/customerDbOps');
 const utils = require('../../utils/utils');
 const appDefines = require('../../constants/appDefines');
+const { sanitizeError } = require('../../utils/safeError');
 
 async function loginCustomerUser(userData) {
   try {
@@ -80,7 +81,7 @@ const getUserProfile = async (user_id) => {
   try {
     return await dbCmds.getUserById(user_id);
   } catch (err) {
-    console.error("Error in getUserProfile manager:", err);
+    console.error("Error in getUserProfile manager:", sanitizeError(err));
     throw err;
   }
 };

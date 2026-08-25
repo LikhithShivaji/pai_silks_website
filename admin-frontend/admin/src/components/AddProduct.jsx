@@ -80,9 +80,50 @@ const AddProduct = ({
     });
   };
 
+  /**
+   * Validate before anything is sent.
+   *
+   * Only `name` was ever checked. The price fields were plain text inputs, so
+   * `Number("abc") || 0` published a product at price ZERO on the live
+   * storefront, and "-500" stored a negative price. selling_price was never
+   * compared against regular_price. See CLAUDE.md AF-18.
+   *
+   * The server re-validates all of this independently (Phase 3 Slice 3) — this
+   * is for immediate feedback, not the security boundary.
+   *
+   * @returns {string|null} first error message, or null when valid
+   */
+  const validateProduct = () => {
+    if (!newProduct.name.trim()) return "Product name is required.";
+    if (newProduct.name.length > 255) return "Product name must be 255 characters or fewer.";
+
+    const regular = newProduct.regularPrice;
+    const selling = newProduct.discountedPrice;
+
+    if (regular === "" || regular === null) return "Regular price is required.";
+    if (!Number.isFinite(Number(regular)) || Number(regular) < 0)
+      return "Regular price must be a number of 0 or more.";
+
+    if (selling !== "" && selling !== null) {
+      if (!Number.isFinite(Number(selling)) || Number(selling) < 0)
+        return "Discounted price must be a number of 0 or more.";
+      if (Number(selling) > Number(regular))
+        return "Discounted price cannot be higher than the regular price.";
+    }
+
+    if (newProduct.stockQty !== "" && newProduct.stockQty !== null) {
+      const stock = Number(newProduct.stockQty);
+      if (!Number.isInteger(stock) || stock < 0)
+        return "Stock quantity must be a whole number of 0 or more.";
+    }
+
+    return null;
+  };
+
   const handleSaveProduct = async () => {
-    if (!newProduct.name.trim()) {
-      alert("Please enter the required field (Product Name)");
+    const validationError = validateProduct();
+    if (validationError) {
+      alert(validationError);
       return false;
     }
 
@@ -411,6 +452,9 @@ const AddProduct = ({
               <p>Regular Price</p>
               <Input
                 name="regularPrice"
+                type="number"
+                min="0"
+                step="0.01"
                 placeholder="Regular Price"
                 className="border-1 border-black resize-none"
                 value={newProduct.regularPrice}
@@ -426,6 +470,9 @@ const AddProduct = ({
               <p>Discounted Price</p>
               <Input
                 name="discountedPrice"
+                type="number"
+                min="0"
+                step="0.01"
                 placeholder="Discounted Price"
                 className="border-1 border-black resize-none"
                 value={newProduct.discountedPrice}

@@ -23,5 +23,31 @@ module.exports = {
 
     // Maximum concurrent logged-in devices for the admin account (user
     // decision). A 3rd login evicts the OLDEST active session.
-    MAX_ACTIVE_SESSIONS: 2
+    MAX_ACTIVE_SESSIONS: 2,
+
+    /**
+     * Order fulfilment states, in order (owner decision, 2026-08-24).
+     *
+     * Strictly forward-only. There is deliberately NO Cancelled and NO
+     * Returned: the business does not accept returns or cancellations, so
+     * those states would have no meaning. Raised and declined explicitly.
+     *
+     * Previously `status` was written straight from the request body with no
+     * check at all, so "delivered" (lowercase) or "Shipped!" would persist —
+     * and silently break the dashboard, which compares
+     * `SUM(status = 'Delivered')` on an exact string. See CLAUDE.md AB-13.
+     *
+     * The admin ships via DTDC and India Post. When a carrier API is wired up,
+     * the last three states will be driven by carrier events. Carrier APIs
+     * return their own vocabulary, so that integration needs a MAPPING layer —
+     * do not write carrier strings straight into this column.
+     */
+    ORDER_STATUSES: [
+        'Pending',
+        'Confirmed',
+        'Packed',
+        'Shipped',
+        'Out for Delivery',
+        'Delivered'
+    ]
 };

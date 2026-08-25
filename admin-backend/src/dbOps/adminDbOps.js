@@ -2,6 +2,7 @@
 const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 const sqlqueries = require('../dbOps/sqlQueries')
+const { sanitizeError } = require('../utils/safeError');
 
 class Cmds {
 
@@ -14,7 +15,7 @@ class Cmds {
             const match = await bcrypt.compare(passwd, user.pass);
             return match ? user : null;
         } catch (err) {
-            console.error("Error in verifyAdminPasswd:", err);
+            console.error("Error in verifyAdminPasswd:", sanitizeError(err));
             throw err;
         }
     }
@@ -25,7 +26,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.login.getSessionDetails, [pri_email]);
             return rows[0] || null;
         } catch (err) {
-            console.error("Error in getAdminLastSessionByEmail:", err);
+            console.error("Error in getAdminLastSessionByEmail:", sanitizeError(err));
             throw err;
         }
     }
@@ -39,7 +40,7 @@ class Cmds {
             );
             return result.insertId || null;
         } catch (err) {
-            console.error("Error in insertNewSession:", err);
+            console.error("Error in insertNewSession:", sanitizeError(err));
             throw err;
         }
     }
@@ -49,7 +50,7 @@ class Cmds {
         try {
             await pool.query(sqlqueries.login.updateToken, [token, sid]);
         } catch (err) {
-            console.error("Error in updateToken:", err);
+            console.error("Error in updateToken:", sanitizeError(err));
             throw err;
         }
     }
@@ -59,7 +60,7 @@ class Cmds {
         try {
             await pool.query(sqlqueries.login.updateSessionStatus, [status, logoutTime, sid]);
         } catch (err) {
-            console.error("Error in updateSessionStatus:", err);
+            console.error("Error in updateSessionStatus:", sanitizeError(err));
             throw err;
         }
     }
@@ -78,7 +79,7 @@ class Cmds {
             );
             return rows[0] || null;
         } catch (err) {
-            console.error("Error in getActiveSessionById:", err);
+            console.error("Error in getActiveSessionById:", sanitizeError(err));
             throw err;
         }
     }
@@ -95,7 +96,7 @@ class Cmds {
             );
             return rows;
         } catch (err) {
-            console.error("Error in getActiveSessionsForUser:", err);
+            console.error("Error in getActiveSessionsForUser:", sanitizeError(err));
             throw err;
         }
     }
@@ -112,7 +113,7 @@ class Cmds {
             );
             return result.affectedRows;
         } catch (err) {
-            console.error("Error in logoutSessionBySessionId:", err);
+            console.error("Error in logoutSessionBySessionId:", sanitizeError(err));
             throw err;
         }
     }
@@ -139,7 +140,7 @@ class Cmds {
         
             return result.insertId;
         } catch (err) {
-            console.error("Error in updateSessionStatus:", err);
+            console.error("Error in updateSessionStatus:", sanitizeError(err));
             throw err;
         }
     }
@@ -151,7 +152,7 @@ class Cmds {
             [product_id, stock_qty ?? 0]
     );
         } catch (err) {
-            console.error("Error in insertProductStock:", err);
+            console.error("Error in insertProductStock:", sanitizeError(err));
             throw err;
   }
 }
@@ -161,7 +162,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.dashBoard.getOrderStats);
             return rows[0]; // single aggregated row
         } catch (error) {
-            console.error("Error in getOrderStats:", error);
+            console.error("Error in getOrderStats:", sanitizeError(error));
             throw error;
         }
     }
@@ -171,7 +172,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.dashBoard.getBestSellers);
             return rows; // return full list
         } catch (error) {
-            console.error("Error in getBestSellers:", error);
+            console.error("Error in getBestSellers:", sanitizeError(error));
             throw error;
         }
     }
@@ -181,7 +182,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.dashBoard.getRecentOrders);
             return rows; // return full list
         } catch (error) {
-            console.error("Error in getRecentOrders:", error);
+            console.error("Error in getRecentOrders:", sanitizeError(error));
             throw error;
         }
     }
@@ -191,7 +192,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.product.getCategoryWiseCount);
             return rows;
         } catch (err) {
-            console.error("Error in getCategoryWiseCount:", err);
+            console.error("Error in getCategoryWiseCount:", sanitizeError(err));
             throw err;
         }
     }
@@ -201,7 +202,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.product.getAllProductDetails);
             return rows;
         } catch (err) {
-            console.error("Error in getAllProductDetails:", err);
+            console.error("Error in getAllProductDetails:", sanitizeError(err));
             throw err;
         }
     }
@@ -211,7 +212,7 @@ class Cmds {
             const [rows] = await pool.query(sqlqueries.orders.getAllOrderData);
             return rows;
         } catch (error) {
-            console.error("Error in getOrderDetails:", error);
+            console.error("Error in getOrderDetails:", sanitizeError(error));
             throw error;
         }
     }
@@ -233,7 +234,7 @@ async updateProduct(productData) {
       productData.id
     ]);
   } catch (err) {
-    console.error("Error in updateProduct:", err);
+    console.error("Error in updateProduct:", sanitizeError(err));
     throw err;
   }
 }
@@ -247,15 +248,27 @@ async updateProductStock(product_id, stock_qty) {
 
 
 
+    /**
+     * @returns {number} rows affected — 0 means no such order.
+     *
+     * The destructuring on the next line is the fix. mysql2 resolves to
+     * [rows, fields], so `result.affectedRows` on the undestructured array was
+     * always `undefined` — and `undefined === 0` is false. The "no order found"
+     * guard could therefore never fire, and updating a NONEXISTENT order id
+     * returned 200 "Order status updated successfully". See CLAUDE.md AB-13.
+     *
+     * Returning the count rather than throwing lets the controller answer 404,
+     * which is the honest status for "that order does not exist".
+     */
     async updateOrderStatus(order_id, new_status) {
         try {
-            const result = await pool.query(sqlqueries.orders.updateOrderStatus, [new_status, order_id]);
-            if (result.affectedRows === 0) {
-                throw new Error(`No order found with id: ${order_id}`);
-            }
-            return true;
+            const [result] = await pool.query(
+                sqlqueries.orders.updateOrderStatus,
+                [new_status, order_id]
+            );
+            return result.affectedRows;
         } catch (error) {
-            console.error("Error in updateOrderStatus:", error);
+            console.error("Error in updateOrderStatus:", error.code || error.message);
             throw error;
         }
     }
@@ -294,7 +307,7 @@ async updateProductStock(product_id, stock_qty) {
 
     return result.affectedRows;
   } catch (err) {
-    console.error("Error in insertImages:", err);
+    console.error("Error in insertImages:", sanitizeError(err));
     throw err;
   }
 }
@@ -304,7 +317,7 @@ async updateProductStock(product_id, stock_qty) {
             const [result] = await pool.query(sqlqueries.product.deleteProduct, [productId]);
             return result;
         } catch (err) {
-            console.error("Error in deleteProduct DB Ops:", err);
+            console.error("Error in deleteProduct DB Ops:", sanitizeError(err));
             throw err;
         }
     }
@@ -324,7 +337,7 @@ async updateProductStock(product_id, stock_qty) {
     const [result] = await pool.query(sqlqueries.product.deleteCategory, [categoryId]);
     return result;
   } catch (err) {
-    console.error("Error in dbCmds.deleteCategoryById:", err);
+    console.error("Error in dbCmds.deleteCategoryById:", sanitizeError(err));
     throw err;
   }
 }
@@ -335,7 +348,7 @@ async updateProductStock(product_id, stock_qty) {
         const [rows] = await pool.query(sqlqueries.product.getAllCategory);
         return rows;
     } catch (err) {
-        console.error("Error in dbCmds.getAllCategories:", err);
+        console.error("Error in dbCmds.getAllCategories:", sanitizeError(err));
         throw err;
     }
     }

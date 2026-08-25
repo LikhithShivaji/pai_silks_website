@@ -7,6 +7,7 @@ const cors = require('cors');
 require("dotenv").config();
 
 const { loginLimiter, writeLimiter } = require('./middlewares/rateLimiters');
+const { sanitizeError } = require('./utils/safeError');
 
 const app = express();
 
@@ -94,7 +95,7 @@ app.use((req, res) => {
 //
 // The stack is logged server-side and never sent to the client.
 app.use((err, req, res, next) => {
-  console.error(`[error] ${req.method} ${req.originalUrl}`, err);
+  console.error(`[error] ${req.method} ${req.originalUrl}`, sanitizeError(err));
 
   if (res.headersSent) return next(err);
 

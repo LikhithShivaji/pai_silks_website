@@ -1,0 +1,46 @@
+-- Migration 004 — widen phone_number for international customers
+--
+-- Fixes: CLAUDE.md CF-45 / CB-28-phone (international support)
+--
+-- WHY
+-- master_user.phone_number was VARCHAR(15), sized for a bare 10-digit Indian
+-- mobile with no country code. The owner confirmed on 2026-08-25 that the shop
+-- serves both India and the USA, and that customers pick their country from a
+-- dropdown rather than typing a free-form number.
+--
+-- Numbers are now stored in E.164 form — country code + national number, '+'
+-- and digits only:
+--
+--   India  +91 + 10 digits = 13 chars
+--   USA    +1  + 10 digits = 12 chars
+--
+-- Both of those DO fit in VARCHAR(15). This widening is therefore headroom
+-- rather than a fix for a current overflow — it is here so that adding a third
+-- country later is a config change and not a schema migration during a release.
+-- E.164 permits up to 15 digits plus '+', i.e. 16 characters, which 15 could
+-- not have held.
+--
+-- Worth doing now because the failure mode is nasty: in non-strict SQL mode
+-- MySQL SILENTLY TRUNCATES an over-long value, storing an unreachable number
+-- that looks plausible. The merchant only finds out when trying to phone a
+-- customer about their order.
+--
+-- 20 leaves room for '+' plus 15 digits without reaching for TEXT.
+--
+-- Numbers are stored NORMALISED — '+' and digits only, separators stripped by
+-- the application — so display formatting never eats into the limit.
+--
+-- APPLY
+--   local:      mysql -u root -p db < migrations/004_phone_number_international.sql
+--   production: run in Hostinger phpMyAdmin against u863032788_db
+--
+-- SAFETY
+-- Widening a VARCHAR is non-destructive; no existing value can be too long for
+-- the larger type. Safe on a live table.
+--
+-- ROLLBACK
+--   ALTER TABLE master_user MODIFY COLUMN phone_number VARCHAR(15) NULL;
+--   (only safe if no number longer than 15 characters has been stored)
+
+ALTER TABLE master_user
+  MODIFY COLUMN phone_number VARCHAR(20) NULL;

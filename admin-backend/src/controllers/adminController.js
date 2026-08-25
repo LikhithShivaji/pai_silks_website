@@ -7,6 +7,7 @@ const utils = require('../utils/utils');
 const appDefines = require('../constants/appDefines');
 const CookiesKey = require('../constants/cookieKeys');
 const admindb = require('../dbOps/adminDbOps'); // adjust path if needed
+const { sanitizeError } = require('../utils/safeError');
 
 // adminController.js
 
@@ -122,10 +123,10 @@ exports.insertImage = async (req, res) => {
       images
     });
   } catch (error) {
-    console.error("Insert Image Error:", error);
+    console.error("Insert Image Error:", sanitizeError(error));
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Something went wrong. Please try again.'
     });
   }
 };
@@ -142,10 +143,10 @@ exports.createProduct = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in createProduct Controller:", error);
+    console.error("Error in createProduct Controller:", sanitizeError(error));
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: 'Something went wrong. Please try again.',
       
     });
   }
@@ -156,7 +157,7 @@ exports.getOrderStats = async (req, res) => {
     const result = await dashBoardManager.getOrderStats();
     return utils.sendResponse(res, result);
   } catch (error) {
-    console.error("Error in getOrderStats:", error);
+    console.error("Error in getOrderStats:", sanitizeError(error));
     return utils.sendError(res, error);
   }
 };
@@ -166,7 +167,7 @@ exports.getBestSellerList = async (req, res) => {
     const result = await dashBoardManager.getBestSellers();
     return utils.sendResponse(res, result);
   } catch (error) {
-    console.error("Error in getBestSellerList:", error);
+    console.error("Error in getBestSellerList:", sanitizeError(error));
     return utils.sendError(res, error);
   }
 };
@@ -176,7 +177,7 @@ exports.getRecentOrders = async (req, res) => {
     const result = await dashBoardManager.getRecentOrders();
     return utils.sendResponse(res, result);
   } catch (error) {
-    console.error("Error in getRecentOrders:", error);
+    console.error("Error in getRecentOrders:", sanitizeError(error));
     return utils.sendError(res, error);
   }
 };
@@ -189,8 +190,8 @@ exports.getCategoryWiseCount = async (req, res) => {
       data: result
     });
   } catch (error) {
-    console.error("Error in getCategoryWiseCount Controller:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error in getCategoryWiseCount Controller:", sanitizeError(error));
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -202,8 +203,8 @@ exports.getAllProductDetails = async (req, res) => {
       data: result
     });
   } catch (error) {
-    console.error("Error in getAllProductDetails Controller:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error in getAllProductDetails Controller:", sanitizeError(error));
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -215,8 +216,8 @@ exports.getOrderDetails = async (req, res) => {
       data: result
     })
   } catch (error) {
-    console.error("Error to get AllOrderDetails Controller:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error to get AllOrderDetails Controller:", sanitizeError(error));
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -232,22 +233,38 @@ exports.updateProduct = async (req, res) => {
       message: "Product updated successfully",
     });
   } catch (error) {
-    console.error("Error in updateProduct Controller:", error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Error in updateProduct Controller:", sanitizeError(error));
+    res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
-exports.updateOrderStatus = async (req, res) => {
+exports.updateOrderStatus = async (req, res, next) => {
   try {
+    // Both fields are validated upstream: order_id is a positive integer and
+    // status is one of appDefines.ORDER_STATUSES. See AB-13.
     const { order_id, status } = req.body;
-    const result = await orderManager.updateOrderStatus(order_id, status);
-    res.status(200).json({
+
+    const affectedRows = await orderManager.updateOrderStatus(order_id, status);
+
+    // Previously this always returned 200, even for an order id that does not
+    // exist — the affectedRows guard in the dbOp was dead code because the
+    // mysql2 result was never destructured. An admin could "update" order
+    // 99999 and be told it worked.
+    if (affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No order found with id ${order_id}.`,
+      });
+    }
+
+    return res.status(200).json({
       success: true,
       message: "Order status updated successfully",
+      order_id,
+      status,
     });
   } catch (error) {
-    console.error("Error in updateOrderStatus Controller:", error);
-    res.status(500).json({ success: false, message: error.message });
+    return next(error);
   }
 };
 
@@ -263,8 +280,8 @@ exports.updateProductImages = async (req, res) => {
 
         res.status(200).json({ success: true, images });
     } catch (err) {
-        console.error("Error updating product images:", err);
-        res.status(500).json({ success: false, message: err.message });
+        console.error("Error updating product images:", sanitizeError(err));
+        res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
     }
 };
 
@@ -285,10 +302,10 @@ exports.deleteProduct = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in deleteProduct Controller:", error);
+    console.error("Error in deleteProduct Controller:", sanitizeError(error));
     res.status(500).json({
       success: false,
-      message: error.message
+      message: 'Something went wrong. Please try again.'
     });
   }
 };
@@ -303,7 +320,7 @@ exports.addCategory = async (req, res) => {
     const newCategory = await productManager.addCategory(name);
     return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -312,7 +329,7 @@ exports.getAllCategories = async (req, res) => {
     const categories = await productManager.getAllCategories();
     return res.status(200).json({ success: true, data: categories });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -321,7 +338,7 @@ exports.deleteAllCategories = async (req, res) => {
     await productManager.deleteAllCategories();
     return res.status(200).json({ success: true, message: "All categories deleted successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };exports.addCategory = async (req, res) => {
   try {
@@ -331,7 +348,7 @@ exports.deleteAllCategories = async (req, res) => {
     const newCategory = await productManager.addCategory(name);
     return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -340,7 +357,7 @@ exports.getAllCategories = async (req, res) => {
     const categories = await productManager.getAllCategories();
     return res.status(200).json({ success: true, data: categories });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -349,7 +366,7 @@ exports.deleteAllCategories = async (req, res) => {
     await productManager.deleteAllCategories();
     return res.status(200).json({ success: true, message: "All categories deleted successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -361,7 +378,7 @@ exports.addCategory = async (req, res) => {
     const newCategory = await productManager.addCategory(name);
     return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -370,7 +387,7 @@ exports.getAllCategories = async (req, res) => {
     const categories = await productManager.getAllCategories();
     return res.status(200).json({ success: true, data: categories });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
 
@@ -391,7 +408,7 @@ exports.deleteCategory = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: 'Something went wrong. Please try again.',
     });
   }
 };

@@ -1,6 +1,13 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { CLIENT_API, apiFetch } from "@/config/api";
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  getCountry,
+  validateNationalNumber,
+  toE164,
+} from "@/config/phone";
 import footerBg from "@/assets/footerbgimage.webp";
 import {
   User,
@@ -26,25 +33,80 @@ const SignupPage = () => {
     user_name: "",
     pri_email: "",
     password: "",
+    countryCode: DEFAULT_COUNTRY,
     phone_number: "",
     address: "",
   });
 
+  // Per-field messages. The form previously relied on `required` and a bare
+  // minLength={6} — so "abc" was an acceptable phone number and the only
+  // feedback on a bad value was whatever MySQL happened to say. See CF-45.
+  const [errors, setErrors] = useState({});
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    // Clear this field's error as soon as the user edits it, rather than
+    // leaving a stale message under a field they have already corrected.
+    if (errors[e.target.name]) {
+      setErrors((prev) => ({ ...prev, [e.target.name]: undefined }));
+    }
+  };
+
+  /** @returns {object} field -> message, empty when the form is valid */
+  const validateForm = () => {
+    const next = {};
+
+    const name = formData.user_name.trim();
+    if (!name) next.user_name = "Name is required";
+    else if (name.length > 50) next.user_name = "Name must be 50 characters or fewer";
+
+    const email = formData.pri_email.trim();
+    if (!email) next.pri_email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
+      next.pri_email = "Enter a valid email address";
+    else if (email.length > 100) next.pri_email = "Email is too long";
+
+    const phoneError = validateNationalNumber(formData.countryCode, formData.phone_number);
+    if (phoneError) next.phone_number = phoneError;
+
+    // Mirrors the server policy in appDefines.password. The 72-byte ceiling is
+    // not arbitrary: bcrypt silently ignores anything past it, so a longer
+    // password would give the user false confidence. See CB-28.
+    if (!formData.password) next.password = "Password is required";
+    else if (formData.password.length < 8)
+      next.password = "Password must be at least 8 characters";
+    else if (new Blob([formData.password]).size > 72)
+      next.password = "Password is too long (maximum 72 bytes)";
+
+    if (formData.address && formData.address.length > 500)
+      next.address = "Address is too long";
+
+    return next;
   };
 
   const handleSignup = async (e) => {
     e.preventDefault();
+
+    const found = validateForm();
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
+
     setLoading(true);
 
     try {
+      // countryCode is a UI concern only — the server stores one E.164 string.
+      const { countryCode, phone_number, ...rest } = formData;
+      const payload = {
+        ...rest,
+        phone_number: toE164(countryCode, phone_number),
+      };
+
       const response = await apiFetch(`${CLIENT_API}/api/signup`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -136,6 +198,9 @@ const SignupPage = () => {
               />
             </div>
           </div>
+              {errors.user_name && (
+                <p className="text-xs text-red-600 ml-1">{errors.user_name}</p>
+              )}
 
           {/* Email & Phone (Grid) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -165,31 +230,67 @@ const SignupPage = () => {
                 />
               </div>
             </div>
+              {errors.pri_email && (
+                <p className="text-xs text-red-600 ml-1">{errors.pri_email}</p>
+              )}
 
             {/* Phone */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-[#68232B] uppercase tracking-wider ml-1">
                 Phone
               </label>
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#68232B]/40 group-focus-within:text-[#68232B] transition-colors">
-                  <Phone size={20} />
-                </div>
-                <input
-                  type="tel"
-                  name="phone_number"
-                  value={formData.phone_number}
+              {/* Country + national number. The dropdown removes the ambiguity
+                  of a bare 10-digit number, which is valid in both supported
+                  countries. See CLAUDE.md CF-45. */}
+              <div className="flex gap-2">
+                <select
+                  name="countryCode"
+                  value={formData.countryCode}
                   onChange={handleChange}
-                  placeholder="+91 98765..."
-                  required
+                  aria-label="Country calling code"
                   className="
-                    w-full pl-12 pr-4 py-3 bg-white/50 border border-[#68232B]/10 rounded-2xl
-                    text-[#68232B] placeholder:text-[#68232B]/30
+                    shrink-0 px-3 py-3 bg-white/50 border border-[#68232B]/10 rounded-2xl
+                    text-[#68232B]
                     focus:outline-none focus:border-[#68232B]/30 focus:ring-4 focus:ring-[#68232B]/5
                     transition-all duration-300
                   "
-                />
+                >
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.dial}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="relative group flex-1">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#68232B]/40 group-focus-within:text-[#68232B] transition-colors">
+                    <Phone size={20} />
+                  </div>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    maxLength={14}
+                    name="phone_number"
+                    value={formData.phone_number}
+                    onChange={handleChange}
+                    placeholder={`Ex: ${getCountry(formData.countryCode).example}`}
+                    aria-invalid={Boolean(errors.phone_number)}
+                    className={`
+                      w-full pl-12 pr-4 py-3 bg-white/50 border rounded-2xl
+                      text-[#68232B] placeholder:text-[#68232B]/30
+                      focus:outline-none focus:ring-4 focus:ring-[#68232B]/5
+                      transition-all duration-300
+                      ${errors.phone_number
+                        ? "border-red-400 focus:border-red-500"
+                        : "border-[#68232B]/10 focus:border-[#68232B]/30"}
+                    `}
+                  />
+                </div>
               </div>
+              {errors.phone_number && (
+                <p className="text-xs text-red-600 ml-1">{errors.phone_number}</p>
+              )}
             </div>
           </div>
 
@@ -226,6 +327,9 @@ const SignupPage = () => {
               </button>
             </div>
           </div>
+              {errors.password && (
+                <p className="text-xs text-red-600 ml-1">{errors.password}</p>
+              )}
 
           {/* Address */}
           <div className="space-y-1">
@@ -251,6 +355,9 @@ const SignupPage = () => {
               />
             </div>
           </div>
+              {errors.address && (
+                <p className="text-xs text-red-600 ml-1">{errors.address}</p>
+              )}
 
           {/* Submit Button */}
           <button
