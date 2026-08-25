@@ -48,6 +48,23 @@ const sqlqueries = {
             LIMIT 1
         `,
 
+        // Serialises concurrent logins for ONE user.
+        //
+        // read sessions -> evict oldest -> insert new is a check-then-act race.
+        // Without a lock, concurrent logins all read the same count, all
+        // conclude there is room, and all insert. Demonstrated on the admin
+        // side: SIX simultaneous logins produced FOUR sessions against a cap of
+        // two. See CLAUDE.md AB-15.
+        //
+        // The lock is on master_user, not session: `FOR UPDATE` on `session`
+        // locks only rows that already match, so a user with zero active
+        // sessions has nothing locked and the race survives.
+        //
+        // MUST be called inside a transaction.
+        lockUserForSessionUpdate: `
+            SELECT user_id FROM master_user WHERE user_id = ? FOR UPDATE
+        `,
+
         // Active, unexpired sessions for a user, oldest first — used to enforce
         // the 2-device cap. Oldest first so the head of the list is what gets
         // evicted.
@@ -201,7 +218,9 @@ getNewReleaseProducts: `
       p.*, 
       pi.image_url
       FROM wishlist w
-      JOIN product p ON w.product_id = p.id
+      -- is_deleted = 0: same reasoning as getCart. A soft-deleted product must
+      -- not keep appearing in saved items. See CLAUDE.md CB-08s.
+      JOIN product p ON w.product_id = p.id AND p.is_deleted = 0
       LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
       WHERE w.user_id = ?
       ORDER BY w.added_at DESC;
@@ -251,7 +270,14 @@ getNewReleaseProducts: `
     p.category,
     pi.image_url
     FROM cart c
-    JOIN product p ON c.product_id = p.id
+    -- is_deleted = 0: a soft-deleted product must not remain purchasable.
+    -- Without it, a product deleted from the admin panel stayed in any cart it
+    -- was already in, checked out, and reduced stock. See CLAUDE.md CB-08s.
+    --
+    -- The item silently disappears from the cart (owner decision, 2026-08-26).
+    -- Telling the customer "an item is no longer available" is better UX and is
+    -- logged as a follow-up; it needs a frontend change to detect the drop.
+    JOIN product p ON c.product_id = p.id AND p.is_deleted = 0
     LEFT JOIN product_images pi ON p.id = pi.product_id AND pi.is_primary_image = 1
     WHERE c.user_id = ?
     ORDER BY c.added_at DESC;

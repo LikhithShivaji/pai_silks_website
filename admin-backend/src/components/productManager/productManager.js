@@ -1,26 +1,33 @@
 const dbCmds = require('../../dbOps/adminDbOps');
 const cloudinary = require('../../config/cloudinary');
 const { sanitizeError } = require('../../utils/safeError');
+const { withTransaction } = require('../../dbOps/withTransaction');
 
 
 
 
 
 const createProduct = async (productData) => {
-    
+
     if (!productData.name || !productData.regular_price) {
         throw new Error("Product name and regular price are required");
     }
 
-    const productId = await dbCmds.createProduct(productData);
+    // Product row and stock row are ONE unit.
+    //
+    // These were two independent queries. When the second failed the first
+    // stayed, producing a product with no product_stock row — getStock returns
+    // 0 for a missing row, so the product sat on the storefront looking normal
+    // and every checkout hit "Insufficient stock" after the customer had filled
+    // in their address. It happened to 29 of 35 products. See CLAUDE.md AB-14a.
+    return withTransaction(async (conn) => {
+        const productId = await dbCmds.createProduct(productData, conn);
 
-    
+        const stockQty = productData.stock_qty ?? 0;
+        await dbCmds.insertProductStock(productId, stockQty, conn);
 
-    // 2️⃣ Insert stock
-    const stockQty = productData.stock_qty ?? 0;
-    await dbCmds.insertProductStock(productId, stockQty);
-
-    return productId;
+        return productId;
+    });
 };
 
 
@@ -35,18 +42,15 @@ const updateProduct = async (productData, files = []) => {
       ? Number(productData.is_new_release)
       : 0;
 
-  // 1️⃣ Update product basic details
-  await dbCmds.updateProduct(productData);
-
-  // 2️⃣ Update stock_qty (if provided) — always, not just when images exist
-  if (productData.stock_qty !== undefined) {
-    await dbCmds.updateProductStock(productData.id, productData.stock_qty);
-  }
-
-  // 2️⃣ If images are provided → update images
+  // Uploads happen BEFORE the transaction opens, deliberately.
+  //
+  // A rollback undoes database work only — an uploaded asset cannot be
+  // un-uploaded, and nothing in this codebase ever deletes a remote one
+  // (AB-10, and the same will be true of S3). Doing the slow network work
+  // outside the transaction also keeps it short: a long transaction holds one
+  // of only 10 pool connections and locks the rows it has touched.
+  const uploadedImages = [];
   if (files && files.length > 0) {
-    const uploadedImages = [];
-
     for (let i = 0; i < files.length; i++) {
       const uploaded = await cloudinary.uploader.upload(files[i].path, {
         folder: `products/${productData.id}`,
@@ -57,13 +61,60 @@ const updateProduct = async (productData, files = []) => {
         is_primary_image: i === 0 ? 1 : 0
       });
     }
-
-    // Delete old images
-    await dbCmds.deleteImagesByProductId(productData.id);
-
-    // Insert new images
-    await dbCmds.insertImages(productData.id, uploadedImages);
   }
+
+  // Details, stock and images are ONE unit.
+  //
+  // The image swap is delete-then-insert. Without a transaction, a failure on
+  // the insert left the product with NO images at all and nothing to restore —
+  // the old rows were already gone from the database, and the original assets
+  // were orphaned remotely with no way to find them again. Genuinely
+  // unrecoverable. See CLAUDE.md AB-14b.
+  await withTransaction(async (conn) => {
+    // 0 rows means the product does not exist, or has been soft-deleted. The
+    // query carries `AND is_deleted = 0` so editing a deleted product can no
+    // longer silently resurrect it. Fail loudly rather than reporting a success
+    // that never happened. See CLAUDE.md AB-12s.
+    const updated = await dbCmds.updateProduct(productData, conn);
+    if (updated === 0) {
+      const err = new Error('Product not found, or it has been deleted.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // Stock uses compare-and-swap so a concurrent admin edit cannot be silently
+    // discarded. expected_stock_qty is what the form showed when it loaded.
+    // See CLAUDE.md AB-15b.
+    if (productData.stock_qty !== undefined) {
+      if (productData.expected_stock_qty === undefined) {
+        // Fail loudly rather than falling back to a blind overwrite — a silent
+        // fallback would reintroduce exactly the bug this replaces.
+        const err = new Error('expected_stock_qty is required when changing stock.');
+        err.statusCode = 400;
+        throw err;
+      }
+
+      const applied = await dbCmds.updateProductStockCAS(
+        productData.id,
+        productData.stock_qty,
+        productData.expected_stock_qty,
+        conn
+      );
+
+      if (applied === 0) {
+        const err = new Error(
+          'Stock was changed by someone else while you were editing. Reload and try again.'
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+
+    if (uploadedImages.length > 0) {
+      await dbCmds.deleteImagesByProductId(productData.id, conn);
+      await dbCmds.insertImages(productData.id, uploadedImages, conn);
+    }
+  });
 
   return true;
 };

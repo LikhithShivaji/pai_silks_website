@@ -3,6 +3,7 @@ const dbCmds = require('../../dbOps/customerDbOps');
 const utils = require('../../utils/utils');
 const appDefines = require('../../constants/appDefines');
 const { sanitizeError } = require('../../utils/safeError');
+const { withTransaction } = require('../../dbOps/withTransaction');
 
 async function loginCustomerUser(userData) {
   try {
@@ -21,52 +22,69 @@ async function loginCustomerUser(userData) {
       appDefines.expiryTime.sessionExpiryTime / 1000
     );
 
-    const active = await dbCmds.getActiveSessionsForUser(
-      userData.user_id,
-      appDefines.SESSION_STATES.SESSION_ACTIVE,
-      maxAgeSeconds
-    );
-
-    // Oldest first, so evict from the front until there is room for one more.
-    const overBy = active.length - (appDefines.MAX_ACTIVE_SESSIONS - 1);
-    for (let i = 0; i < overBy; i++) {
-      await dbCmds.logoutSessionBySessionId(
-        active[i].session_id,
-        userData.user_id,
-        appDefines.SESSION_STATES.SESSION_LOGOUT
-      );
-    }
-
-    // Create new session_id & token.
+    // Count, evict and insert must be ONE atomic unit.
     //
-    // The token is now a signed JWT carrying { user_id, role_id, session_id }
-    // rather than sha256(user_id + Date.now()). See CLAUDE.md CB-24.
-    const session_id = utils.createSessionId();
-    const login_token = utils.signToken({
-      user_id: userData.user_id,
-      role_id: userData.role_id,
-      session_id,
+    // Without the lock this is a check-then-act race: concurrent logins all
+    // read the same session count, all conclude there is room, and all insert.
+    // Demonstrated on the admin side before the fix — SIX simultaneous logins
+    // produced FOUR active sessions against a cap of two. See CLAUDE.md AB-15.
+    //
+    // The lock is on the master_user row, not on the session rows: locking
+    // `session` would lock only rows that already match, so a user with zero
+    // active sessions would have nothing locked and the race would survive.
+    return withTransaction(async (conn) => {
+      await dbCmds.lockUserForSessionUpdate(userData.user_id, conn);
+
+      const active = await dbCmds.getActiveSessionsForUser(
+        userData.user_id,
+        appDefines.SESSION_STATES.SESSION_ACTIVE,
+        maxAgeSeconds,
+        conn
+      );
+
+      // Oldest first, so evict from the front until there is room for one more.
+      const overBy = active.length - (appDefines.MAX_ACTIVE_SESSIONS - 1);
+      for (let i = 0; i < overBy; i++) {
+        await dbCmds.logoutSessionBySessionId(
+          active[i].session_id,
+          userData.user_id,
+          appDefines.SESSION_STATES.SESSION_LOGOUT,
+          conn
+        );
+      }
+
+      // Created inside the same transaction, so the count above and this
+      // insert cannot be separated by another login.
+      //
+      // The token is a signed JWT carrying { user_id, role_id, session_id }
+      // rather than sha256(user_id + Date.now()). See CLAUDE.md CB-24.
+      const session_id = utils.createSessionId();
+      const login_token = utils.signToken({
+        user_id: userData.user_id,
+        role_id: userData.role_id,
+        session_id,
+      });
+
+      const sid = await dbCmds.insertNewCustomerSession(
+        userData.user_id,
+        userData.pri_email,
+        session_id,
+        login_token,
+        appDefines.SESSION_STATES.SESSION_ACTIVE,
+        conn
+      );
+
+      return {
+        pri_email: userData.pri_email,
+        sid,
+        success: true,
+        session_id,
+        token: login_token,
+        user_status_id: userData.user_status_id,
+        lang_id: userData.lang_id,
+        role_id: userData.role_id,
+      };
     });
-
-    // Insert new session
-    const sid = await dbCmds.insertNewCustomerSession(
-      userData.user_id,
-      userData.pri_email,
-      session_id,
-      login_token,
-      appDefines.SESSION_STATES.SESSION_ACTIVE
-    );
-
-    return {
-      pri_email: userData.pri_email,
-      sid,
-      success: true,
-      session_id,
-      token: login_token,
-      user_status_id: userData.user_status_id,
-      lang_id: userData.lang_id,
-      role_id: userData.role_id,
-    };
   } catch (error) {
     // `appConstants` was referenced here but never imported, so this catch
     // block threw ReferenceError and destroyed the original error.

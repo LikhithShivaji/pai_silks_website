@@ -7,6 +7,7 @@ const productManager = require('../components/productManager/productManager')
 const customerSignupManager = require('../components/customerLoginManager/customerSignupManager');
 const bcrypt = require('bcrypt');
 const { sanitizeError } = require('../utils/safeError');
+const { withTransaction } = require('../dbOps/withTransaction');
 
 exports.customerSignup = async (req, res) => {
   try {
@@ -629,24 +630,37 @@ exports.createOrder = async (req, res) => {
       }
     }
 
-    // 4️⃣ Create order
-    const order_id = await productManager.createOrder(
-      user_id,
-      total_amount,
-      shipping_address,
-      payment_method,
-      payment_status,
-      status
-    );
+    // 4️⃣-6️⃣ Order, items, stock and cart are ONE unit.
+    //
+    // These were four independent writes. A failure partway — most likely
+    // reduceStock losing a race for the last unit — left the order row created,
+    // items recorded for only some products, stock reduced for only some, and
+    // the customer's cart STILL FULL. They would see an error, retry, and place
+    // a second order for things the first had already taken stock for.
+    //
+    // The stock check at step 3 does not prevent this: another customer can buy
+    // the last unit between that check and the decrement here. The transaction
+    // is what makes the whole sequence all-or-nothing. See CLAUDE.md CB-06.
+    const order_id = await withTransaction(async (conn) => {
+      const newOrderId = await productManager.createOrder(
+        user_id,
+        total_amount,
+        shipping_address,
+        payment_method,
+        payment_status,
+        status,
+        conn
+      );
 
-    // 5️⃣ Add order items & reduce stock
-    for (const item of mappedItems) {
-      await productManager.addOrderItem(order_id, item.product_id, item.quantity, item.price);
-      await productManager.reduceStock(item.product_id, item.quantity);
-    }
+      for (const item of mappedItems) {
+        await productManager.addOrderItem(newOrderId, item.product_id, item.quantity, item.price, conn);
+        await productManager.reduceStock(item.product_id, item.quantity, conn);
+      }
 
-    // 6️⃣ Clear cart
-    await productManager.clearCart(user_id);
+      await productManager.clearCart(user_id, conn);
+
+      return newOrderId;
+    });
 
     // Return the authoritative amounts the server actually charged, so the
     // client can display them rather than recomputing its own figure.

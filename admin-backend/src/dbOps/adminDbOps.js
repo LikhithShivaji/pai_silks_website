@@ -32,9 +32,9 @@ class Cmds {
     }
 
     //create a new session
-    async insertNewSession(user_id, pri_email, session_id, login_token, SESSION_ACTIVE) {
+    async insertNewSession(user_id, pri_email, session_id, login_token, SESSION_ACTIVE, conn = null) {
         try {
-            const [result] = await pool.query(
+            const [result] = await (conn || pool).query(
                 sqlqueries.login.createNewSession,
                 [session_id, user_id, pri_email, login_token, SESSION_ACTIVE]
             );
@@ -88,9 +88,18 @@ class Cmds {
      * All ACTIVE, unexpired sessions for a user, OLDEST FIRST.
      * Used to enforce the 2-device cap at login.
      */
-    async getActiveSessionsForUser(user_id, activeStatus, maxAgeSeconds) {
+    /**
+     * Take an exclusive lock on the user row for the rest of the transaction.
+     * Serialises concurrent logins so the device-cap check cannot race.
+     * See CLAUDE.md AB-15.
+     */
+    async lockUserForSessionUpdate(user_id, conn) {
+        await conn.query(sqlqueries.login.lockUserForSessionUpdate, [user_id]);
+    }
+
+    async getActiveSessionsForUser(user_id, activeStatus, maxAgeSeconds, conn = null) {
         try {
-            const [rows] = await pool.query(
+            const [rows] = await (conn || pool).query(
                 sqlqueries.login.getActiveSessionsForUser,
                 [user_id, activeStatus, maxAgeSeconds]
             );
@@ -105,9 +114,9 @@ class Cmds {
      * Revoke a session by session_id, scoped to its owner.
      * @returns {number} rows affected — 0 means nothing matched
      */
-    async logoutSessionBySessionId(session_id, user_id, logoutStatus) {
+    async logoutSessionBySessionId(session_id, user_id, logoutStatus, conn = null) {
         try {
-            const [result] = await pool.query(
+            const [result] = await (conn || pool).query(
                 sqlqueries.login.logoutSessionBySessionId,
                 [logoutStatus, session_id, user_id]
             );
@@ -118,13 +127,16 @@ class Cmds {
         }
     }
 
-    async createProduct(productData) {
+    async createProduct(productData, conn = null) {
+    // `conn` lets this join a caller's transaction. Without it the query grabs
+    // its own pool connection — a separate conversation with the database that
+    // commits independently and that a rollback cannot reach. See withTransaction.
         try {
 
             const isNewRelease = productData.is_new_release !== undefined 
             ? Number(productData.is_new_release)
             : 0;
-            const [result] = await pool.query(sqlqueries.product.insertProduct, [productData.name,
+            const [result] = await (conn || pool).query(sqlqueries.product.insertProduct, [productData.name,
             productData.description || null,
             productData.category || null,
             productData.collection || null,
@@ -145,9 +157,12 @@ class Cmds {
         }
     }
 
-    async insertProductStock(product_id, stock_qty) {
+    async insertProductStock(product_id, stock_qty, conn = null) {
+    // `conn` lets this join a caller's transaction. Without it the query grabs
+    // its own pool connection — a separate conversation with the database that
+    // commits independently and that a rollback cannot reach. See withTransaction.
         try {
-            await pool.query(
+            await (conn || pool).query(
             sqlqueries.product.insertProductStock,
             [product_id, stock_qty ?? 0]
     );
@@ -217,9 +232,12 @@ class Cmds {
         }
     }
 
-async updateProduct(productData) {
+async updateProduct(productData, conn = null) {
+    // `conn` lets this join a caller's transaction. Without it the query grabs
+    // its own pool connection — a separate conversation with the database that
+    // commits independently and that a rollback cannot reach. See withTransaction.
   try {
-    await pool.query(sqlqueries.product.updateProduct, [
+    const [result] = await (conn || pool).query(sqlqueries.product.updateProduct, [
       productData.name,
       productData.description || null,
       productData.category || null,
@@ -233,18 +251,40 @@ async updateProduct(productData) {
       productData.is_new_release,
       productData.id
     ]);
+
+    // The query now carries `AND is_deleted = 0`, so 0 rows means the product
+    // either does not exist or has been deleted. Returning the count lets the
+    // caller answer 404 rather than reporting a success that never happened —
+    // the AB-13 mistake, where a guard existed but its result was never read.
+    // See CLAUDE.md AB-12s.
+    return result.affectedRows;
   } catch (err) {
     console.error("Error in updateProduct:", sanitizeError(err));
     throw err;
   }
 }
 
-async updateProductStock(product_id, stock_qty) {
-  await pool.query(
-    sqlqueries.product.updateProductStock,
-    [stock_qty, product_id]
-  );
+/**
+ * Compare-and-swap stock update.
+ *
+ * @param expected_stock_qty what the admin saw when the form loaded
+ * @returns {number} affectedRows — 0 means someone else changed it first
+ *
+ * See CLAUDE.md AB-15b and the note on updateProductStockCAS in sqlQueries.
+ */
+async updateProductStockCAS(product_id, stock_qty, expected_stock_qty, conn = null) {
+    try {
+        const [result] = await (conn || pool).query(
+            sqlqueries.product.updateProductStockCAS,
+            [stock_qty, product_id, expected_stock_qty]
+        );
+        return result.affectedRows;
+    } catch (err) {
+        console.error("Error in updateProductStockCAS:", sanitizeError(err));
+        throw err;
+    }
 }
+
 
 
 
@@ -274,8 +314,11 @@ async updateProductStock(product_id, stock_qty) {
     }
 
   // Delete all images for a product
-    async deleteImagesByProductId(product_id) {
-        const [result] = await pool.query(sqlqueries.product.deleteImagesByProductId, [product_id]);
+    async deleteImagesByProductId(product_id, conn = null) {
+    // `conn` lets this join a caller's transaction. Without it the query grabs
+    // its own pool connection — a separate conversation with the database that
+    // commits independently and that a rollback cannot reach. See withTransaction.
+        const [result] = await (conn || pool).query(sqlqueries.product.deleteImagesByProductId, [product_id]);
         return result.affectedRows;
     }
 
@@ -292,7 +335,10 @@ async updateProductStock(product_id, stock_qty) {
     }
 
 
-    async insertImages(product_id, images) {
+    async insertImages(product_id, images, conn = null) {
+    // `conn` lets this join a caller's transaction. Without it the query grabs
+    // its own pool connection — a separate conversation with the database that
+    // commits independently and that a rollback cannot reach. See withTransaction.
   try {
     const values = images.map(img => [
       product_id,
@@ -300,7 +346,7 @@ async updateProductStock(product_id, stock_qty) {
       img.is_primary_image ?? 0
     ]);
 
-    const [result] = await pool.query(
+    const [result] = await (conn || pool).query(
       sqlqueries.product.insertImage,
       [values] // 👈 IMPORTANT: array of arrays
     );

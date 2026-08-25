@@ -22,6 +22,7 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
     washCare: "",
     collection: "",
     stockQty: "",
+    loadedStockQty: 0,
     regularPrice: "",
     discountedPrice: "",
     isNewRelease: false,
@@ -41,6 +42,10 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
       washCare: updateProductDetails.product_wash_care ?? updateProductDetails.washCare ?? "",
       collection: updateProductDetails.collection ?? "",
       stockQty: updateProductDetails.stock_qty ?? updateProductDetails.stockQty ?? "",
+      // The stock value this form LOADED with. Sent back as expected_stock_qty
+      // so the server can refuse the update if another admin changed stock
+      // meanwhile, instead of silently discarding their edit. See AB-15b.
+      loadedStockQty: updateProductDetails.stock_qty ?? updateProductDetails.stockQty ?? 0,
       regularPrice: updateProductDetails.regular_price ?? updateProductDetails.regularPrice ?? "",
       discountedPrice: updateProductDetails.selling_price ?? updateProductDetails.discountedPrice ?? "",
       isNewRelease: Number(updateProductDetails.isNewRelease) === 1 || updateProductDetails.isNewRelease === true,
@@ -124,6 +129,7 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
     formData.append("regular_price", Number(newProduct.regularPrice) || 0);
     formData.append("selling_price", Number(newProduct.discountedPrice) || 0);
     formData.append("stock_qty", Number(newProduct.stockQty) || 0);
+    formData.append("expected_stock_qty", Number(newProduct.loadedStockQty) || 0);
     formData.append("is_new_release", newProduct.isNewRelease ? 1 : 0);
     formData.append("updated_at", nowForDb);
 

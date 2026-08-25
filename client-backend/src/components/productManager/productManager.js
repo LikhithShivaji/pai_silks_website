@@ -252,7 +252,7 @@ const addToCart = async (user_id, product_id) => {
 
 
 // Create order
-const createOrder = async (user_id, total_amount, shipping_address, payment_method, payment_status, status) => {
+const createOrder = async (user_id, total_amount, shipping_address, payment_method, payment_status, status, conn = null) => {
   try {
     const order_id = await dbCmds.createOrder(
       user_id,
@@ -260,7 +260,8 @@ const createOrder = async (user_id, total_amount, shipping_address, payment_meth
       shipping_address,
       payment_method,
       payment_status,
-      status
+      status,
+      conn
     );
     return order_id;
   } catch (err) {
@@ -270,9 +271,9 @@ const createOrder = async (user_id, total_amount, shipping_address, payment_meth
 };
 
 // Add item to order
-const addOrderItem = async (order_id, product_id, quantity, price) => {
+const addOrderItem = async (order_id, product_id, quantity, price, conn = null) => {
   try {
-    return await dbCmds.addOrderItem(order_id, product_id, quantity, price);
+    return await dbCmds.addOrderItem(order_id, product_id, quantity, price, conn);
   } catch (err) {
     console.error("Error in addOrderItem:", sanitizeError(err));
     throw err;
@@ -280,9 +281,9 @@ const addOrderItem = async (order_id, product_id, quantity, price) => {
 };
 
 // Reduce stock
-const reduceStock = async (product_id, quantity) => {
+const reduceStock = async (product_id, quantity, conn = null) => {
   try {
-    return await dbCmds.reduceStock(product_id, quantity);
+    return await dbCmds.reduceStock(product_id, quantity, conn);
   } catch (err) {
     console.error("Error in reduceStock:", sanitizeError(err));
     throw err;
@@ -290,9 +291,9 @@ const reduceStock = async (product_id, quantity) => {
 };
 
 // Clear user's cart
-const clearCart = async (user_id) => {
+const clearCart = async (user_id, conn = null) => {
   try {
-    return await dbCmds.clearCart(user_id);
+    return await dbCmds.clearCart(user_id, conn);
   } catch (err) {
     console.error("Error in clearCart:", sanitizeError(err));
     throw err;

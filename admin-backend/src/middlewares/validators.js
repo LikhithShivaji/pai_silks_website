@@ -69,7 +69,14 @@ const createProduct = [
 
   body('category').optional({ values: 'falsy' }).trim()
     .isLength({ max: 100 }).withMessage('Category is too long.'),
-  body('collection').optional({ values: 'falsy' }).trim()
+  // REQUIRED, not optional: product.collection is NOT NULL with no default.
+  // Marking it optional here meant an omitted collection reached the INSERT as
+  // null and failed with ER_BAD_NULL_ERROR — surfacing to the admin as a
+  // generic 500 with no indication of which field was wrong. Caught while
+  // testing the createProduct transaction.
+  body('collection')
+    .trim()
+    .notEmpty().withMessage('Collection is required.')
     .isLength({ max: 100 }).withMessage('Collection is too long.'),
   body('material').optional({ values: 'falsy' }).trim()
     .isLength({ max: 100 }).withMessage('Material is too long.'),

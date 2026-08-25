@@ -7,7 +7,7 @@ const utils = require('../utils/utils');
 const appDefines = require('../constants/appDefines');
 const CookiesKey = require('../constants/cookieKeys');
 const admindb = require('../dbOps/adminDbOps'); // adjust path if needed
-const { sanitizeError } = require('../utils/safeError');
+const { sanitizeError, describeDuplicate } = require('../utils/safeError');
 
 // adminController.js
 
@@ -143,11 +143,23 @@ exports.createProduct = async (req, res) => {
     });
 
   } catch (error) {
+    // product.product_code is UNIQUE. Without this branch a duplicate code
+    // surfaced as a generic 500, leaving the admin no way to know which field
+    // was wrong. Found by auditing every UNIQUE index against its write path.
+    // See CLAUDE.md AB-10c.
+    const duplicate = describeDuplicate(error);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: duplicate.message,
+        field: duplicate.field,
+      });
+    }
+
     console.error("Error in createProduct Controller:", sanitizeError(error));
     res.status(500).json({
       success: false,
       message: 'Something went wrong. Please try again.',
-      
     });
   }
 };
@@ -233,6 +245,31 @@ exports.updateProduct = async (req, res) => {
       message: "Product updated successfully",
     });
   } catch (error) {
+    // Same UNIQUE constraint as createProduct, reached by a different path:
+    // editing a product to use a product_code another product already has.
+    // Missed on the first pass — createProduct and addCategory were handled but
+    // this was not, so the admin got a generic 500 with no idea which field
+    // clashed. See CLAUDE.md AB-10c.
+    const duplicate = describeDuplicate(error);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: duplicate.message,
+        field: duplicate.field,
+      });
+    }
+
+    // Deliberate, admin-facing failures: 404 product missing/deleted (AB-12s),
+    // 409 concurrent-edit conflict (AB-15b), 400 missing expected_stock_qty.
+    // These carry a message written FOR the admin, so pass it through rather
+    // than flattening it to the generic text.
+    if ([400, 404, 409].includes(error.statusCode)) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
     console.error("Error in updateProduct Controller:", sanitizeError(error));
     res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
@@ -311,7 +348,6 @@ exports.deleteProduct = async (req, res) => {
 };
 
 
-
 exports.addCategory = async (req, res) => {
   try {
     const { name } = req.body;
@@ -320,6 +356,18 @@ exports.addCategory = async (req, res) => {
     const newCategory = await productManager.addCategory(name);
     return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
   } catch (error) {
+    // category.name is UNIQUE. Adding an existing category previously returned
+    // a generic 500 instead of saying it already exists. See AB-10c.
+    const duplicate = describeDuplicate(error);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: duplicate.message,
+        field: duplicate.field,
+      });
+    }
+
+    console.error("Error in addCategory Controller:", sanitizeError(error));
     return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
   }
 };
@@ -333,63 +381,6 @@ exports.getAllCategories = async (req, res) => {
   }
 };
 
-exports.deleteAllCategories = async (req, res) => {
-  try {
-    await productManager.deleteAllCategories();
-    return res.status(200).json({ success: true, message: "All categories deleted successfully" });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-  }
-};exports.addCategory = async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
-
-    const newCategory = await productManager.addCategory(name);
-    return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-  }
-};
-
-exports.getAllCategories = async (req, res) => {
-  try {
-    const categories = await productManager.getAllCategories();
-    return res.status(200).json({ success: true, data: categories });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-  }
-};
-
-exports.deleteAllCategories = async (req, res) => {
-  try {
-    await productManager.deleteAllCategories();
-    return res.status(200).json({ success: true, message: "All categories deleted successfully" });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-  }
-};
-
-exports.addCategory = async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Category name is required" });
-
-    const newCategory = await productManager.addCategory(name);
-    return res.status(201).json({ success: true, data: newCategory, message: "Category added successfully" });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-  }
-};
-
-exports.getAllCategories = async (req, res) => {
-  try {
-    const categories = await productManager.getAllCategories();
-    return res.status(200).json({ success: true, data: categories });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-  }
-};
 
 exports.deleteCategory = async (req, res) => {
   try {
@@ -473,6 +464,5 @@ exports.verifyToken = async (req, res) => {
     },
   });
 };
-
 
 

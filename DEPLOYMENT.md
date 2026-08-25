@@ -198,6 +198,55 @@ This is `SEC-02b` in `CLAUDE.md`.
 > bug it fixes. Local was clean; production may not be. The migration file's
 > header contains a pre-flight query and the SQL to collapse duplicates first.
 
+---
+
+## Clearing the placeholder catalogue before handover
+
+The current products, customers and orders are all placeholder data. Before the
+client takes over, that gets wiped and replaced with their real inventory.
+
+**Since migration 005 added foreign keys, deletion order now matters.** A plain
+`DELETE FROM product` fails:
+
+```
+ERROR 1451: Cannot delete or update a parent row: a foreign key constraint
+fails (`db`.`order_items`, CONSTRAINT `fk_order_items_product`)
+```
+
+That is the `RESTRICT` rule working as designed — it exists so a stray delete
+can never destroy sales history. For a deliberate reset you remove the
+referencing rows first:
+
+```sql
+-- 1. sales records first (RESTRICT blocks everything until these are gone)
+DELETE FROM order_items;
+DELETE FROM orders;
+DELETE FROM payments;
+DELETE FROM shipments;
+
+-- 2. now products can go. cart, wishlist, product_images and product_stock
+--    are ON DELETE CASCADE, so they clear themselves.
+DELETE FROM product;
+
+-- 3. customers, if those are being cleared too. Keep the admin (role_id = 0).
+DELETE FROM session     WHERE user_id IN (SELECT user_id FROM master_user WHERE role_id <> 0);
+DELETE FROM master_user WHERE role_id <> 0;
+
+-- 4. optional: restart ids from 1 so the client's first product is #1
+ALTER TABLE product      AUTO_INCREMENT = 1;
+ALTER TABLE orders       AUTO_INCREMENT = 1;
+ALTER TABLE master_user  AUTO_INCREMENT = 2;   -- 1 is the admin
+```
+
+> **Take a dump first.** `mysqldump -u root -p db > pre-handover-backup.sql`.
+> None of the above is reversible, and step 1 destroys the only record that
+> those orders ever existed.
+
+> Do **not** delete the admin row (`role_id = 0`) — it is the only way into the
+> panel. Rotate its credentials instead (`SEC-02b`).
+
+---
+
 ### Deploy order
 
 ```

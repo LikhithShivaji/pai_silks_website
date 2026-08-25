@@ -51,4 +51,39 @@ const sanitizeError = (err) => {
   };
 };
 
-module.exports = { sanitizeError, redactQuoted };
+/**
+ * Map a UNIQUE-constraint violation onto the field a human can act on.
+ *
+ * Every UNIQUE index in this schema was audited against its write path
+ * (2026-08-25). Three were unhandled and surfaced as a generic 500, leaving the
+ * admin with no idea which field was the problem:
+ *
+ *   product.product_code   creating a product with a code already in use
+ *   category.name          adding a category that already exists
+ *   master_user.pri_email  handled already, in customerSignup
+ *
+ * mysql2 puts the constraint name in err.message, e.g.
+ *   Duplicate entry 'DUPTEST-1' for key 'product.product_code'
+ * The offending VALUE is deliberately not echoed back — for pri_email that
+ * would confirm to an attacker that an account exists (CB-27).
+ *
+ * @returns {{field:string, message:string}|null} null when not a duplicate error
+ */
+const DUPLICATE_FIELDS = [
+  { key: 'product_code', field: 'product_code', message: 'That product code is already in use.' },
+  { key: 'category.name', field: 'name',        message: 'That category already exists.' },
+  { key: 'pri_email',    field: 'pri_email',    message: 'Email already registered.' },
+  { key: 'uniq_cart_user_product',     field: 'product_id', message: 'That item is already in the cart.' },
+  { key: 'uniq_product_stock_product', field: 'product_id', message: 'That product already has a stock record.' },
+];
+
+const describeDuplicate = (err) => {
+  if (!err || err.code !== 'ER_DUP_ENTRY') return null;
+  const raw = String(err.message || '');
+  const hit = DUPLICATE_FIELDS.find(({ key }) => raw.includes(key));
+  return hit
+    ? { field: hit.field, message: hit.message }
+    : { field: null, message: 'That value is already in use.' };
+};
+
+module.exports = { sanitizeError, redactQuoted, describeDuplicate };

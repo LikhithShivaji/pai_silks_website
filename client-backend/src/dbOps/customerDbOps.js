@@ -71,9 +71,9 @@ async insertCustomerUser(userData) {
   }
 
   // Create a new customer session
-  async insertNewCustomerSession(user_id, pri_email, session_id, login_token, SESSION_ACTIVE) {
+  async insertNewCustomerSession(user_id, pri_email, session_id, login_token, SESSION_ACTIVE, conn = null) {
     try {
-      const [result] = await pool.query(
+      const [result] = await (conn || pool).query(
         sqlqueries.login.createNewSession,
         [session_id, user_id, pri_email, login_token, SESSION_ACTIVE]
       );
@@ -145,9 +145,17 @@ async getUserById(user_id) {
    * All ACTIVE, unexpired sessions for a user, OLDEST FIRST.
    * Used to enforce the 2-device cap at login.
    */
-  async getActiveSessionsForUser(user_id, activeStatus, maxAgeSeconds) {
+  /**
+   * Take an exclusive lock on the user row for the rest of the transaction.
+   * Serialises concurrent logins so the device-cap check cannot race. AB-15.
+   */
+  async lockUserForSessionUpdate(user_id, conn) {
+    await conn.query(sqlqueries.login.lockUserForSessionUpdate, [user_id]);
+  }
+
+  async getActiveSessionsForUser(user_id, activeStatus, maxAgeSeconds, conn = null) {
     try {
-      const [rows] = await pool.query(
+      const [rows] = await (conn || pool).query(
         sqlqueries.login.getActiveSessionsForUser,
         [user_id, activeStatus, maxAgeSeconds]
       );
@@ -164,9 +172,9 @@ async getUserById(user_id) {
    *
    * @returns {number} rows affected — 0 means nothing matched
    */
-  async logoutSessionBySessionId(session_id, user_id, logoutStatus) {
+  async logoutSessionBySessionId(session_id, user_id, logoutStatus, conn = null) {
     try {
-      const [result] = await pool.query(
+      const [result] = await (conn || pool).query(
         sqlqueries.login.logoutSessionBySessionId,
         [logoutStatus, session_id, user_id]
       );
@@ -424,8 +432,11 @@ async checkCart(user_id, product_id) {
 // ==========================
 
   // Create Order
-  async createOrder(user_id, total_amount, shipping_address, payment_method, payment_status, status) {
-    const [result] = await pool.query(sqlqueries.order.createOrder, [
+  // `conn` lets these join a caller's transaction. Without it each query grabs
+  // its own pool connection — a separate conversation with the database that
+  // commits independently and that a rollback cannot reach. See withTransaction.
+  async createOrder(user_id, total_amount, shipping_address, payment_method, payment_status, status, conn = null) {
+    const [result] = await (conn || pool).query(sqlqueries.order.createOrder, [
       user_id,
       total_amount,
       shipping_address,
@@ -437,8 +448,8 @@ async checkCart(user_id, product_id) {
   }
 
   // Add Order Items
-  async addOrderItem(order_id, product_id, quantity, price) {
-    await pool.query(sqlqueries.order.addOrderItem, [
+  async addOrderItem(order_id, product_id, quantity, price, conn = null) {
+    await (conn || pool).query(sqlqueries.order.addOrderItem, [
       order_id,
       product_id,
       quantity,
@@ -449,28 +460,29 @@ async checkCart(user_id, product_id) {
 
 
   // Reduce stock
-  async reduceStock(product_id, quantity) {
+  async reduceStock(product_id, quantity, conn = null) {
 
     // 1. Force convert to Numbers to prevent string concatenation issues
     const pId = Number(product_id);
     const qty = Number(quantity);
 
-    console.log(`--- Stock Update Attempt ---`);
-    console.log(`Target Product ID: ${pId}, Subtraction Qty: ${qty}`);
-    const [result] = await pool.query(sqlqueries.stock.reduceStock, [
-      quantity,
-      product_id,
-      quantity
+    // These coerced values were computed and then NOT USED — the query received
+    // the original un-coerced arguments, so the very problem the comment above
+    // describes was still live. They were only ever read by the console.log
+    // below. See CLAUDE.md CB-31.
+    const [result] = await (conn || pool).query(sqlqueries.stock.reduceStock, [
+      qty,
+      pId,
+      qty
     ]);
-    console.log(`Rows affected: ${result.affectedRows}`);
     if (result.affectedRows === 0) {
-      throw new Error(`Insufficient  stock for product_id ${product_id}`);
+      throw new Error(`Insufficient stock for product_id ${pId}`);
     }
   }
 
   // Clear cart
-  async clearCart(user_id) {
-    await pool.query(sqlqueries.cart.clearCart, [user_id]);
+  async clearCart(user_id, conn = null) {
+    await (conn || pool).query(sqlqueries.cart.clearCart, [user_id]);
   }
 
   

@@ -51,4 +51,41 @@ const sanitizeError = (err) => {
   };
 };
 
-module.exports = { sanitizeError, redactQuoted };
+/**
+ * Map a UNIQUE-constraint violation onto the field a human can act on.
+ *
+ * Every UNIQUE index in this schema was audited against its write path
+ * (2026-08-25). The ones this service can hit:
+ *
+ *   master_user.pri_email        signup — already handled in customerSignup
+ *   cart(user_id, product_id)    handled by ON DUPLICATE KEY UPDATE
+ *   wishlist(user_id, product_id) handled by an existence check before insert
+ *
+ * The list is kept identical to admin-backend's copy so the two services give
+ * the same message for the same constraint. Both write to `master_user`.
+ *
+ * mysql2 puts the constraint name in err.message, e.g.
+ *   Duplicate entry 'x@y.com' for key 'master_user.pri_email'
+ * The offending VALUE is deliberately not echoed back — for pri_email that
+ * would confirm to an attacker that an account exists (CB-27).
+ *
+ * @returns {{field:string, message:string}|null} null when not a duplicate error
+ */
+const DUPLICATE_FIELDS = [
+  { key: 'product_code', field: 'product_code', message: 'That product code is already in use.' },
+  { key: 'category.name', field: 'name',        message: 'That category already exists.' },
+  { key: 'pri_email',    field: 'pri_email',    message: 'Email already registered.' },
+  { key: 'uniq_cart_user_product',     field: 'product_id', message: 'That item is already in the cart.' },
+  { key: 'uniq_product_stock_product', field: 'product_id', message: 'That product already has a stock record.' },
+];
+
+const describeDuplicate = (err) => {
+  if (!err || err.code !== 'ER_DUP_ENTRY') return null;
+  const raw = String(err.message || '');
+  const hit = DUPLICATE_FIELDS.find(({ key }) => raw.includes(key));
+  return hit
+    ? { field: hit.field, message: hit.message }
+    : { field: null, message: 'That value is already in use.' };
+};
+
+module.exports = { sanitizeError, redactQuoted, describeDuplicate };
