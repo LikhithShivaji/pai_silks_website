@@ -3,6 +3,7 @@ const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 const sqlqueries = require('../dbOps/sqlQueries')
 const { sanitizeError } = require('../utils/safeError');
+const appDefines = require('../constants/appDefines');
 
 class Cmds {
 
@@ -172,9 +173,15 @@ class Cmds {
   }
 }
 
+    // The active-status list and the terminal status are bound, not inlined.
+    // mysql2 expands a JS array into an `IN (?)` list, so ORDER_STATUS_ACTIVE
+    // drives the count directly from the enum. See CLAUDE.md AB-17 (a).
     async getOrderStats() {
         try {
-            const [rows] = await pool.query(sqlqueries.dashBoard.getOrderStats);
+            const [rows] = await pool.query(sqlqueries.dashBoard.getOrderStats, [
+                appDefines.ORDER_STATUS_ACTIVE,
+                appDefines.ORDER_STATUS_TERMINAL
+            ]);
             return rows[0]; // single aggregated row
         } catch (error) {
             console.error("Error in getOrderStats:", sanitizeError(error));
@@ -182,20 +189,28 @@ class Cmds {
         }
     }
 
-    async getBestSellers() {
+    async getBestSellers(limit = appDefines.DASHBOARD_LIMITS.BEST_SELLERS) {
         try {
-            const [rows] = await pool.query(sqlqueries.dashBoard.getBestSellers);
-            return rows; // return full list
+            const [rows] = await pool.query(sqlqueries.dashBoard.getBestSellers, [
+                appDefines.ORDER_STATUS_TERMINAL,
+                // Coerced and clamped: LIMIT cannot be a placeholder in every
+                // MySQL configuration path, and an unbounded caller-supplied
+                // limit would re-open the DoS this LIMIT exists to close.
+                Number(limit) > 0 ? Math.min(Number(limit), 100) : appDefines.DASHBOARD_LIMITS.BEST_SELLERS
+            ]);
+            return rows;
         } catch (error) {
             console.error("Error in getBestSellers:", sanitizeError(error));
             throw error;
         }
     }
 
-    async getRecentOrders() {
+    async getRecentOrders(limit = appDefines.DASHBOARD_LIMITS.RECENT_ORDERS) {
         try {
-            const [rows] = await pool.query(sqlqueries.dashBoard.getRecentOrders);
-            return rows; // return full list
+            const [rows] = await pool.query(sqlqueries.dashBoard.getRecentOrders, [
+                Number(limit) > 0 ? Math.min(Number(limit), 100) : appDefines.DASHBOARD_LIMITS.RECENT_ORDERS
+            ]);
+            return rows;
         } catch (error) {
             console.error("Error in getRecentOrders:", sanitizeError(error));
             throw error;

@@ -43,12 +43,40 @@ const sellingNotAboveRegular = body().custom((_, { req }) => {
   return true;
 });
 
+/**
+ * Prices must be GREATER THAN ZERO — not merely non-negative.
+ *
+ * `min: 0` allowed a price of exactly 0, and selling_price was `optional`, so a
+ * product could be saved with no selling price at all. Product 49 in the local
+ * catalogue is exactly that: regular_price 4999.00, selling_price NULL.
+ *
+ * A product with no price is not merely cosmetic. getCart aliases
+ * `p.selling_price AS price`, so such a row reaches checkout with `price: null`
+ * and the order path treats it as unbillable. Before CB-24b was fixed it was
+ * silently dropped from the order and the whole cart was then cleared, so the
+ * customer paid for a subset and lost the rest. See CLAUDE.md CB-24b-data.
+ *
+ * Owner decision, 2026-08-29: neither price may be null, empty or 0.
+ *
+ * MIN_PRICE is 0.01 rather than a bare `> 0` because the column is
+ * DECIMAL(10,2) — anything smaller rounds to 0.00 on write, which would store
+ * exactly the value this rule exists to reject.
+ */
+const MIN_PRICE = 0.01;
+
 const priceRules = (field, label, { optional = false } = {}) => {
   let c = body(field);
-  if (optional) c = c.optional({ values: 'falsy' });
+  // `optional` now means "absent is fine on an update" — it does NOT mean an
+  // empty string or 0 is acceptable. `values: 'undefined'` rather than
+  // 'falsy' is what makes that distinction: '' and 0 are falsy and would
+  // previously have skipped validation entirely.
+  if (optional) c = c.optional({ values: 'undefined' });
   return c
-    .isFloat({ min: 0, max: MAX_DECIMAL_10_2 })
-    .withMessage(`${label} must be a number between 0 and ${MAX_DECIMAL_10_2}.`)
+    .exists({ checkNull: true })
+    .withMessage(`${label} is required and cannot be empty.`)
+    .bail()
+    .isFloat({ min: MIN_PRICE, max: MAX_DECIMAL_10_2 })
+    .withMessage(`${label} must be greater than 0.`)
     .toFloat();
 };
 
@@ -58,8 +86,11 @@ const createProduct = [
     .notEmpty().withMessage('Product name is required.')
     .isLength({ max: 255 }).withMessage('Product name must be 255 characters or fewer.'),
 
+  // Both required on create. selling_price was `optional`, which is how a
+  // product could be created with no price at all and then sit in the catalogue
+  // being unbuyable. See CLAUDE.md CB-24b-data.
   priceRules('regular_price', 'Regular price'),
-  priceRules('selling_price', 'Selling price', { optional: true }),
+  priceRules('selling_price', 'Selling price'),
   sellingNotAboveRegular,
 
   body('stock_qty')

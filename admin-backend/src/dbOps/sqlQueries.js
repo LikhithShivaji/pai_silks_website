@@ -132,7 +132,37 @@ const sqlqueries = {
     },
 
     dashBoard: {
-        getOrderStats: `SELECT COUNT(*) AS totalOrders, SUM(status = 'Active') AS activeOrders, SUM(status = 'Delivered') AS completedOrders FROM orders`,
+        // Two bugs, both silent.
+        //
+        // 1. It counted SUM(status = 'Active'). 'Active' is not — and never was
+        //    — one of the six statuses this system writes, so the admin's
+        //    "Active Orders" card read 0 permanently. Verified with one order
+        //    in each of the six states: 10 orders in the table, SQL reported 0
+        //    active. Now driven by appDefines.ORDER_STATUS_ACTIVE via an IN
+        //    list, so the enum is the single source of truth.
+        //
+        // 2. SUM() over zero rows returns NULL, not 0 — verified
+        //    (SELECT SUM(status='Delivered') FROM orders WHERE 1=0 -> NULL).
+        //    That matters at HANDOVER: the placeholder data gets wiped before
+        //    the client takes over, so the very first dashboard they load has
+        //    an empty orders table and would render null. COALESCE fixes it.
+        //
+        // The status list is bound as a single array parameter (mysql2 expands
+        // `IN (?)` from an array), so this stays a bound query with no string
+        // building.
+        //
+        // CAST(... AS UNSIGNED) because SUM() returns DECIMAL and mysql2 maps
+        // DECIMAL to a STRING to avoid float precision loss. Without the cast
+        // this endpoint returned {totalOrders: 4, activeOrders: "0"} — a number
+        // and two strings in the same object, so `stats.active + 1` would have
+        // produced "01". Counts are integers; money stays DECIMAL.
+        // See CLAUDE.md AB-17 (a).
+        getOrderStats: `
+            SELECT COUNT(*) AS totalOrders,
+                   CAST(COALESCE(SUM(status IN (?)), 0) AS UNSIGNED) AS activeOrders,
+                   CAST(COALESCE(SUM(status = ?),   0) AS UNSIGNED) AS completedOrders
+              FROM orders
+        `,
         // p.is_deleted = 0 — a product removed from the catalogue should not
         // appear in a "best sellers" list the admin uses to decide what to
         // restock. The CLIENT's getBestSellers already filtered this; the two
@@ -140,18 +170,130 @@ const sqlqueries = {
         //
         // Note this is the bestseller LIST, not order history: past orders for
         // a deleted product are still visible via getOrderItems, deliberately.
-        getBestSellers: `SELECT p.id, p.name, p.selling_price, SUM(oi.quantity) AS total_sales, SUM(oi.price * oi.quantity) AS total_revenue FROM order_items oi JOIN product p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.order_id WHERE o.status = 'Delivered' AND p.is_deleted = 0 GROUP BY p.id, p.name, p.selling_price ORDER BY total_sales DESC`,
-        getRecentOrders: `SELECT o.order_id, o.order_date, o.status, o.total_amount, u.user_name AS customer_name FROM orders o JOIN master_user u ON o.user_id = u.user_id ORDER BY o.order_date DESC`
+        // Adds, versus the original:
+        //
+        //   LIMIT          — a query named "best sellers" returned the ENTIRE
+        //                    delivered catalogue, unbounded.
+        //   primary image  — the dashboard needs a thumbnail. Without it the
+        //                    admin panel had to fetch bestsellers from the
+        //                    CLIENT backend instead, which is why the admin
+        //                    dashboard depended on the storefront API being up.
+        //   total_sold     — aliased to match what the UI already reads. The
+        //                    old name was total_sales, which differed from the
+        //                    client backend's field for the same concept.
+        //
+        // total_revenue is SUM(oi.price * oi.quantity) — the price actually
+        // PAID, captured on the order line. The dashboard was instead computing
+        // selling_price × quantity in the browser, i.e. today's price applied to
+        // historical sales. Verified: dropping one saree from ₹1999 to ₹999
+        // made the browser under-report that product by ₹11,000 with nothing
+        // refunded. Money is computed here, in SQL, from what was charged.
+        //
+        // The image subquery (rather than a JOIN) keeps this one row per
+        // product: a LEFT JOIN to product_images multiplies rows when a product
+        // has more than one primary image, which is exactly the AB-16
+        // double-count. Nothing enforces a single primary image.
+        // See CLAUDE.md AB-17 (b).
+        getBestSellers: `
+            SELECT p.id,
+                   p.name,
+                   p.selling_price,
+                   CAST(SUM(oi.quantity) AS UNSIGNED) AS total_sold,
+                   SUM(oi.price * oi.quantity)        AS total_revenue,
+                   (SELECT pi.image_url
+                      FROM product_images pi
+                     WHERE pi.product_id = p.id AND pi.is_primary_image = 1
+                     LIMIT 1)                   AS primary_image
+              FROM order_items oi
+              JOIN product p  ON oi.product_id = p.id
+              JOIN orders  o  ON oi.order_id   = o.order_id
+             WHERE o.status = ? AND p.is_deleted = 0
+             GROUP BY p.id, p.name, p.selling_price
+             ORDER BY total_sold DESC
+             LIMIT ?
+        `,
+
+        // Two fixes:
+        //
+        //   LIMIT      — "recent orders" returned every order ever placed.
+        //   LEFT JOIN  — this was an INNER JOIN on master_user, so an order
+        //                whose customer row was removed vanished entirely.
+        //                That made the dashboard disagree with itself:
+        //                getOrderStats counts orders directly, so the totals
+        //                card and this list would report different numbers with
+        //                no indication why. A missing customer now shows as
+        //                NULL and the order stays visible.
+        // See CLAUDE.md AB-17 (c).
+        getRecentOrders: `
+            SELECT o.order_id,
+                   o.order_date,
+                   o.status,
+                   o.total_amount,
+                   u.user_name AS customer_name
+              FROM orders o
+              LEFT JOIN master_user u ON o.user_id = u.user_id
+             ORDER BY o.order_date DESC
+             LIMIT ?
+        `
     },
 
     orders: {
-        getAllOrderData: `SELECT 
-    o.order_id, o.order_date, o.status, o.shipping_address, o.payment_method, 
-    o.payment_status, oi.product_id, oi.quantity, oi.price, s.shipment_status, 
-    mu.user_name, p.name as product_name, 
+        // o.total_amount and o.shipping_fee are selected because the manager
+        // must NOT recompute the order value by summing these rows.
+        //
+        // The joins below are not one-to-one: `shipments` and `product_images`
+        // can each return multiple rows per order line. Two shipment rows means
+        // every order_item appears twice, so a SUM over these rows doubles the
+        // order — verified: order 10, real total ₹11,996, summed ₹23,992. It is
+        // latent only because `shipments` is empty; it fires the day parcels
+        // are recorded for DTDC / India Post.
+        //
+        // And even with no duplication the sum was already WRONG: it counts
+        // only the line items, while the customer was charged line items plus
+        // shipping. Verified on a real order — customer paid ₹4,099, the admin
+        // panel showed ₹3,999. That one is live on every order placed since the
+        // shipping fee was introduced. See CLAUDE.md AB-16.
+        //
+        // order_item_id is selected so the manager can de-duplicate the product
+        // list by a stable key rather than by position.
+        getAllOrderData: `SELECT
+    o.order_id, o.order_date, o.status, o.shipping_address, o.payment_method,
+    o.total_amount, o.shipping_fee, oi.order_item_id,
+    o.payment_status, oi.product_id, oi.quantity, oi.price, s.shipment_status,
+    mu.user_name,
+    -- The "Contact Number" column in the admin order table rendered blank for
+    -- every order, and the search box labelled "Search by phone number or order
+    -- ID" could never match a phone, because no phone was ever selected here.
+    -- See CLAUDE.md AB-42.
+    --
+    -- COALESCE order matters: the per-order delivery contact wins, because that
+    -- is the number the customer gave for THIS parcel. The account phone is
+    -- only the fallback, used for orders placed before migration 007 added
+    -- contact_phone (all four existing orders) or where none was captured.
+    COALESCE(o.contact_phone, mu.phone_number) AS contact_number,
+    p.name as product_name,
     pi.image_url -- Select the image URL here
-    FROM orders o 
-    JOIN order_items oi ON oi.order_id = o.order_id 
+    FROM orders o
+    -- LEFT, not INNER. An INNER JOIN dropped any order with no order_items
+    -- rows from the result entirely, so such an order was INVISIBLE in the
+    -- admin panel: the customer may have been charged, and the operator could
+    -- not find the order to investigate.
+    --
+    -- These cannot be created any more — CB-06 wrapped checkout in a
+    -- transaction, verified: a crash after the order row is written now rolls
+    -- it back. But production still runs the pre-transaction code, so it may
+    -- already hold some, and this is how they become visible.
+    --
+    -- Requires the nullish-coalescing guard on product_list in
+    -- normalizeOrders: without it, surfacing one of these orders throws inside
+    -- the promise chain and takes the ENTIRE order list down silently. Guards
+    -- shipped first, in the same slice. See CLAUDE.md AF-C-FIX.
+    --
+    -- NOTE: no backticks in these comments. This is a JS template literal, so a
+    -- backtick here silently TERMINATES the query string mid-statement — the
+    -- file still parses, and MySQL then fails with a confusing
+    -- "Unknown column 'oi.order_item_id'" because every JOIN below was cut off.
+    LEFT JOIN order_items oi ON oi.order_id = o.order_id
     LEFT JOIN shipments s ON s.order_id = o.order_id 
     LEFT JOIN master_user mu ON mu.user_id = o.user_id 
     LEFT JOIN product p ON p.id = oi.product_id

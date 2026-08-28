@@ -49,5 +49,39 @@ module.exports = {
         'Shipped',
         'Out for Delivery',
         'Delivered'
-    ]
+    ],
+
+    /**
+     * Dashboard groupings, derived from ORDER_STATUSES above.
+     *
+     * These exist because the dashboard had THREE disagreeing vocabularies:
+     *   - this enum (the database truth)
+     *   - getOrderStats, which counted SUM(status = 'Active') — and 'Active'
+     *     is not a status this system has ever written, so the admin's
+     *     "active orders" card read 0 permanently
+     *   - DashBoard.jsx, which counted ['pending','processing','shipped']
+     *
+     * Between them, Confirmed / Packed / Out for Delivery were counted NOWHERE:
+     * an order in any of those three states appeared in neither the active nor
+     * the completed card. Verified against one order in each of the six states.
+     * See CLAUDE.md AB-17.
+     *
+     * ACTIVE is defined as "every status except the terminal one" rather than
+     * as its own hand-written list. Add a seventh status to ORDER_STATUSES and
+     * it is counted automatically — which is exactly the failure being fixed
+     * here, so it must not be reintroduced by listing states twice.
+     */
+    ORDER_STATUS_TERMINAL: 'Delivered',
+
+    get ORDER_STATUS_ACTIVE() {
+        return this.ORDER_STATUSES.filter((s) => s !== this.ORDER_STATUS_TERMINAL);
+    },
+
+    // Dashboard list caps. Both queries were named "best sellers" and "recent
+    // orders" and had no LIMIT at all — they returned the entire delivered
+    // catalogue and every order ever placed. See CLAUDE.md AB-17 (b)(c).
+    DASHBOARD_LIMITS: {
+        BEST_SELLERS: 10,
+        RECENT_ORDERS: 10
+    }
 };
