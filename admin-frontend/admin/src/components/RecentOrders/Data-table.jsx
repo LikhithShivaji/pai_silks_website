@@ -30,10 +30,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function DataTable({ columns, data, displayOrderPage }) {
-  const [sorting, setSorting] = React.useState([]);
+export function DataTable({
+  columns,
+  data,
+  displayOrderPage,
+  // Optional controlled sorting. When the parent passes these (RecentOrders
+  // does, to drive the sort dropdown), the parent owns the state; otherwise the
+  // table keeps its own. Uncontrolled callers are unaffected.
+  sorting: sortingProp,
+  onSortingChange: onSortingChangeProp,
+}) {
+  const [internalSorting, setInternalSorting] = React.useState([]);
+  const isControlled = sortingProp !== undefined;
+  const sorting = isControlled ? sortingProp : internalSorting;
+  const setSorting = isControlled ? onSortingChangeProp : setInternalSorting;
+
   const [columnFilters, setColumnFilters] = React.useState([]);
-  const [columnVisibility, setColumnVisibility] = React.useState([]);
+  // {} not [] — this is a Record<columnId, boolean>. It was initialised to an
+  // array, which is truthy and iterable but has no column keys, so visibility
+  // lookups silently missed.
+  const [columnVisibility, setColumnVisibility] = React.useState({});
   const [rowSelection, setRowSelection] = React.useState({});
   const [globalFilter, setGlobalFilter] = React.useState("");
 
@@ -47,8 +63,23 @@ export function DataTable({ columns, data, displayOrderPage }) {
       rowSelection,
       globalFilter,
     },
+    // AF-20: every one of these was missing.
+    //
+    // The table was passed `state` — making it FULLY CONTROLLED — while
+    // registering only onGlobalFilterChange. TanStack therefore had no way to
+    // write back any other piece of state, so it silently froze:
+    //   - every sort header did nothing when clicked
+    //   - the row-select checkboxes never checked
+    //   - the Columns dropdown never hid a column
+    // Nothing errored; the UI just ignored the user. getSortedRowModel was
+    // also absent, so even a sorting state would not have reordered rows.
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onRowSelectionChange: setRowSelection,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
 

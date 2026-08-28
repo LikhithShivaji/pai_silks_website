@@ -46,6 +46,17 @@ router.post('/signup', signupLimiter, v.signup, validate, customerController.cus
 router.post('/customer-login', loginLimiter, v.login, validate, customerController.customerLogin);
 
 // Catalogue — genuinely public, no session needed.
+//
+// ⚠️ These are SINGLE-SEGMENT GETs, so they MUST stay above the /:productId
+// catch-all further down. That trap has already fired twice (CB-39): a route
+// declared below it returns {"success":false,"message":"Product not found"}
+// instead of running, because ":productId" matches the literal word.
+//
+// /products is the storefront's whole catalogue. It exists because the shop
+// previously fetched it from the ADMIN backend, which Phase 2 locked behind
+// admin auth — so every customer would have got 401 and an empty shop page.
+// See CLAUDE.md CF-22 and CONSTRAINT 5.
+router.get('/products', customerController.getAllProducts);
 router.get('/collections', customerController.getAllCollections);
 router.get('/bestsellers', customerController.getBestSellers);
 router.get('/categories', customerController.getAllCategories);
@@ -60,6 +71,14 @@ router.get('/verify-token', authMiddleware, customerController.verifyToken);
 // Replaces GET /get-user-details/:user_id. The caller can only ever read their
 // own profile now — there is no parameter to tamper with.
 router.get('/me', authMiddleware, customerController.getUserDetails);
+
+// The write counterpart to /me. This route is NEW — MyProfile.jsx has called it
+// since day one and always got a 404, so profile editing never worked. CF-06.
+//
+// Kept above the catch-all for consistency with its siblings even though the
+// catch-all is GET-only and could not have shadowed a PUT. The next
+// single-segment route added here may not be so lucky — see CB-39.
+router.put('/update-profile', authMiddleware, v.updateProfile, validate, customerController.updateUserProfile);
 
 // SINGLE-segment, so it must live above the catch-all. Its multi-segment
 // siblings (/wishlist/add, /wishlist/count, ...) are declared further down and

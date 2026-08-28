@@ -96,32 +96,50 @@ const MyProfile = () => {
   //   }
   // };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleSave = async () => {
-    const userId = localStorage.getItem("user_id");
-    if (!userId) return;
+    if (isSaving) return;
+    setIsSaving(true);
 
     try {
+      // Send the three editable fields by name, not `{...user}`.
+      //
+      // The spread shipped whatever happened to be in state — including `email`,
+      // which is read-only, and anything a later feature adds to this object.
+      // The server ignores unknown keys, but a payload that quietly grows is how
+      // a field nobody meant to expose ends up being written.
       const response = await apiFetch(`${API_BASE}/api/update-profile`, {
-        method: "PUT", // Usually update is PUT, but check your backend if it needs POST
-        headers: {
-          "Content-Type": "application/json",
-        },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            ...user
+          name: user.name,
+          phone: user.phone,
+          address: user.address,
         }),
       });
 
       const result = await response.json();
 
-      if (result.success) {
-        setIsEditing(false); // Switch back to view mode after saving
-        // Optional: Show success toast here
+      if (response.ok && result.success) {
+        // Render what the server stored, not the optimistic local copy — they
+        // differ whenever the server trims or normalises a value.
+        if (result.data) setUser(result.data);
+        setIsEditing(false);
       } else {
-        alert("Failed to update profile");
+        // Surface the real reason. This used to be a flat "Failed to update
+        // profile", which told a customer with a bad phone number nothing at
+        // all about what to change.
+        //
+        // `message` is already the first validation error — validate.js sets
+        // it from errors[0].message — so no need to dig into the array.
+        alert(result.message || "Failed to update profile.");
       }
     } catch (error) {
       console.error("Error updating profile:", error);
-      alert("Network error");
+      alert("Could not reach the server. Please try again.");
+    } finally {
+      setIsSaving(false);
     }
   };
 

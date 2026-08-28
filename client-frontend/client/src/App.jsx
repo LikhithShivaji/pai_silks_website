@@ -5,7 +5,11 @@ import Header from "./components/Header";
 import ProductCard from "./components/ProductCard";
 import FilterAndSort from "./components/FilterandSort";
 import Footer from "./components/Footer";
-import { ADMIN_API, apiFetch } from "@/config/api";
+// ADMIN_API is deliberately NOT imported. The storefront must never depend on
+// the admin service: those routes require an admin session (Phase 2), so a
+// customer would get 401, and the shop would also break whenever the admin
+// backend was down. See CLAUDE.md CF-22 and CONSTRAINT 5.
+import { CLIENT_API, apiFetch } from "@/config/api";
 
 import { CartContext } from "./CartContext";
 
@@ -45,12 +49,25 @@ const App = () => {
   const [isDivOpen, setIsDivOpen] = useState(false);
 
   /* ---------------- FETCH PRODUCTS ---------------- */
+  // The catalogue comes from the CLIENT backend, not the admin one.
+  //
+  // This page used to call ADMIN_API/api/get-all-product-details. Phase 2 put
+  // every admin route behind authMiddleware + requireAdmin, so a customer with
+  // no admin session gets 401, `res.data` is undefined, and the shop renders
+  // EMPTY. It looks fine locally only because browser cookies ignore port
+  // numbers — with the admin panel open on localhost, this request carries the
+  // owner's admin session. In production (paisilks.com -> onrender.com) there
+  // is no such cookie. See CLAUDE.md CF-22 and CONSTRAINT 5.
+  //
+  // /api/products is public and returns customer-safe fields only — no exact
+  // stock count, no created_at/updated_at/is_deleted.
   useEffect(() => {
-    apiFetch(`${ADMIN_API}/api/get-all-product-details`)
+    apiFetch(`${CLIENT_API}/api/products`)
       .then((res) => res.json())
       .then((res) => {
-        const data = res.data || (res.success ? res.data : []);
-        setProducts(Array.isArray(data) ? data : []);
+        // Was `res.data || (res.success ? res.data : [])` — an unreachable
+        // ternary: if res.data is falsy both branches yield undefined (CF-33).
+        setProducts(Array.isArray(res.data) ? res.data : []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -82,6 +99,14 @@ const App = () => {
     return {
       id: p.product_id || p.id,
       name: p.name,
+      // quantity is initialised here, at the source.
+      //
+      // Without it, every product added through ProductCard reached the cart
+      // with no quantity key at all, so the guest→login merge computed
+      // Number(undefined) -> NaN -> Math.max(NaN, 1) -> NaN, and `quantity: NaN`
+      // entered React state and serialised to `null` in localStorage. Downstream
+      // `|| 1` fallbacks masked it by luck. See CLAUDE.md CF-13.
+      quantity: 1,
       category: p.category,
       collection: p.collection, // ✅ Ensure collection exists
       description: p.description,

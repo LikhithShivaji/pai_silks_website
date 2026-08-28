@@ -87,9 +87,35 @@ const sqlqueries = {
 
         getUserDetails: `SELECT * FROM master_user WHERE pri_email = ?`,
         getUserById: `
-      SELECT user_id, user_name, pri_email, phone_number, address 
-      FROM master_user 
+      SELECT user_id, user_name, pri_email, phone_number, address
+      FROM master_user
       WHERE user_id = ?
+    `,
+
+        // Profile self-service update. Backs PUT /api/update-profile, which did
+        // not exist at all until now — MyProfile.jsx called it, got a 404, and
+        // tried to JSON.parse the HTML error body, so every save died on
+        // "Network error". Customers could never change their phone or address.
+        // See CLAUDE.md CF-06.
+        //
+        // The three editable columns are listed explicitly rather than built
+        // from the request body. The frontend sends its whole `user` state
+        // object, so a bound field list is what stops a spread payload from
+        // reaching columns it has no business touching.
+        //
+        // pri_email is deliberately NOT updatable here:
+        //   - it is the UNIQUE login identity, so a collision is a 500, and
+        //   - session.pri_email is a DENORMALISED COPY, so changing one without
+        //     the other silently rots every existing session row.
+        // The UI already renders the email input as disabled. Changing an email
+        // is the SEC-02b procedure — email + session cleanup in one transaction.
+        //
+        // is_delete = 0 so a soft-deleted account cannot edit itself back into
+        // a usable state. The caller MUST check affectedRows and 404 on 0.
+        updateUserProfile: `
+      UPDATE master_user
+         SET user_name = ?, phone_number = ?, address = ?
+       WHERE user_id = ? AND is_delete = 0
     `,
     },
 
@@ -123,7 +149,10 @@ const sqlqueries = {
     p.regular_price,
     p.saree_length,
     p.selling_price,
-    IFNULL(ps.stock_qty, 0) AS stock_qty,
+    -- in_stock, not stock_qty — public endpoint, see CF-22. The WHERE clause
+    -- below already excludes anything out of stock, so this is always 1 here;
+    -- it is kept for shape consistency with the other product endpoints.
+    IFNULL(ps.stock_qty, 0) > 0 AS in_stock,
     SUM(oi.quantity) AS total_sold, -- Changed from COUNT to SUM for unit accuracy
     pi.image_url AS primary_image
     FROM order_items oi
@@ -178,7 +207,9 @@ getProductsByCategory: `
       p.regular_price,
       p.saree_length,
       p.selling_price,
-      IFNULL(ps.stock_qty, 0) AS stock_qty,
+      -- in_stock, not stock_qty: this is a PUBLIC endpoint and the exact count
+      -- is inventory data. Nothing in the storefront reads a count. See CF-22.
+      IFNULL(ps.stock_qty, 0) > 0 AS in_stock,
       pi.id AS image_id,
       pi.image_url,
       pi.is_primary_image
@@ -189,12 +220,86 @@ getProductsByCategory: `
   ORDER BY p.name, pi.is_primary_image DESC;
     `,
 
-getNewReleaseProducts: `
-    SELECT *
-    FROM product
-    WHERE is_new_release = 1
-      AND is_deleted = 0
-    ORDER BY created_at DESC;
+// The full live catalogue, for the storefront's /shop page.
+    //
+    // This endpoint is NEW. The storefront had no client-side source for the
+    // whole catalogue, so it fetched from the ADMIN backend's
+    // get-all-product-details instead — see CLAUDE.md CF-22 and CONSTRAINT 5.
+    // That worked only because the deployed admin backend has no auth (AB-01);
+    // once Phase 2's authMiddleware ships, an anonymous customer gets 401 and
+    // the shop renders empty.
+    //
+    // Columns are listed explicitly, never SELECT *. A customer receives what a
+    // customer needs:
+    //   - no stock_qty      -> `in_stock` boolean instead. The exact count is
+    //                          inventory data; whether a saree can be bought is
+    //                          not. Nothing in the storefront reads a count
+    //                          (verified: zero occurrences), and a boolean is
+    //                          what CF-20 needs to disable Add to Cart at zero.
+    //   - no created_at / updated_at / is_deleted / is_new_release
+    //
+    // One row per image, grouped into an images[] array by the manager — same
+    // shape as getProductsByCategory so both feed the same normaliser.
+    // ORDER BY puts the primary image first, so images[0] is the card image.
+    getAllProducts: `
+      SELECT
+          p.id,
+          p.name,
+          p.description,
+          p.category,
+          p.collection,
+          p.material,
+          p.product_code,
+          p.product_wash_care,
+          p.regular_price,
+          p.selling_price,
+          p.saree_length,
+          IFNULL(ps.stock_qty, 0) > 0 AS in_stock,
+          pi.id               AS image_id,
+          pi.image_url,
+          pi.is_primary_image
+      FROM product p
+      LEFT JOIN product_stock  ps ON ps.product_id = p.id
+      LEFT JOIN product_images pi ON pi.product_id = p.id
+      WHERE p.is_deleted = 0
+      ORDER BY p.name ASC, pi.is_primary_image DESC, pi.id ASC;
+    `,
+
+    // Was `SELECT *`, which had two problems:
+    //
+    //   1. It leaked is_deleted, created_at and updated_at to a PUBLIC endpoint
+    //      (CLAUDE.md CB-35).
+    //   2. It returned NO images at all. The homepage was therefore unable to
+    //      use it and pulled the entire 35-product catalogue from the admin
+    //      backend just to filter 7 new releases in the browser. Switching the
+    //      homepage to this endpoint without adding images would have rendered
+    //      seven products with blank pictures.
+    //
+    // Same column set and same image grouping as getAllProducts above, so both
+    // feed the storefront's existing normaliser unchanged.
+    getNewReleaseProducts: `
+      SELECT
+          p.id,
+          p.name,
+          p.description,
+          p.category,
+          p.collection,
+          p.material,
+          p.product_code,
+          p.product_wash_care,
+          p.regular_price,
+          p.selling_price,
+          p.saree_length,
+          IFNULL(ps.stock_qty, 0) > 0 AS in_stock,
+          pi.id               AS image_id,
+          pi.image_url,
+          pi.is_primary_image
+      FROM product p
+      LEFT JOIN product_stock  ps ON ps.product_id = p.id
+      LEFT JOIN product_images pi ON pi.product_id = p.id
+      WHERE p.is_new_release = 1
+        AND p.is_deleted = 0
+      ORDER BY p.created_at DESC, pi.is_primary_image DESC, pi.id ASC;
     `,
     
   },
@@ -300,10 +405,24 @@ getNewReleaseProducts: `
 
     order: {
 
+    // contact_phone added by migrations/007_order_contact_phone.sql.
+    //
+    // The customer types a delivery number at checkout and Checkout.jsx has
+    // always sent it as `phone_number` — but createOrder never read it and the
+    // table had no column for it, so it was discarded on every order. The
+    // shipping ADDRESS was stored per order while the contact PHONE for the
+    // same parcel was thrown away. See CLAUDE.md AB-42 / CF-09.
+    // shipping_fee added by migrations/008_order_shipping_fee.sql.
+    //
+    // The fee is part of total_amount and is ALSO stored on its own, so a
+    // charge can be broken down after the fact. Deriving it as
+    // total_amount - SUM(line items) works only while the total has exactly two
+    // parts; a future discount or tax would be silently relabelled "shipping".
+    // Razorpay reconciliation needs the exact breakdown. See CLAUDE.md AB-16.
     createOrder: `
-    INSERT INTO orders 
-    (user_id, total_amount, shipping_address, payment_method, payment_status, status, order_date)
-    VALUES (?, ?, ?, ?, ?, ?, NOW());
+    INSERT INTO orders
+    (user_id, total_amount, shipping_fee, shipping_address, contact_phone, payment_method, payment_status, status, order_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW());
   `,
 
   addOrderItem: `

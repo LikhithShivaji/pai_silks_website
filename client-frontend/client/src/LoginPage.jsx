@@ -111,11 +111,18 @@ const LoginPage = () => {
 
                     // If we have a local quantity, prefer it (because it's the most recent user action)
                     // Otherwise use server quantity
-                    const localQty = localItem ? Number(localItem.quantity) : 0;
-                    const serverQty = Number(serverItem.quantity || 1);
-                    
+                    //
+                    // `|| 0` on the local side: items added through ProductCard
+                    // carry NO quantity key at all (the normalised object in
+                    // App.jsx never set one), so this was Number(undefined) ->
+                    // NaN, and Math.max(NaN, 1) is NaN. That NaN went into
+                    // React state and serialised to `null` in localStorage.
+                    // Verified. See CLAUDE.md CF-13.
+                    const localQty = Number(localItem?.quantity) || 0;
+                    const serverQty = Number(serverItem.quantity) || 1;
+
                     // Use the HIGHER of the two to be safe
-                    const finalQty = Math.max(localQty, serverQty); 
+                    const finalQty = Math.max(localQty, serverQty);
 
                     return {
                         ...serverItem,
@@ -127,6 +134,44 @@ const LoginPage = () => {
                         selling_price: Number(serverItem.selling_price || serverItem.price || 0)
                     };
                 });
+
+                // Persist the merged quantities to the SERVER.
+                //
+                // This was the whole bug in CF-13: finalQty was computed and put
+                // into React state, but nothing ever told the server. addToCart
+                // hardcodes quantity 1 —
+                //   VALUES (?, ?, 1, NOW()) ON DUPLICATE KEY UPDATE quantity = quantity
+                // — and deliberately ignores any quantity the client sends,
+                // because making it increment is what caused the CF-02/CB-22
+                // over-billing. So the guest's 3 became 1 in the database while
+                // the UI showed 3: the customer saw 3x the price and was
+                // charged for 1.
+                //
+                // /api/cart/update is the documented path for quantity changes,
+                // so the merge goes through it rather than loosening addToCart.
+                // Only rows that actually differ are sent.
+                const quantityUpdates = cleanCartData
+                    .filter((item) => Number(item.quantity) > 1)
+                    .map((item) =>
+                        apiFetch(`${CLIENT_API}/api/cart/update`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                product_id: item.id,
+                                quantity: Number(item.quantity)
+                            })
+                        })
+                    );
+
+                if (quantityUpdates.length > 0) {
+                    // allSettled, not all: one failed row must not abort the
+                    // rest of the merge or skip the wishlist fetch below.
+                    const results = await Promise.allSettled(quantityUpdates);
+                    const failed = results.filter((r) => r.status === "rejected").length;
+                    if (failed > 0) {
+                        console.error(`${failed} cart quantity update(s) failed during merge`);
+                    }
+                }
 
                 setCartItems(cleanCartData);
             }

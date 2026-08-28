@@ -51,49 +51,89 @@ const getProductById = async (productId) => {
 //Get all the products of a category
 const getProductsByCategory = async (category) => {
   try {
-    const rows = await dbCmds.getProductsByCategory(category);
-
-    // Convert flat rows into products with images array
-    const productsMap = {};
-
-    rows.forEach(row => {
-      if (!productsMap[row.id]) {
-        productsMap[row.id] = {
-          id: row.id,
-          name: row.name,
-          description: row.description,
-          category: row.category,
-          collection: row.collection,
-          material: row.material,
-          product_code: row.product_code,
-          product_wash_care: row.product_wash_care,
-          regular_price: row.regular_price,
-          selling_price: row.selling_price,
-          saree_length: row.saree_length,
-          stock_qty: row.stock_qty,
-          images: []
-        };
-      }
-      if (row.image_id) {
-        productsMap[row.id].images.push({
-          id: row.image_id,
-          url: row.image_url,
-          is_primary: row.is_primary_image
-        });
-      }
-    });
-
-    return Object.values(productsMap);
+    // Same collapse as every other product endpoint, via the shared helper.
+    // This was an inline copy that also passed through `stock_qty`; the query
+    // now returns `in_stock` instead, since this endpoint is public. See CF-22.
+    return groupProductRows(await dbCmds.getProductsByCategory(category));
   } catch (err) {
     console.error("Error in getProductsByCategory:", sanitizeError(err));
     throw err;
   }
 };
 
+/**
+ * Collapse flat product+image rows into products carrying an images[] array.
+ *
+ * The product queries LEFT JOIN product_images, so a product with four images
+ * arrives as four rows. Every storefront product endpoint needs the same
+ * collapse, and getProductsByCategory already had this logic inline — this is
+ * the shared version so a third copy is not created. The image object shape
+ * ({id, url, is_primary}) matches what that endpoint already returns, so the
+ * storefront normaliser needs no change.
+ *
+ * SQL orders primary images first, so images[0] is the card image.
+ */
+const groupProductRows = (rows) => {
+  const productsMap = {};
+
+  (rows || []).forEach((row) => {
+    if (!productsMap[row.id]) {
+      productsMap[row.id] = {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        category: row.category,
+        collection: row.collection,
+        material: row.material,
+        product_code: row.product_code,
+        product_wash_care: row.product_wash_care,
+        regular_price: row.regular_price,
+        selling_price: row.selling_price,
+        saree_length: row.saree_length,
+        // Boolean, not a count. MySQL returns a comparison as 1/0.
+        in_stock: Boolean(row.in_stock),
+        images: []
+      };
+    }
+
+    if (row.image_id) {
+      productsMap[row.id].images.push({
+        id: row.image_id,
+        url: row.image_url,
+        is_primary: row.is_primary_image
+      });
+    }
+  });
+
+  return Object.values(productsMap);
+};
+
+/**
+ * The whole live catalogue, for /shop.
+ *
+ * New in Phase 5 Slice 3. Until now the storefront had no client-side source
+ * for the full catalogue and used the ADMIN backend's get-all-product-details
+ * instead — which Phase 2 put behind admin auth, so customers would have got
+ * 401 and an empty shop. See CLAUDE.md CF-22 and CONSTRAINT 5.
+ */
+const getAllProducts = async () => {
+  try {
+    return groupProductRows(await dbCmds.getAllProducts());
+  } catch (err) {
+    console.error("Error in getAllProducts:", sanitizeError(err));
+    throw err;
+  }
+};
+
 // Get new release products
+//
+// Now grouped: the query returns one row per image where it previously
+// returned none at all, so the homepage can use this endpoint instead of
+// downloading all 35 products from the admin backend to filter 7 in the
+// browser.
 const getNewReleaseProducts = async () => {
   try {
-    return await dbCmds.getNewReleaseProducts();
+    return groupProductRows(await dbCmds.getNewReleaseProducts());
   } catch (err) {
     console.error("Error in getNewReleaseProducts:", sanitizeError(err));
     throw err;
@@ -252,17 +292,12 @@ const addToCart = async (user_id, product_id) => {
 
 
 // Create order
-const createOrder = async (user_id, total_amount, shipping_address, payment_method, payment_status, status, conn = null) => {
+// Named object rather than positional arguments — see the note on
+// dbCmds.createOrder. Two money fields and two address-ish strings sat
+// adjacent, and any swap would have written wrong data without erroring.
+const createOrder = async (order, conn = null) => {
   try {
-    const order_id = await dbCmds.createOrder(
-      user_id,
-      total_amount,
-      shipping_address,
-      payment_method,
-      payment_status,
-      status,
-      conn
-    );
+    const order_id = await dbCmds.createOrder(order, conn);
     return order_id;
   } catch (err) {
     console.error("Error in createOrder:", sanitizeError(err));
@@ -358,6 +393,7 @@ module.exports = {
   getOrderById,
   getOrderItems,
   getOrdersByUser,
+  getAllProducts,
   getNewReleaseProducts,
   logoutSession
 };

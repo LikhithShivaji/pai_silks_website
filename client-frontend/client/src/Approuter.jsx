@@ -7,9 +7,16 @@ import MyOrders from './MyOrders'
 import MyProfile from "./MyProfile";
 import Checkout from "./Checkout"
 import LoginPage from "./LoginPage";
-import PeacockLoader from "./components/PeacockLoader";
+// NOTE: PeacockLoader is NOT imported here any more, and that is not a
+// removal of the component — it is still the loading spinner used by
+// Homepage, App and ViewProductPage. What went away is the /animation route
+// that published it as a standalone public page, where it rendered a
+// fullscreen spinner that never resolved, with no header, footer or way out.
+// See CLAUDE.md CF-08.
 import Signup from "./components/Signup";
 import PrivateRoute from "./components/PrivateRoute";
+import NotFound from "./components/NotFound";
+import ForgotPassword from "./components/ForgotPassword";
 
 export default function AppRouter() {
   return (
@@ -21,8 +28,12 @@ export default function AppRouter() {
         <Route path="/shop" element={<App />} />
         <Route path="/product/:productId" element={<ViewProductPage />} />
         <Route path="/about-us" element={<AboutUs />} />
-        <Route path="/animation" element={<PeacockLoader />} />
         <Route path="/signup" element={<Signup />} />
+
+        {/* LoginPage has always linked here; the route never existed, so
+            "Forgot Password?" rendered a blank page. Not a self-service reset —
+            there is no mail channel configured — so it routes to a human. */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* --- Requires a valid session ---
             These previously rendered for anyone. PrivateRoute asks the server,
@@ -40,6 +51,13 @@ export default function AppRouter() {
           path="/checkout"
           element={<PrivateRoute><Checkout /></PrivateRoute>}
         />
+
+        {/* ⚠️ CATCH-ALL — keep this LAST.
+            Without it, any unmatched URL rendered a blank white page with no
+            header, footer or way back. React Router ranks routes by specificity
+            rather than declaration order, so this is safe where it sits, but
+            keeping it last is how the file stays readable. */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
   );

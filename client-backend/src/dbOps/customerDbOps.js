@@ -99,6 +99,26 @@ async getUserById(user_id) {
   }
 }
 
+  // Returns affectedRows, NOT the OkPacket. 0 means the user does not exist or
+  // has been soft-deleted, and the caller turns that into a 404.
+  //
+  // affectedRows rather than changedRows on purpose: opening the form and
+  // saving without editing anything matches the row but changes nothing, which
+  // is a valid no-op. changedRows would report that as "user not found". Same
+  // distinction as the admin-side stock CAS.
+  async updateUserProfile(user_id, { user_name, phone_number, address }) {
+    try {
+      const [result] = await pool.query(
+        sqlqueries.login.updateUserProfile,
+        [user_name, phone_number, address, user_id]
+      );
+      return result.affectedRows;
+    } catch (err) {
+      console.error("Error in updateUserProfile dbCmd:", sanitizeError(err));
+      throw err;
+    }
+  }
+
   // Update customer session token
   async updateCustomerToken(token, sid) {
     try {
@@ -263,6 +283,19 @@ async checkWishlist(user_id, product_id) {
     return rows;
   } catch (err) {
     console.error("Error in checkWishlist:", sanitizeError(err));
+    throw err;
+  }
+}
+
+// Full live catalogue for the storefront's /shop page.
+// Returns FLAT rows — one per image — which the manager groups into products
+// with an images[] array, same as getProductsByCategory. See CLAUDE.md CF-22.
+async getAllProducts() {
+  try {
+    const [rows] = await pool.query(sqlqueries.product.getAllProducts);
+    return rows;
+  } catch (err) {
+    console.error("Error in getAllProducts:", sanitizeError(err));
     throw err;
   }
 }
@@ -435,11 +468,36 @@ async checkCart(user_id, product_id) {
   // `conn` lets these join a caller's transaction. Without it each query grabs
   // its own pool connection — a separate conversation with the database that
   // commits independently and that a rollback cannot reach. See withTransaction.
-  async createOrder(user_id, total_amount, shipping_address, payment_method, payment_status, status, conn = null) {
+  // Takes a named object, not positional arguments.
+  //
+  // This was seven positionals and shipping_fee would have made eight, with two
+  // adjacent money fields (total_amount, shipping_fee) and two adjacent
+  // strings (shipping_address, contact_phone) — swap either pair and it still
+  // runs, silently writing the wrong values. The previous comment here said to
+  // convert on the eighth field; this is it.
+  async createOrder(order, conn = null) {
+    const {
+      user_id,
+      total_amount,
+      shipping_fee,
+      shipping_address,
+      contact_phone,
+      payment_method,
+      payment_status,
+      status
+    } = order;
+
     const [result] = await (conn || pool).query(sqlqueries.order.createOrder, [
       user_id,
       total_amount,
+      // Coalesced so a caller that omits it records 0.00 rather than NULL —
+      // the column is NOT NULL, and "no shipping charged" is a real value.
+      shipping_fee ?? 0,
       shipping_address,
+      // Normalised to NULL rather than undefined: mysql2 escapes undefined to
+      // the literal NULL anyway, but being explicit keeps "no number given"
+      // as one representation instead of two. See CB-23.
+      contact_phone || null,
       payment_method,
       payment_status,
       status

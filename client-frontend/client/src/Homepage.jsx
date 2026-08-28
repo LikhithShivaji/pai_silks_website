@@ -4,7 +4,9 @@ import ProductCard from "./components/ProductCard";
 import CategoryCard from "./components/Categorycard.jsx";
 import ReviewCard from "./components/ReviewCard.jsx";
 import { useNavigate } from "react-router-dom";
-import { CLIENT_API, ADMIN_API, apiFetch } from "@/config/api";
+// ADMIN_API is deliberately no longer imported — see the note in App.jsx and
+// CLAUDE.md CF-22. Every storefront call now goes to the client backend.
+import { CLIENT_API, apiFetch } from "@/config/api";
 import frame from "./assets/heroframe.svg";
 import finisher from "./assets/finisher.svg";
 import trendingProducts from "./products.js";
@@ -134,21 +136,35 @@ function Homepage() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
+        // New releases come from the CLIENT backend's dedicated endpoint.
+        //
+        // This used to download the ENTIRE catalogue from the ADMIN backend and
+        // filter `is_new_release === 1` in the browser — 35 products fetched to
+        // display 7. Worse, Phase 2 locked the admin routes, so a customer with
+        // no admin session got 401 and this section rendered empty. The
+        // endpoint below is public and filters server-side.
+        // See CLAUDE.md CF-22 and CONSTRAINT 5.
         const response = await apiFetch(
-          `${ADMIN_API}/api/get-all-product-details`
+          `${CLIENT_API}/api/products/new-releases`
         );
         const result = await response.json();
         if (result.success) {
-          const filtered = result.data.filter(
-            (p) => Number(p.is_new_release) === 1
-          );
+          // No client-side is_new_release filter — the query already applies it.
+          const filtered = Array.isArray(result.data) ? result.data : [];
           // console.log("filtered new releases are", filtered);
           const safeData = filtered.map((p) => {
+            // Accept BOTH image object shapes. The admin backend returns
+            // {image_id, image_url, is_primary_image}; the client backend
+            // returns {id, url, is_primary}. This previously checked only
+            // `image_url`, so against the client shape the ternary fell through
+            // and assigned the OBJECT itself to image1 — every new-release
+            // thumbnail would have rendered broken. The SQL sorts primary
+            // first, so images[0] is the right one to take.
             const rawImgObj =
               p.images && p.images.length > 0 ? p.images[0] : p.image_url;
             const finalImgString =
-              typeof rawImgObj === "object" && rawImgObj?.image_url
-                ? rawImgObj.image_url
+              typeof rawImgObj === "object" && rawImgObj !== null
+                ? rawImgObj.image_url || rawImgObj.url
                 : rawImgObj;
             return {
               ...p,

@@ -4,8 +4,10 @@ import { Textarea } from "@/components/ui/textarea";
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
 import { ADMIN_API, apiFetch } from "@/config/api";
+import { useToast } from "@/ToastContext";
 
 const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProductDetails }) => {
+  const { showToast } = useToast();
   
   // 1. STATE
   const [imageFiles, setImageFiles] = useState([]); 
@@ -90,15 +92,50 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
 
 
   // 4. LOGIC: Save (Update) Product - SINGLE STEP
+  /**
+   * Price rules, matching AddProduct and the server's validators.js.
+   *
+   * This form had NO price validation at all — only a name check — so an
+   * existing product could be saved with its price blanked or set to 0, which
+   * is how a live catalogue row ends up unbuyable. getCart aliases
+   * selling_price AS price, and an unpriced row used to be silently dropped
+   * from the order while the whole cart was cleared with it.
+   * Owner decision, 2026-08-29. See CLAUDE.md CB-24b-data, AF-18.
+   */
+  const validatePrices = () => {
+    const regular = newProduct.regularPrice;
+    const selling = newProduct.discountedPrice;
+
+    if (regular === "" || regular === null || regular === undefined)
+      return "Regular price cannot be left empty.";
+    if (!Number.isFinite(Number(regular)) || Number(regular) <= 0)
+      return "Regular price cannot be 0 — enter a price greater than 0.";
+
+    if (selling === "" || selling === null || selling === undefined)
+      return "Selling price cannot be left empty.";
+    if (!Number.isFinite(Number(selling)) || Number(selling) <= 0)
+      return "Selling price cannot be 0 — enter a price greater than 0.";
+    if (Number(selling) > Number(regular))
+      return "Selling price cannot be higher than the regular price.";
+
+    return null;
+  };
+
   const handleSaveProduct = async () => {
     if (!newProduct.name?.trim()) {
-      alert("Please enter the product name");
+      showToast("Please enter the product name");
+      return false;
+    }
+
+    const priceError = validatePrices();
+    if (priceError) {
+      showToast(priceError);
       return false;
     }
 
     const targetId = updateProductDetails?.id || updateProductDetails?.product_id;
     if (!targetId) {
-        alert("Error: Missing Product ID. Cannot update.");
+        showToast("Missing product ID — cannot update.");
         return false;
     }
 

@@ -189,6 +189,55 @@ exports.getUserDetails = async (req, res) => {
 };
 
 
+// PUT /api/update-profile
+//
+// This route did not exist. MyProfile.jsx has always called it, always got the
+// 404 HTML page, and always threw on response.json() — so the customer saw
+// "Network error" and profile editing was a permanent no-op. See CLAUDE.md CF-06.
+//
+// The frontend sends its whole `user` state object. Only these three keys are
+// read; anything else in the body is ignored, and pri_email/role_id/is_delete
+// are not reachable from here at all. Identity comes from the verified session,
+// never the body — same rule as every other handler since CB-02.
+exports.updateUserProfile = async (req, res) => {
+  try {
+    const user_id = req.user.user_id;
+    const { name, phone, address } = req.body;
+
+    const updated = await customerLoginManager.updateUserProfile(user_id, {
+      user_name: name,
+      phone_number: phone,
+      // The column is nullable, so an empty address is stored as NULL rather
+      // than an empty string — otherwise "no address" has two representations.
+      address: address ? address : null,
+    });
+
+    // Echo the saved row back in the same shape GET /api/me returns, so the
+    // client can render what the server actually stored rather than trusting
+    // its own optimistic copy.
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated.',
+      data: {
+        name: updated.user_name || "",
+        email: updated.pri_email || "",
+        phone: updated.phone_number || "",
+        address: updated.address || ""
+      }
+    });
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return res.status(404).json({ success: false, message: 'Profile not found.' });
+    }
+    console.error("Error in updateUserProfile Controller:", sanitizeError(error));
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.'
+    });
+  }
+};
+
+
 exports.getAllCollections = async (req, res) => {
   try {
     const collections = await productManager.getAllCollections();
@@ -305,6 +354,30 @@ exports.getProductsByCategory = async (req, res) => {
 };
 
 // ---------------------- GET NEW RELEASE PRODUCTS ----------------------
+
+// GET /api/products — the full live catalogue for the storefront's /shop page.
+//
+// Public and unauthenticated, deliberately: this is a shop window. It replaces
+// the storefront's call to the ADMIN backend's get-all-product-details, which
+// Phase 2 put behind admin auth — leaving customers with a 401 and an empty
+// shop. See CLAUDE.md CF-22 and CONSTRAINT 5.
+exports.getAllProducts = async (req, res) => {
+  try {
+    const products = await productManager.getAllProducts();
+
+    return res.status(200).json({
+      success: true,
+      data: products,
+      message: "Products fetched successfully"
+    });
+  } catch (error) {
+    console.error("Error in getAllProducts Controller:", sanitizeError(error));
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.'
+    });
+  }
+};
 
 exports.getNewReleaseProducts = async (req, res) => {
   try {
@@ -585,7 +658,14 @@ exports.createOrder = async (req, res) => {
     // CLAUDE.md CB-03 / CF-01.
     // user_id comes from the verified session, never the request. See CB-02.
     const user_id = req.user.user_id;
-    const { shipping_address, payment_method } = req.body;
+    // phone_number is the DELIVERY contact for this parcel, not the account's
+    // phone. The checkout form has always collected and sent it; this handler
+    // never read it and the table had no column, so it was discarded on every
+    // order — the shipping address was stored while the phone for the same
+    // parcel was thrown away. Validated by v.createOrder against the same rules
+    // as signup and profile. See CLAUDE.md AB-42 / CF-09, migration 007.
+    const { shipping_address, payment_method, phone_number } = req.body;
+    const contact_phone = phone_number || null;
 
     if (!user_id || !shipping_address || !payment_method) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
@@ -604,14 +684,53 @@ exports.createOrder = async (req, res) => {
     }
 
     // 2️⃣ Map cart items & calculate total_amount
-    const mappedItems = cartItems.map(item => {
-      const price = Number(item.price) || 0;
-      const quantity = Number(item.quantity) || 0;
-      return { product_id: Number(item.product_id), price, quantity };
-    }).filter(item => item.price > 0 && item.quantity > 0);
+    // Every cart row must be billable. Invalid rows are REJECTED, never dropped.
+    //
+    // This was `.filter(item => item.price > 0 && item.quantity > 0)`, which
+    // silently discarded any unpriced or non-positive-quantity row, created the
+    // order from whatever survived, and then cleared the WHOLE cart — so the
+    // customer paid for a subset and lost the rest with no notification, while
+    // receiving "Order created successfully". Reproduced on real data: a cart
+    // holding product 49 (NULL selling_price) plus a valid saree produced a
+    // one-item order and an emptied cart. See CLAUDE.md CB-24b.
+    //
+    // `Number(null)` is 0 and `Number(undefined)` is NaN, so both a missing
+    // price and a malformed one land in `invalidItems` rather than being
+    // rounded away by `|| 0`.
+    const mappedItems = [];
+    const invalidItems = [];
+
+    for (const item of cartItems) {
+      const price = Number(item.price);
+      const quantity = Number(item.quantity);
+      const product_id = Number(item.product_id);
+
+      if (!Number.isFinite(price) || price <= 0) {
+        invalidItems.push({ product_id, name: item.name, reason: 'is not available for purchase right now' });
+        continue;
+      }
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        invalidItems.push({ product_id, name: item.name, reason: 'has an invalid quantity' });
+        continue;
+      }
+      mappedItems.push({ product_id, price, quantity });
+    }
+
+    if (invalidItems.length > 0) {
+      // Named, so the customer can act on it — and the cart is left untouched,
+      // so nothing is lost while they do.
+      const names = invalidItems
+        .map((i) => `"${i.name || `product ${i.product_id}`}" ${i.reason}`)
+        .join('; ');
+      return res.status(400).json({
+        success: false,
+        message: `Your order was not placed because ${names}. Please remove it from your cart and try again.`,
+        invalid_items: invalidItems.map((i) => i.product_id)
+      });
+    }
 
     if (mappedItems.length === 0) {
-      return res.status(400).json({ success: false, message: "No valid items in cart" });
+      return res.status(400).json({ success: false, message: "Cart is empty" });
     }
 
     const subtotal = mappedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -643,12 +762,18 @@ exports.createOrder = async (req, res) => {
     // is what makes the whole sequence all-or-nothing. See CLAUDE.md CB-06.
     const order_id = await withTransaction(async (conn) => {
       const newOrderId = await productManager.createOrder(
-        user_id,
-        total_amount,
-        shipping_address,
-        payment_method,
-        payment_status,
-        status,
+        {
+          user_id,
+          total_amount,
+          // Stored alongside the total so the charge can be broken down later.
+          // total_amount already includes it — this is not an extra charge.
+          shipping_fee,
+          shipping_address,
+          contact_phone,
+          payment_method,
+          payment_status,
+          status
+        },
         conn
       );
 

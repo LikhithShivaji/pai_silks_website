@@ -14,24 +14,39 @@ const OrderCard = ({ order }) => {
   const orderId = order.id || order.order_id || "N/A";
   
   // --- SMART ITEM DETECTION ---
-  const itemsArray = order.items || order.order_items || [order];
-  const firstItem = order.items && order.items.length > 0 ? order.items[0] : null;
+  // `[order]` removed as a fallback: it wrapped the ORDER in an array and
+  // treated it as an item, so extraCount counted orders as products (CF-38).
+  const itemsArray = Array.isArray(order.items)
+    ? order.items
+    : Array.isArray(order.order_items)
+      ? order.order_items
+      : [];
 
-  const displayImage = 
-    firstItem.image || 
-    firstItem.product_image || 
-    firstItem.image_url ||      // 👈 Added this common key
-    firstItem.primary_image ||  // 👈 Added for Best Sellers consistency
-    firstItem.product?.image || 
-    order.image ||              // 👈 Check root order object too
+  const firstItem = itemsArray.length > 0 ? itemsArray[0] : null;
+
+  // Optional chaining throughout.
+  //
+  // firstItem was deliberately set to null when an order has no items — and
+  // then dereferenced on the very next line, so `firstItem.image` threw a
+  // TypeError during render and blanked the ENTIRE /my-orders page, hiding
+  // every other order the customer had. Reachable: an order with zero items
+  // can exist (see AF-C-FIX; the checkout transaction stops new ones, but
+  // production still runs the pre-transaction code). See CLAUDE.md CF-16.
+  const displayImage =
+    firstItem?.image ||
+    firstItem?.product_image ||
+    firstItem?.image_url ||
+    firstItem?.primary_image ||
+    firstItem?.product?.image ||
+    order.image ||
     order.product_image ||
     "https://placehold.co/150?text=Package";
 
-  const rawName = 
-    firstItem.product_name || 
-    firstItem.name || 
-    firstItem.product?.name || 
-    order.product_name ||       // 👈 Check root order object
+  const rawName =
+    firstItem?.product_name ||
+    firstItem?.name ||
+    firstItem?.product?.name ||
+    order.product_name ||
     "Unknown Product";
   
   const extraCount = itemsArray.length > 1 ? itemsArray.length - 1 : 0;

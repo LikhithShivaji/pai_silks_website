@@ -66,10 +66,27 @@ function ViewProductPage() {
     window.scrollTo(0, 0);
     setLoading(true);
 
-    apiFetch(`${CLIENT_API}/api/${productId}`)
+    // productId must be a positive integer BEFORE it is put in the URL.
+    //
+    // The route is /product/:productId and the fetch is /api/${productId}, so
+    // visiting /product/collections requested /api/collections — a REAL
+    // endpoint that returns {success: true}. The guard below therefore passed
+    // and the page rendered a "product" built from the collections payload,
+    // every field undefined. /product/..%2Fsomething likewise escaped the
+    // intended path segment. The server rejects /api/abc (400) but cannot help
+    // here, because /api/collections is a legitimate route.
+    // See CLAUDE.md CF-19.
+    const numericId = Number(productId);
+    if (!Number.isInteger(numericId) || numericId < 1) {
+      setProduct(null);
+      setLoading(false);
+      return;
+    }
+
+    apiFetch(`${CLIENT_API}/api/${numericId}`)
       .then((res) => res.json())
       .then((res) => {
-        if (res.success) {
+        if (res.success && res.data) {
           const p = res.data;
           // console.log("p is", p);
 
@@ -91,9 +108,18 @@ function ViewProductPage() {
             image3: images[2] || images[0],
             image4: images[3] || images[0],
           });
+        } else {
+          // Reset on failure. Without this, `product` kept the PREVIOUS
+          // product's data: navigating from product A to a deleted product B
+          // left A's name, description and price on screen under B's URL, with
+          // a working Add to Cart button. See CLAUDE.md CF-19.
+          setProduct(null);
         }
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to load product:", err);
+        setProduct(null);
+      })
       .finally(() => {
         setTimeout(() => setLoading(false), 500);
       });

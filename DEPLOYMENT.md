@@ -178,6 +178,11 @@ mysql -u root -p db < migrations/001_cart_unique_user_product.sql
 |---|---|---|
 | `001_cart_unique_user_product.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live** — `addToCart` now relies on `ON DUPLICATE KEY UPDATE`, which needs this unique index. |
 | `002_session_token_widen.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live.** `session.token` was `VARCHAR(255)`; a JWT measures 243 characters. Without this, MySQL either errors on login or — in non-strict mode — silently truncates the token, which breaks verification and logs users out at random. |
+| `004_phone_number_international.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live.** Widens `master_user.phone_number` from `VARCHAR(15)` to `VARCHAR(20)`. Signup, profile and checkout now store E.164 (`+919876543210`), and with a longer country code the old width overflows — in non-strict SQL mode MySQL **silently truncates**, producing a stored number that cannot be dialled. |
+| `005_referential_integrity.sql` | local ✅ · production ❌ | Adds **11 foreign keys** (1 → 12), cleans orphan rows first, backfills `orders.status`, and adds `UNIQUE(product_id)` on `product_stock`. ⚠️ **Run during a quiet window and take a dump first** — this is the largest structural change of the set, and it will **fail** if production holds orphan rows that local did not. The file cleans known orphans before adding constraints; read its header before running. ⚠️ It also changes the handover wipe: `DELETE FROM product` now fails with `ERROR 1451` until sales rows are removed — see *Clearing the placeholder catalogue* below. |
+| `006_backfill_missing_product_stock.sql` | local ✅ · production ❌ | Gives every live product a `product_stock` row at qty **300**. Locally **29 of 35 products had none**, so `getStock` returned 0 and checkout rejected them with "Insufficient stock" after the customer had filled in their address. ⚠️ **Production may have a different set of stranded products, and 300 is placeholder data** — re-run the file's pre-flight query against production and decide the quantity before applying. Pair with `AB-14a` (the transaction fix), which stops new ones being created. |
+| `008_order_shipping_fee.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live** — `createOrder` now inserts into `orders.shipping_fee`, so without this column every checkout fails with `ER_BAD_FIELD_ERROR`. Adds `DECIMAL(10,2) NOT NULL DEFAULT 0.00`. The fee is already inside `total_amount`; this records it separately so a charge can be broken down (needed for Razorpay reconciliation). ⚠️ **The 0.00 backfill is only correct for orders placed before the shipping fee existed.** Production may hold orders created *after* the Phase 1 fee went live — the file's verification query flags any row where `total_amount − shipping_fee − line_items ≠ 0`; check it before trusting the backfill. |
+| `007_order_contact_phone.sql` | local ✅ · production ❌ | **Must run BEFORE the new backend code goes live** — `createOrder` now inserts into `orders.contact_phone`, so without this column every checkout fails with `ER_BAD_FIELD_ERROR`. Adds a nullable `VARCHAR(20)` holding the delivery contact captured at checkout, which was previously discarded on every order. Existing rows stay `NULL` and fall back to `master_user.phone_number` when displayed. Not re-runnable — the file's header carries a pre-flight check. |
 | `003_remove_shared_password_accounts.sql` | local ✅ · production ❌ | Deletes `customer1@gmail.com` and `abcd234@gmail.com`, which shared the **admin's** password hash. Safe to run at any point. Does **not** fix the admin password — see below. |
 
 ### ⚠️ Also required at deploy: rotate the admin password
@@ -217,7 +222,12 @@ That is the `RESTRICT` rule working as designed — it exists so a stray delete
 can never destroy sales history. For a deliberate reset you remove the
 referencing rows first:
 
+Run the deletes inside a transaction, so a failure part-way leaves the database
+whole rather than half-emptied:
+
 ```sql
+START TRANSACTION;
+
 -- 1. sales records first (RESTRICT blocks everything until these are gone)
 DELETE FROM order_items;
 DELETE FROM orders;
@@ -225,18 +235,44 @@ DELETE FROM payments;
 DELETE FROM shipments;
 
 -- 2. now products can go. cart, wishlist, product_images and product_stock
---    are ON DELETE CASCADE, so they clear themselves.
+--    are ON DELETE CASCADE, so they clear themselves — no need to touch them.
 DELETE FROM product;
 
--- 3. customers, if those are being cleared too. Keep the admin (role_id = 0).
+-- 3. categories
+DELETE FROM category;
+
+-- 4. customers. KEEP the admin (role_id = 0).
 DELETE FROM session     WHERE user_id IN (SELECT user_id FROM master_user WHERE role_id <> 0);
 DELETE FROM master_user WHERE role_id <> 0;
 
--- 4. optional: restart ids from 1 so the client's first product is #1
+-- 5. check before committing — every count should be 0 except the admin
+SELECT 'product' t, COUNT(*) n FROM product
+UNION ALL SELECT 'orders',         COUNT(*) FROM orders
+UNION ALL SELECT 'order_items',    COUNT(*) FROM order_items
+UNION ALL SELECT 'cart',           COUNT(*) FROM cart
+UNION ALL SELECT 'wishlist',       COUNT(*) FROM wishlist
+UNION ALL SELECT 'product_images', COUNT(*) FROM product_images
+UNION ALL SELECT 'product_stock',  COUNT(*) FROM product_stock
+UNION ALL SELECT 'category',       COUNT(*) FROM category
+UNION ALL SELECT 'customers',      COUNT(*) FROM master_user WHERE role_id <> 0
+UNION ALL SELECT 'ADMIN (kept)',   COUNT(*) FROM master_user WHERE role_id = 0;
+
+COMMIT;   -- or ROLLBACK if anything above looks wrong
+```
+
+```sql
+-- 6. optional, AFTER the commit: restart ids so the client's first product is #1
 ALTER TABLE product      AUTO_INCREMENT = 1;
 ALTER TABLE orders       AUTO_INCREMENT = 1;
 ALTER TABLE master_user  AUTO_INCREMENT = 2;   -- 1 is the admin
 ```
+
+> This exact sequence was executed against the local database on 2026-08-26
+> inside a rolled-back transaction. Every table reached 0 and the admin row
+> survived, so the ordering is verified rather than assumed.
+>
+> `ALTER TABLE` is DDL — MySQL commits implicitly, so step 6 cannot be part of
+> the transaction and must come after.
 
 > **Take a dump first.** `mysqldump -u root -p db > pre-handover-backup.sql`.
 > None of the above is reversible, and step 1 destroys the only record that

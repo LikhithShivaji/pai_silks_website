@@ -11,7 +11,11 @@ import AddProduct from "./components/AddProduct";
 import DisplayOrderPage from "./components/DisplayOrderPage";
 import UpdateProduct from "./components/UpdateProduct";
 import { Menu, X, Trash, Bell } from "lucide-react";
-import { ADMIN_API, CLIENT_API, apiFetch } from "@/config/api";
+// CLIENT_API is no longer imported here: this page's last cross-service call
+// (bestsellers) moved to the admin backend. AddProduct.jsx still fetches
+// collections from the client backend — see the API-ownership item in
+// CLAUDE.md, scheduled after the phases.
+import { ADMIN_API, apiFetch } from "@/config/api";
 
 const AdminHomePage = () => {
   const notifications = 3;
@@ -32,6 +36,13 @@ const AdminHomePage = () => {
   const [updateProductDetails, setUpdateProductDetails] = useState(null);
   const containerRef = useRef(null);
   const [bestSellers, setBestSellers] = useState([]);
+  // Server-computed dashboard counts. null until the fetch lands, which is the
+  // signal DashBoard uses to fall back to counting locally.
+  const [orderStats, setOrderStats] = useState(null);
+  // Order-load state. Previously a failure was invisible: `orders` stayed [] and
+  // the dashboard looked like a shop with no orders. See CLAUDE.md AF-C-FIX.
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState(null);
 
   /**
    * Log out.
@@ -107,25 +118,38 @@ const AdminHomePage = () => {
   }, []);
 
 
+  // Bestsellers now come from the ADMIN backend, not the CLIENT one.
+  //
+  // Two reasons this moved:
+  //
+  // 1. Revenue was being computed HERE, in the browser, as
+  //    selling_price × total_sold — today's price applied to historical sales.
+  //    Verified: dropping one saree from ₹1,999 to ₹999 made the dashboard
+  //    under-report that product by ₹11,000, with nothing refunded. The admin
+  //    query sums oi.price × oi.quantity, the price actually charged on each
+  //    order line, so a later price change cannot rewrite past revenue.
+  //
+  // 2. The admin panel was calling the storefront's API for its own dashboard.
+  //    If the client service was down or cold-starting, the admin's bestseller
+  //    panel broke for no reason connected to the admin.
+  //
+  // See CLAUDE.md AB-17 and AF-09.
   useEffect(() => {
-    apiFetch(`${CLIENT_API}/api/bestsellers`)
+    apiFetch(`${ADMIN_API}/api/get-bestSeller-list`)
       .then(async (res) => {
         const data = await res.json();
 
-        if (data.success) {
-          const cleanData = data.data.map((p) => {
-            const price = parseFloat(p.selling_price || 0);
-            const sold = parseInt(p.total_sold || 0);
-            const totalRevenue = price * sold;
-
-            return {
-              id: p.id,
-              name: p.name,
-              image: p.primary_image || "https://placehold.co/100", 
-              totalSold: sold,
-              revenue: totalRevenue, 
-            };
-          });
+        if (data.success && Array.isArray(data.data)) {
+          const cleanData = data.data.map((p) => ({
+            id: p.id,
+            name: p.name,
+            image: p.primary_image || "https://placehold.co/100",
+            totalSold: Number(p.total_sold) || 0,
+            // Server-computed. total_revenue is a DECIMAL, which mysql2 returns
+            // as a string to protect precision — Number() it once here rather
+            // than letting a string reach Intl.NumberFormat.
+            revenue: Number(p.total_revenue) || 0,
+          }));
 
           setBestSellers(cleanData);
         }
@@ -135,29 +159,102 @@ const AdminHomePage = () => {
       });
   }, []);
 
+  // Stat cards, computed by the server rather than in this browser.
+  //
+  // The local calculation only ever saw the orders this page had fetched, and
+  // used a status vocabulary that did not match the database. The endpoint
+  // counts every row against the real enum. DashBoard falls back to a local
+  // count if this fails, so the cards still render.
   useEffect(() => {
-    apiFetch(`${ADMIN_API}/api/get-order-detils`)
-      .then((res) => res.json())
-      .then((res) => {
-        if (res.success) {
-          setOrders(normalizeOrders(res.data));
-        }
+    apiFetch(`${ADMIN_API}/api/get-order-stats`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (data.success && data.data) setOrderStats(data.data);
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error("Order stats API error:", err);
+      });
   }, []);
 
+  // Orders load, with the failure made VISIBLE.
+  //
+  // This was `.catch(console.error)`. Any failure — network, a non-JSON
+  // response, a throw inside normalizeOrders — left `orders` as [] and the
+  // dashboard rendered as though the shop had no orders at all. No error, no
+  // retry, nothing to indicate anything had gone wrong. An ErrorBoundary cannot
+  // help here: the throw happens inside a promise chain, so React never sees it
+  // and the .catch swallows it first. See CLAUDE.md AF-C-FIX.
+  //
+  // Extracted into a named function so Retry can call it again.
+  const loadOrders = React.useCallback(async () => {
+    setOrdersError(null);
+    setOrdersLoading(true);
+    try {
+      const res = await apiFetch(`${ADMIN_API}/api/get-order-detils`);
+      // Check ok BEFORE parsing: an HTML error page or an empty body throws on
+      // .json(), which previously surfaced as a generic swallowed error.
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401
+            ? "Your session has expired. Please log in again."
+            : `Could not load orders (HTTP ${res.status}).`
+        );
+      }
+      const body = await res.json();
+      if (!body.success) {
+        throw new Error(body.message || "Could not load orders.");
+      }
+      setOrders(normalizeOrders(body.data));
+    } catch (err) {
+      console.error("Failed to load orders:", err);
+      setOrders([]);
+      setOrdersError(err.message || "Could not load orders.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
+
   const normalizeOrders = (apiOrders) => {
+    // Defensive: the caller already checks success, but a malformed payload
+    // would otherwise throw .map of undefined inside the promise chain — the
+    // exact class of error that used to vanish into .catch(console.error).
+    if (!Array.isArray(apiOrders)) return [];
+
     return apiOrders.map((o) => ({
       id: o.id,
       orderId: o.id,
       date: o.date,
       customerName: o.customer_name || "Guest",
+      // The table has always had a "Contact Number" column and a search box
+      // offering to search by phone, but nothing ever populated this key — so
+      // the column was blank on every row and the phone half of the search
+      // could not match. See CLAUDE.md AB-42.
+      contactNumber: o.contact_number || "",
       status: o.status_of_order || o.status || "Pending",
+      // The server's stored total_amount — what the customer was charged,
+      // shipping included. It is no longer recomputed from the line items,
+      // which double-counted across non-1:1 joins and omitted shipping anyway.
+      // See CLAUDE.md AB-16.
       amount: o.amount,
+      shipping_fee: o.shipping_fee ?? 0,
       address: o.shipping_address,
       paymentMethod: o.payment_method,
       paymentStatus: o.payment_status,
-      product: o.product_list.map((p) => ({
+      // `?? []` — an order with no product_list must not take down the whole
+      // list. This was `o.product_list.map(...)` unguarded: one such order threw
+      // inside normalizeOrders, the surrounding .catch swallowed it, and the
+      // dashboard showed ZERO orders with no error. See CLAUDE.md AF-C-FIX.
+      //
+      // Newly reachable: getAllOrderData was changed to a LEFT JOIN in this
+      // slice so an itemless order becomes visible instead of being silently
+      // dropped from the admin's view. Those orders cannot be created any more
+      // (CB-06 wrapped checkout in a transaction), but production still runs
+      // the pre-transaction code and may already hold some.
+      product: (o.product_list ?? []).map((p) => ({
         name: p.product_name || "Product",
         qty: p.quantity,
         price: Number(p.price),
@@ -206,6 +303,10 @@ const AdminHomePage = () => {
           displayOrderPage={displayOrderPage}
           bestSellers={bestSellers}
           orders={orders}
+          orderStats={orderStats}
+          ordersLoading={ordersLoading}
+          ordersError={ordersError}
+          onRetryOrders={loadOrders}
         />;
 
       case "allProducts":
@@ -256,9 +357,17 @@ const AdminHomePage = () => {
         );
 
       default:
+        // The default branch omitted `orders`, so DashBoard fell back to its
+        // `orders = []` default and rendered a dashboard with zero orders and
+        // an empty table. Passed explicitly now, same as the case above.
         return <DashBoard
           displayOrderPage={displayOrderPage}
           bestSellers={bestSellers}
+          orders={orders}
+          orderStats={orderStats}
+          ordersLoading={ordersLoading}
+          ordersError={ordersError}
+          onRetryOrders={loadOrders}
         />;
     }
   };

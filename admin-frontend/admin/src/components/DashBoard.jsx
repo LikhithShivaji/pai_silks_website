@@ -2,25 +2,39 @@ import React, { useMemo } from "react"; // Import useMemo
 import RecentOrders from "@/components/RecentOrders/RecentOrders";
 import ThreeDotts from "../assets/svg/ThreeDots.svg?react";
 import OrderBag from "../assets/svg/OrderBag.svg?react";
+import { countOrderStats } from "@/constants/orderStatus";
 
-const DashBoard = ({ displayOrderPage, bestSellers = [], orders = [] }) => {
-  // 1. Calculate Stats (Total, Active, Completed)
+const DashBoard = ({
+  displayOrderPage,
+  bestSellers = [],
+  orders = [],
+  orderStats = null,
+  ordersLoading = false,
+  ordersError = null,
+  onRetryOrders = null,
+}) => {
+  // Stats come from the SERVER when available (GET /api/get-order-stats), with
+  // the local count as a fallback for the first render and for any fetch
+  // failure. The server is the authority: it counts every order row, whereas
+  // this component only ever sees the page of orders that was fetched.
+  //
+  // The local fallback now uses the shared status groups rather than the old
+  // hand-written ["pending","processing","shipped"] / ["completed","delivered"]
+  // lists. Those matched only 3 of the 6 real statuses, so Confirmed, Packed
+  // and Out for Delivery were counted in NEITHER card. See CLAUDE.md AB-17.
   const stats = useMemo(() => {
-    return {
-      total: orders.length,
-      active: orders.filter((o) =>
-        ["pending", "processing", "shipped"].includes(o.status?.toLowerCase())
-      ).length,
-      completed: orders.filter((o) =>
-        ["completed", "delivered"].includes(o.status?.toLowerCase())
-      ).length,
-    };
-  }, [orders]);
-
-  // 2. Filter for the Table (Pending Only)
-  const pendingOrders = orders.filter(
-    (order) => order.status && order.status.trim().toLowerCase() === "pending"
-  );
+    if (
+      orderStats &&
+      Number.isFinite(Number(orderStats.totalOrders))
+    ) {
+      return {
+        total: Number(orderStats.totalOrders) || 0,
+        active: Number(orderStats.activeOrders) || 0,
+        completed: Number(orderStats.completedOrders) || 0,
+      };
+    }
+    return countOrderStats(orders);
+  }, [orders, orderStats]);
 
   return (
     <div className="p-5">
@@ -120,11 +134,13 @@ const DashBoard = ({ displayOrderPage, bestSellers = [], orders = [] }) => {
 
               <div className="flex flex-col items-end flex-shrink-0">
                 <p className="font-bold text-sm md:text-lg text-[#68232B]">
+                  {/* Number()-coerced and finite-checked: Intl.format(NaN)
+                      renders "₹NaN" instead of throwing. See AF-C-FIX. */}
                   {new Intl.NumberFormat("en-IN", {
                     style: "currency",
                     currency: "INR",
                     maximumFractionDigits: 0,
-                  }).format(item.revenue)}
+                  }).format(Number.isFinite(Number(item.revenue)) ? Number(item.revenue) : 0)}
                 </p>
                 <p className="text-[10px] md:text-xs text-gray-500 font-medium whitespace-nowrap">
                   {item.totalSold} sold
@@ -141,10 +157,38 @@ const DashBoard = ({ displayOrderPage, bestSellers = [], orders = [] }) => {
 
       {/* --- RECENT ORDERS TABLE --- */}
       <div className="my-5 w-full bg-white rounded-2xl p-6">
-        <RecentOrders
-          displayOrderPage={displayOrderPage}
-          orders={pendingOrders}
-        />
+        {/* A failed order load is now VISIBLE. It used to be swallowed by
+            .catch(console.error), leaving `orders` empty — so a broken API or
+            an expired session looked exactly like a shop with no orders.
+            See CLAUDE.md AF-C-FIX. */}
+        {ordersError ? (
+          <div className="py-10 text-center">
+            <p className="text-lg font-semibold text-[#68232B]">
+              Couldn&apos;t load orders
+            </p>
+            <p className="mt-2 text-sm text-gray-600">{ordersError}</p>
+            {onRetryOrders && (
+              <button
+                type="button"
+                onClick={onRetryOrders}
+                className="mt-5 px-6 py-2.5 rounded-full bg-[#68232B] text-white text-sm hover:bg-[#8B2E39] transition-colors"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        ) : ordersLoading ? (
+          <div className="py-10 text-center text-sm text-gray-500">
+            Loading orders…
+          </div>
+        ) : (
+          /* Full list, not a pre-filtered "pending only" slice — RecentOrders
+             owns the New / Processing / Dispatched / All tabs now. */
+          <RecentOrders
+            displayOrderPage={displayOrderPage}
+            orders={orders}
+          />
+        )}
       </div>
     </div>
   );

@@ -104,7 +104,32 @@ const getUserProfile = async (user_id) => {
   }
 };
 
+// Backs PUT /api/update-profile. The three fields are named explicitly here as
+// well as in the SQL — the controller picks them out of the request body, so
+// nothing the client sends can widen this set. See CLAUDE.md CF-06.
+//
+// Throws a 404-tagged error rather than returning a bare 0, so the caller
+// cannot accidentally treat "no such user" as success. That was AB-13 on the
+// admin side: a guard existed but its result was never read.
+const updateUserProfile = async (user_id, fields) => {
+  try {
+    const affected = await dbCmds.updateUserProfile(user_id, fields);
+
+    if (affected === 0) {
+      const err = new Error('Profile not found.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    return await dbCmds.getUserById(user_id);
+  } catch (err) {
+    console.error("Error in updateUserProfile manager:", sanitizeError(err));
+    throw err;
+  }
+};
+
 module.exports = {
   loginCustomerUser,
-  getUserProfile
+  getUserProfile,
+  updateUserProfile
 };

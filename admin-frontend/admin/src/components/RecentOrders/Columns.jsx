@@ -66,7 +66,11 @@ export const columns = [
       }
 
       // Logic: Get 1st name & count the rest
-      const firstName = products[0].name || "Unknown Product";
+      // products[0] is guarded for array-ness above but not for element type.
+      // A null first element threw "Cannot read properties of null (reading
+      // 'name')", which killed the cell and — with no ErrorBoundary — the page.
+      // Verified. See CLAUDE.md AF-C-F13.
+      const firstName = products[0]?.name || "Unknown Product";
       const remainingCount = products.length - 1;
 
       return (
@@ -159,12 +163,18 @@ export const columns = [
     accessorKey: "amount",
     header: () => <div className="">Amount</div>,
     cell: ({ row }) => {
+      // Intl.format(NaN) renders the literal "₹NaN" rather than throwing, so a
+      // missing or non-numeric amount silently displayed ₹NaN to the admin.
+      // Verified: parseFloat(undefined) -> NaN -> "₹NaN". See CLAUDE.md AF-C-FIX.
       const amount = parseFloat(row.getValue("amount"))
+      if (!Number.isFinite(amount)) {
+        return <div className="font-medium text-gray-400">—</div>
+      }
       const formatted = new Intl.NumberFormat("en-IN", {
         style: "currency",
         currency: "INR",
       }).format(amount)
- 
+
       return <div className=" font-medium">{formatted}</div>
     },
   },

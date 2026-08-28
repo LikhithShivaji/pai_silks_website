@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import ImageUpload from "./ImageUpload";
 import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
 import { ADMIN_API, CLIENT_API, apiFetch } from "@/config/api";
+import { useToast } from "@/ToastContext";
 
 import {
   Select,
@@ -21,6 +22,7 @@ const AddProduct = ({
   onBack,
   categories,
 }) => {
+  const { showToast } = useToast();
   const [imageFiles, setImageFiles] = useState([]);
   const [previewUrls, setPreviewUrls] = useState([]);
   const [collections, setCollections] = useState([]);
@@ -100,16 +102,28 @@ const AddProduct = ({
     const regular = newProduct.regularPrice;
     const selling = newProduct.discountedPrice;
 
-    if (regular === "" || regular === null) return "Regular price is required.";
-    if (!Number.isFinite(Number(regular)) || Number(regular) < 0)
-      return "Regular price must be a number of 0 or more.";
+    // Both prices are REQUIRED and must be greater than zero.
+    //
+    // Previously the selling price was optional and 0 was accepted, which is
+    // how product 49 came to exist with regular_price 4999 and selling_price
+    // NULL. getCart aliases selling_price AS price, so such a product reaches
+    // checkout unpriced: it used to be silently dropped from the order and the
+    // whole cart cleared with it. Owner decision, 2026-08-29 — neither price may
+    // be empty or 0. See CLAUDE.md CB-24b-data.
+    //
+    // The server enforces the same rule independently (validators.js); this is
+    // immediate feedback, not the boundary.
+    if (regular === "" || regular === null || regular === undefined)
+      return "Regular price cannot be left empty.";
+    if (!Number.isFinite(Number(regular)) || Number(regular) <= 0)
+      return "Regular price cannot be 0 — enter a price greater than 0.";
 
-    if (selling !== "" && selling !== null) {
-      if (!Number.isFinite(Number(selling)) || Number(selling) < 0)
-        return "Discounted price must be a number of 0 or more.";
-      if (Number(selling) > Number(regular))
-        return "Discounted price cannot be higher than the regular price.";
-    }
+    if (selling === "" || selling === null || selling === undefined)
+      return "Selling price cannot be left empty.";
+    if (!Number.isFinite(Number(selling)) || Number(selling) <= 0)
+      return "Selling price cannot be 0 — enter a price greater than 0.";
+    if (Number(selling) > Number(regular))
+      return "Selling price cannot be higher than the regular price.";
 
     if (newProduct.stockQty !== "" && newProduct.stockQty !== null) {
       const stock = Number(newProduct.stockQty);
@@ -123,7 +137,8 @@ const AddProduct = ({
   const handleSaveProduct = async () => {
     const validationError = validateProduct();
     if (validationError) {
-      alert(validationError);
+      // Toast rather than alert(): non-blocking, and several can stack.
+      showToast(validationError);
       return false;
     }
 

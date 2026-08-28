@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { SelectComponent } from "./ui/SelectComponent";
 
 import {
+
   Table,
   TableBody,
   TableCaption,
@@ -11,6 +12,27 @@ import {
   TableRow,
   TableFooter,
 } from "@/components/ui/table";
+
+// Dates and money arriving from the API are not guaranteed present or numeric.
+//
+// Verified behaviour of the unguarded versions:
+//   new Date(undefined).toLocaleString()  -> "Invalid Date"   (rendered as-is)
+//   new Date(null).toLocaleString()       -> "1/1/1970"       (silently WRONG,
+//                                            worse than an error, because it
+//                                            looks like a real order date)
+//   undefined * 2                          -> NaN             -> "₹NaN"
+// See CLAUDE.md AF-C-FIX.
+const formatDate = (value) => {
+  if (value === null || value === undefined || value === "") return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+};
+
+const formatMoney = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? `₹${n.toFixed(2)}` : "—";
+};
+
 
 export default function DisplayOrderPage({
   order,
@@ -57,7 +79,7 @@ export default function DisplayOrderPage({
               </h2>
               {order.date && (
                 <p className="text-sm text-gray-500">
-                  Placed: {new Date(order.date).toLocaleString()}
+                  Placed: {formatDate(order.date)}
                 </p>
               )}
               <p className="mt-1 text-sm">
@@ -67,7 +89,7 @@ export default function DisplayOrderPage({
 
             <div className="text-right">
               <p className="text-sm text-gray-500">Amount</p>
-              <p className="text-xl font-semibold">₹{order.amount ?? "-"}</p>
+              <p className="text-xl font-semibold">{formatMoney(order.amount)}</p>
               {order.paymentId && (
                 <p className="text-xs text-gray-500 mt-1">
                   Payment: {order.paymentId}
@@ -124,7 +146,7 @@ export default function DisplayOrderPage({
                           {it.name || it.title || it.product || "Product"}
                         </div>
                         <div className="text-sm text-gray-600">
-                          ₹{it.price ?? it.amount ?? "-"}
+                          {formatMoney(it.price ?? it.amount)}
                         </div>
                       </div>
                       <div className="text-sm text-gray-500">
@@ -168,7 +190,7 @@ export default function DisplayOrderPage({
           </p>
           <p className="text-sm text-gray-500">Address: {order.address}</p>
           <p className="text-sm text-gray-500">
-            Order Date: {new Date(order.date).toLocaleString()}
+            Order Date: {formatDate(order.date)}
           </p>
         </div>
       </div>
@@ -188,7 +210,12 @@ export default function DisplayOrderPage({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {order.product.map((product, index) => (
+            {/* `?? []` — the sibling render at :128 checks Array.isArray but
+                this one did not, on the SAME object, 85 lines apart. An order
+                whose product list is missing threw here and, with no
+                ErrorBoundary, blanked the whole order-detail page.
+                See CLAUDE.md AF-C-F3. */}
+            {(Array.isArray(order.product) ? order.product : []).map((product, index) => (
               <TableRow key={index}>
                 <TableCell className="font-medium">
                   #{order.orderId}-{index + 1}
@@ -214,16 +241,41 @@ export default function DisplayOrderPage({
                 <TableCell>{order.status}</TableCell>
                 <TableCell>{order.paymentMethod}</TableCell>
                 <TableCell className="text-right">
-                  ₹{product.price * product.qty}
+                  {formatMoney(Number(product.price) * Number(product.qty))}
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
 
+          {/* Subtotal / Shipping / Total.
+              `amount` is the order's stored total_amount — what the customer
+              was actually charged — and it INCLUDES shipping. Showing only the
+              total made the ₹100 look unaccounted for next to the item lines,
+              so the breakdown is spelled out. Subtotal is derived here purely
+              for display; both real figures come from the server.
+              See CLAUDE.md AB-16. */}
           <TableFooter>
+            {Number(order.shipping_fee) > 0 && (
+              <>
+                <TableRow>
+                  <TableCell colSpan={6}>Subtotal</TableCell>
+                  <TableCell className="text-right">
+                    ₹{(Number(order.amount) - Number(order.shipping_fee)).toFixed(2)}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell colSpan={6}>Shipping</TableCell>
+                  <TableCell className="text-right">
+                    ₹{Number(order.shipping_fee).toFixed(2)}
+                  </TableCell>
+                </TableRow>
+              </>
+            )}
             <TableRow>
               <TableCell colSpan={6}>Total</TableCell>
-              <TableCell className="text-right">₹{order.amount}</TableCell>
+              <TableCell className="text-right">
+                ₹{Number(order.amount ?? 0).toFixed(2)}
+              </TableCell>
             </TableRow>
           </TableFooter>
         </Table>

@@ -124,6 +124,20 @@ const createOrder = [
     .trim()
     .notEmpty().withMessage('Payment method is required.')
     .isLength({ max: 50 }).withMessage('Invalid payment method.'),
+
+  // Delivery contact for this parcel — stored on the order by migration 007.
+  //
+  // Optional, not required: orders can be placed from paths that do not collect
+  // a per-order number, and those fall back to the account phone when displayed
+  // in the admin panel. But if one IS sent it must be a real number, using the
+  // same isAcceptedPhone rule as signup and profile — three places accepting
+  // three different formats is how a number becomes unusable for calling.
+  body('phone_number')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 20 }).withMessage('Phone number is too long.')
+    .custom(isAcceptedPhone)
+    .withMessage('Enter a valid India (+91) or USA (+1) phone number.'),
 ];
 
 const orderIdParam = [
@@ -144,6 +158,41 @@ const categoryParam = [
     .isLength({ max: 100 }).withMessage('Invalid category.'),
 ];
 
+// PUT /api/update-profile. Backs CF-06.
+//
+// Field names are the FRONTEND's (name/phone/address), not the column names —
+// this validates the request body, and MyProfile.jsx has always used these
+// keys. The controller maps them to columns.
+//
+// Same phone rule as signup, via the shared isAcceptedPhone: if the two ever
+// disagreed, a number accepted at signup could become unsaveable on the
+// profile page, which is precisely the kind of split-brain rule nobody finds
+// until a customer reports it.
+//
+// Deliberately no `pri_email` / `email` rule: email is not updatable here. The
+// UI disables the input, and the column is UNIQUE with a denormalised copy in
+// session.pri_email. Adding it later means the SEC-02b procedure, not a rule.
+const updateProfile = [
+  body('name')
+    .trim()
+    .notEmpty().withMessage('Name is required.')
+    .isLength({ max: 50 }).withMessage('Name must be 50 characters or fewer.'),
+
+  body('phone')
+    .trim()
+    .notEmpty().withMessage('Phone number is required.')
+    .isLength({ max: 20 }).withMessage('Phone number is too long.')
+    .custom(isAcceptedPhone)
+    .withMessage('Enter a valid India (+91) or USA (+1) phone number.'),
+
+  // Optional because address is nullable, and a customer who has not set one
+  // must still be able to save a name or phone change.
+  body('address')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 500 }).withMessage('Address is too long.'),
+];
+
 const wishlistCheck = [
   query('product_id')
     .isInt({ min: 1 }).withMessage('Invalid product.').toInt(),
@@ -159,4 +208,5 @@ module.exports = {
   productIdParam,
   categoryParam,
   wishlistCheck,
+  updateProfile,
 };
