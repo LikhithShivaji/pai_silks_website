@@ -2,6 +2,7 @@ import React, { useEffect, useState, useContext } from "react";
 import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag, ArrowLeft } from "lucide-react";
 
 import { CartContext } from "@/CartContext";
+import { useAuth } from "@/AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -126,6 +127,7 @@ const OrderCard = ({ order }) => {
 // --- Main Component ---
 const MyOrders = () => {
   const { cartItems, setCartItems, wishListItems, setWishListItems } = useContext(CartContext);
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
   const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
@@ -138,15 +140,13 @@ const MyOrders = () => {
   // --- FETCH & FILTER LOGIC ---
   useEffect(() => {
     const fetchAndSortOrders = async () => {
-      const userId = localStorage.getItem("user_id");
-      
-      // 1. Log the ID we are asking for
-      // console.log(`👤 Checking orders for User ID: ${userId} on Server -1`);
-
-      if (!userId) {
-        console.warn("⛔ No 'user_id' found in localStorage.");
+      // Server-confirmed, not localStorage. This page also sits behind
+      // PrivateRoute, so reaching it already means the session was verified —
+      // this guard only avoids a pointless request during the "checking"
+      // window. See CLAUDE.md CF-55.
+      if (!isAuthenticated) {
         setLoading(false);
-        return; 
+        return;
       }
 
       try {
@@ -210,7 +210,9 @@ const MyOrders = () => {
     };
 
     fetchAndSortOrders();
-  }, []);
+    // Re-runs when auth resolves. With an empty array this fired once, before
+    // /api/verify-token had answered, and gave up permanently.
+  }, [isAuthenticated]);
 
   return (
     <>

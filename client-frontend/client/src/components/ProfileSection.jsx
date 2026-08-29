@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from "react";
 import footerBg from "../assets/footerbgimage.webp";
 import { useNavigate } from "react-router-dom";
-import { CartContext } from "../CartContext"; 
+import { CartContext } from "../CartContext";
+import { useAuth } from "../AuthContext";
 import { 
   X, 
   User, 
@@ -16,29 +17,35 @@ import {
 const Profile = ({ onClose }) => {
   const navigate = useNavigate();
   const { setCartItems, setWishListItems } = useContext(CartContext);
-  
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  useEffect(() => {
-    const userId = localStorage.getItem("user_id");
-    setIsLoggedIn(!!userId); 
-    // console.log(userId)
-  }, []);
+  // Auth comes from the SERVER, not localStorage.
+  //
+  // This was `setIsLoggedIn(!!localStorage.getItem("user_id"))`. That string
+  // outlives the session cookie, so the header could greet a signed-out
+  // customer by name and offer them Logout while every protected page bounced
+  // them to /login. Observed exactly that on 2026-08-29. See CLAUDE.md CF-55.
+  const { isAuthenticated, signOut } = useAuth();
+  const isLoggedIn = isAuthenticated;
 
-  const handleLogout = () => {
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("user_name");
-    localStorage.removeItem("user_email");
-    localStorage.removeItem("cart"); 
-    
+  const handleLogout = async () => {
+    // signOut calls POST /api/logout, so the session row is flipped to LOGOUT
+    // and the httpOnly cookies are cleared server-side. Clearing localStorage
+    // alone never ended the session — it only hid it from this tab.
+    //
+    // It also removes `wishlist`, which this function used to leave behind: on
+    // a shared device the next visitor saw the previous customer's saved items,
+    // with names, prices and images. See CLAUDE.md CF-11.
+    await signOut();
+
     setCartItems([]);
     setWishListItems([]);
 
-    // 3. Update State & Navigate
-    setIsLoggedIn(false);
     onClose();
-    navigate("/"); 
-    window.location.reload(); 
+    navigate("/");
+    // No window.location.reload(). It ran synchronously in the same handler,
+    // BEFORE React could commit the two setState calls above — so the clearing
+    // never took effect and was pointless. AuthContext now holds the state, so
+    // there is nothing to reload for. See CLAUDE.md CF-11.
   };
 
   // --- LOGIN LOGIC ---
@@ -106,8 +113,15 @@ const Profile = ({ onClose }) => {
             <div className="p-2 bg-[#68232B]/10 rounded-full text-[#FFCB85]">
                 <User size={20} fill="#FFCB85" className="text-[#FFCB85]"/>
             </div>
+            {/* The greeting is only shown once the SERVER has confirmed the
+                session. localStorage supplies the display name — a nicety, not
+                identity — and is only consulted when `isLoggedIn` is already
+                true, so a leftover name can no longer imply a session that does
+                not exist. See CLAUDE.md CF-55. */}
             <h2 className="text-xl font-bold text-[#FFCB85] tracking-wide">
-              {isLoggedIn ? `Hello, ${localStorage.getItem("user_name")?.split(" ")[0] || "User"}` : "Profile"}
+              {isLoggedIn
+                ? `Hello, ${localStorage.getItem("user_name")?.split(" ")[0] || "there"}`
+                : "Profile"}
             </h2>
           </div>
 

@@ -14,6 +14,9 @@ const getOrderDetails = async () => {
                     id: orderId,
                     date: row.order_date,
                     customer_name: row.user_name,
+                    // The account's email. The order-detail page has always
+                    // rendered an Email line with nothing behind it. See AB-43.
+                    customer_email: row.customer_email,
                     // Per-order delivery contact, falling back to the account
                     // phone for orders that predate migration 007. See AB-42.
                     contact_number: row.contact_number,

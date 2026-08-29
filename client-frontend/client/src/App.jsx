@@ -99,6 +99,19 @@ const App = () => {
     return {
       id: p.product_id || p.id,
       name: p.name,
+      // Carried through from the API so the UI can refuse an out-of-stock item
+      // BEFORE the customer fills in their address.
+      //
+      // The old payload exposed a raw `stock_qty` and this normaliser discarded
+      // it, so the storefront had no stock awareness at all: an unavailable
+      // saree added to the cart, showed a total, and failed only at the final
+      // step with "Insufficient stock for product_id 12" — after the whole
+      // delivery form had been typed. Slice 3 replaced the raw count with a
+      // boolean (the exact figure is inventory data customers should not see);
+      // this is where it enters the UI. Defaults to true so a product from an
+      // endpoint that does not send the field is not wrongly hidden.
+      // See CLAUDE.md CF-20, CF-22.
+      in_stock: p.in_stock !== undefined ? Boolean(p.in_stock) : true,
       // quantity is initialised here, at the source.
       //
       // Without it, every product added through ProductCard reached the cart

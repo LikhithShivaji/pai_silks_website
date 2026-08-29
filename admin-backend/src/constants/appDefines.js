@@ -71,6 +71,22 @@ module.exports = {
      * it is counted automatically — which is exactly the failure being fixed
      * here, so it must not be reintroduced by listing states twice.
      */
+    /**
+     * bcrypt work factor, mirroring client-backend/src/constants/appDefines.js.
+     *
+     * The admin backend never CREATES a password — there is no admin signup —
+     * but it now re-hashes on login to upgrade legacy hashes, so it needs the
+     * target cost. The admin row is still `$2b$10$`, the original DB-08 shared
+     * hash; it upgrades to cost 12 the next time the admin signs in.
+     *
+     * ⚠️ Kept in sync BY HAND with the client backend (DEP-13). If that value
+     * changes, change it here too — and regenerate DUMMY_HASH in adminDbOps,
+     * which must be hashed at the same cost or the AB-19e timing gap reopens.
+     */
+    password: {
+        BCRYPT_COST: 12
+    },
+
     ORDER_STATUS_TERMINAL: 'Delivered',
 
     get ORDER_STATUS_ACTIVE() {

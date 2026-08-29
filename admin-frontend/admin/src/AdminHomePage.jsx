@@ -16,8 +16,10 @@ import { Menu, X, Trash, Bell } from "lucide-react";
 // collections from the client backend — see the API-ownership item in
 // CLAUDE.md, scheduled after the phases.
 import { ADMIN_API, apiFetch } from "@/config/api";
+import { useToast } from "@/ToastContext";
 
 const AdminHomePage = () => {
+  const { showToast } = useToast();
   const notifications = 3;
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -234,6 +236,9 @@ const AdminHomePage = () => {
       // the column was blank on every row and the phone half of the search
       // could not match. See CLAUDE.md AB-42.
       contactNumber: o.contact_number || "",
+      // DisplayOrderPage renders `order.email`, and nothing ever set it — the
+      // Email line on every order was blank. See CLAUDE.md AB-43.
+      email: o.customer_email || "",
       status: o.status_of_order || o.status || "Pending",
       // The server's stored total_amount — what the customer was charged,
       // shipping included. It is no longer recomputed from the line items,
@@ -263,36 +268,89 @@ const AdminHomePage = () => {
     }));
   };
 
+  /**
+   * Change an order's status.
+   *
+   * Two bugs lived here.
+   *
+   * AF-10 — the panel LIED about what saved. The UI was updated first and, on
+   * failure, the only response was a console.error: no rollback, nothing shown
+   * to the admin. A failed request left "Delivered" on screen while the
+   * database still said "Pending". Worse, `await res.json()` ran BEFORE the
+   * `res.ok` check, so an HTML error page or an empty body threw past that
+   * check and landed in the network catch — reporting a network error when the
+   * server had in fact answered.
+   *
+   * AF-24 — the body sent SIX keys for two values (id / orderId / order_id and
+   * status / status_of_order / order_status) because the API contract was
+   * unknown when it was written. The server reads exactly two:
+   * `const { order_id, status } = req.body`. The rest was noise, and becomes
+   * dangerous the day the server reads a different pair than the UI maintains.
+   *
+   * The optimistic update is KEPT — it makes the dropdown feel instant — but
+   * the previous value is captured first and restored if the server refuses.
+   */
   const changeOrderStatus = async (orderId, newStatus) => {
+    // Captured BEFORE mutating, so a failure can put it back.
+    const previousStatus = orders.find(
+      (o) => String(o.id) === String(orderId)
+    )?.status;
+
     setOrders((prev) =>
-      prev.map((o) => (String(o.id) === String(orderId) ? { ...o, status: newStatus } : o))
+      prev.map((o) =>
+        String(o.id) === String(orderId) ? { ...o, status: newStatus } : o
+      )
     );
 
+    const rollback = () => {
+      if (previousStatus === undefined) return;
+      setOrders((prev) =>
+        prev.map((o) =>
+          String(o.id) === String(orderId) ? { ...o, status: previousStatus } : o
+        )
+      );
+    };
 
     try {
-      const res = await apiFetch(
-        `${ADMIN_API}/api/update-order-status`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-              id: orderId,
-              orderId: orderId, 
-              order_id: orderId,
-              status: newStatus, 
-              status_of_order: newStatus,
-              order_status: newStatus
-          }),
+      const res = await apiFetch(`${ADMIN_API}/api/update-order-status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // Exactly the two fields the server destructures.
+        body: JSON.stringify({ order_id: orderId, status: newStatus }),
+      });
+
+      // res.ok BEFORE parsing. A 401 HTML page or an empty body makes .json()
+      // throw, which previously masked a server answer as a network failure.
+      if (!res.ok) {
+        let message = `Could not update the order (HTTP ${res.status}).`;
+        if (res.status === 401) {
+          message = "Your session has expired. Please log in again.";
+        } else {
+          // Best effort: prefer the server's own message when it sent JSON.
+          try {
+            const body = await res.json();
+            if (body?.message) message = body.message;
+          } catch {
+            /* not JSON — keep the status-based message */
+          }
         }
-      );
+        rollback();
+        showToast(message);
+        return;
+      }
 
       const data = await res.json();
+      if (!data.success) {
+        rollback();
+        showToast(data.message || "Could not update the order.");
+        return;
+      }
 
-      if (!res.ok) {
-        console.error("Update failed on backend");
-      } 
+      showToast(`Order #${orderId} set to ${newStatus}.`, "success");
     } catch (err) {
-      console.error("❌ Network error", err);
+      console.error("Order status update failed:", err);
+      rollback();
+      showToast("Could not reach the server. The order was not updated.");
     }
   };
 

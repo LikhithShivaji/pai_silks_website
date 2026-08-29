@@ -3,8 +3,37 @@ import instagram from "../assets/instagram.svg";
 import whatsapp from "../assets/whatsapp.svg";
 import footerBg from "../assets/footerbgimage.webp";
 import { Input } from "./ui/input";
+import React, { useState } from "react";
+import { useToast } from "../ToastContext";
 
 function Footer() {
+  const { showToast } = useToast();
+  const [subscribeEmail, setSubscribeEmail] = useState("");
+
+  /**
+   * Newsletter submit.
+   *
+   * preventDefault is the whole point: without an onSubmit handler the browser
+   * performed a native GET to the current URL, reloading the page and taking
+   * the cart drawer and scroll position with it. See CLAUDE.md CF-18.
+   *
+   * There is no mailing-list backend, so this deliberately does not claim the
+   * address was subscribed — saying "you're subscribed!" when nothing was
+   * recorded is the same class of dishonesty as the fabricated reviews (CF-21).
+   * Wire it to a real endpoint when one exists.
+   */
+  const handleSubscribe = (e) => {
+    e.preventDefault();
+    const email = subscribeEmail.trim();
+    if (!email) return;
+
+    showToast(
+      "Thanks — we'll be in touch. Newsletter sign-up isn't live yet.",
+      "success"
+    );
+    setSubscribeEmail("");
+  };
+
   return (
     <>
       {/* --- MAIN FOOTER --- */}
@@ -40,9 +69,26 @@ function Footer() {
             Subscribe to our newsletter!
           </h2>
 
-          <form className="flex flex-col md:flex-row items-center gap-3">
+          {/* onSubmit with preventDefault is REQUIRED here.
+              With neither onSubmit nor action, submitting performed a native
+              GET to the current URL: a full page reload that closed the cart
+              drawer, lost the scroll position and appended "?" to the address
+              bar — and subscribed nobody, since the input had no `name` either.
+              The footer renders on nearly every page, so "Subscribe" was a
+              reload trap sitting under the whole site.
+
+              There is no mailing-list backend yet, so this collects the address
+              and says so honestly rather than pretending to sign anyone up.
+              See CLAUDE.md CF-18. */}
+          <form
+            className="flex flex-col md:flex-row items-center gap-3"
+            onSubmit={handleSubscribe}
+          >
             <Input
               type="email"
+              name="email"
+              value={subscribeEmail}
+              onChange={(e) => setSubscribeEmail(e.target.value)}
               placeholder="Your Email address"
               required
               className="

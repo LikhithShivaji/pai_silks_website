@@ -5,16 +5,54 @@ const sqlqueries = require('../dbOps/sqlQueries')
 const { sanitizeError } = require('../utils/safeError');
 const appDefines = require('../constants/appDefines');
 
+/**
+ * A real bcrypt hash of a value that is no admin's password. Compared against
+ * on the account-not-found path so a failed login costs the same whether or not
+ * the email exists. Hardcoded rather than generated at boot — hashing at cost
+ * 12 takes ~230ms and that would be paid on every cold start.
+ *
+ * Cost 12, matching appDefines.password.BCRYPT_COST. Raise that constant and
+ * this must be regenerated, or the timing gap reopens. See CLAUDE.md AB-19e.
+ */
+const DUMMY_HASH = '$2b$12$I4dTwYOh1APoqQm65IJMjO/iIGlWTHMrZhPkyxdAWe8LGXRFBA.KW';
+
 class Cmds {
 
-    // Verify admin password
+    // Verify admin password.
+    //
+    // Constant-time-ish with respect to WHETHER THE ACCOUNT EXISTS. The old
+    // code returned the moment the email was not found, skipping bcrypt: an
+    // existing account cost ~235ms while an unknown one returned in ~19ms, a
+    // reliable oracle. Mirrors the customer-side fix. See CLAUDE.md AB-19e.
     async verifyAdminPasswd(pri_email, passwd) {
         try {
             const [rows] = await pool.query(sqlqueries.login.getUserDetails, [pri_email]);
-            if (rows.length === 0) return null;
+
+            // No such account, or no usable hash — a NULL `pass` used to make
+            // bcrypt.compare reject and surface as a 500 instead of a 401.
+            if (rows.length === 0 || !rows[0].pass) {
+                await bcrypt.compare(passwd, DUMMY_HASH);
+                return null;
+            }
+
             const user = rows[0];
             const match = await bcrypt.compare(passwd, user.pass);
-            return match ? user : null;
+            if (!match) return null;
+
+            // Transparent rehash — the admin row is still cost 10 (the original
+            // DB-08 shared hash). Failure is swallowed: the admin has already
+            // authenticated and must not be blocked by a background upgrade.
+            const cost = parseInt(String(user.pass).split('$')[2], 10);
+            if (Number.isFinite(cost) && cost < appDefines.password.BCRYPT_COST) {
+                try {
+                    const upgraded = await bcrypt.hash(passwd, appDefines.password.BCRYPT_COST);
+                    await pool.query(sqlqueries.login.updatePasswordHash, [upgraded, user.user_id]);
+                } catch (rehashErr) {
+                    console.error('Password rehash failed (login still succeeded):', sanitizeError(rehashErr));
+                }
+            }
+
+            return user;
         } catch (err) {
             console.error("Error in verifyAdminPasswd:", sanitizeError(err));
             throw err;

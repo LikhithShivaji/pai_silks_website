@@ -55,13 +55,24 @@ function Homepage() {
   const [newReleases, setNewReleases] = useState([]);
   const [loadingNew, setLoadingNew] = useState(true);
 
-  const thumbnails =
-    bestSellers.length > 0
-      ? [1, 2, 3].map((offset) => {
-          const index = (currentBestIndex + offset) % bestSellers.length;
-          return { ...bestSellers[index], originalIndex: index };
-        })
-      : [];
+  // The OTHER bestsellers — never the one already on display, never repeated.
+  //
+  // This was `[1, 2, 3].map(off => (currentBestIndex + off) % bestSellers.length)`,
+  // which always produced exactly three entries regardless of how many products
+  // existed. With fewer than four it wrapped around onto itself:
+  //
+  //   1 product  -> indexes [0, 0, 0]  duplicate React keys
+  //   2 products -> indexes [1, 0, 1]  duplicate React keys
+  //   3 products -> indexes [1, 2, 0]  index 0 IS the current product, shown
+  //                                     as one of its own "other products"
+  //
+  // There are 3 bestsellers today, so the third case is live. Taking everything
+  // except the current index gives at most three, never a repeat, and never the
+  // product already on screen. See CLAUDE.md CF-25.
+  const thumbnails = bestSellers
+    .map((item, index) => ({ ...item, originalIndex: index }))
+    .filter((item) => item.originalIndex !== currentBestIndex)
+    .slice(0, 3);
 
   const updateCart = (c) => setCartItems(c);
   const updateWishList = (w) => setWishListItems(w);
@@ -488,7 +499,16 @@ function Homepage() {
                     </button>
 
                     <button
-                      onClick={() => {
+                      // AWAITS the cart sync before navigating.
+                      //
+                      // handleAddToCart is async — it POSTs to /api/cart/add —
+                      // and this navigated immediately without waiting. Since
+                      // the server builds the order from the DATABASE cart, a
+                      // fast click reached checkout before the item was
+                      // recorded, producing "Cart is empty" for a saree plainly
+                      // on screen — or, worse, billing stale items from an
+                      // earlier session. See CLAUDE.md CF-14.
+                      onClick={async () => {
                         if (!currentProduct) return;
 
                         const productForCart = {
@@ -503,7 +523,7 @@ function Homepage() {
                           quantity: 1,
                         };
 
-                        handleAddToCart(productForCart);
+                        await handleAddToCart(productForCart);
                         navigate("/checkout");
                       }}
                       className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg shadow-orange-900/20

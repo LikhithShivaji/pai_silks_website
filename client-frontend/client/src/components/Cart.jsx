@@ -2,12 +2,16 @@ import React, { useEffect, useContext } from "react";
 import CartItem from "./CartItem";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";
+import { useAuth } from "../AuthContext";
+import { useToast } from "../ToastContext";
 import { CLIENT_API, SHIPPING_FEE, apiFetch } from "@/config/api";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, ShoppingBag } from "lucide-react";
 
 const Cart = ({ onClose }) => {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { showToast } = useToast();
 
   const {
     cartItems,
@@ -32,31 +36,56 @@ const Cart = ({ onClose }) => {
   // 2. HYBRID QUANTITY CHANGE (Local + DB)
   // --------------------------------------------------------
   const changeQuantity = async (index, newQuantity) => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed identity, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
     const itemToUpdate = dynamicCartItem[index];
 
-    // Optimistic UI Update
-    const updatedCart = [...dynamicCartItem];
-    updatedCart[index] = { ...updatedCart[index], quantity: newQuantity };
+    // Guard against a stale index — this one was actively dangerous.
+    //
+    // `index` is captured at RENDER time. If the array shrank between render
+    // and click, `dynamicCartItem[index]` was `undefined`, and the line below
+    // spread it: `{ ...undefined, quantity: n }` yields `{ quantity: n }` — a
+    // nameless, PRICELESS row silently inserted into the cart and then
+    // persisted to localStorage by the context's sync effect. The API call
+    // then threw on `itemToUpdate.id`. See CLAUDE.md CF-12.
+    if (!itemToUpdate) return;
+
+    const productId = itemToUpdate.id || itemToUpdate.product_id;
+
+    // Optimistic UI Update — matched by product_id, not by position.
+    const previous = dynamicCartItem;
+    const updatedCart = dynamicCartItem.map((item) =>
+      (item.id || item.product_id) === productId
+        ? { ...item, quantity: newQuantity }
+        : item
+    );
     setDynamicCartItem(updatedCart);
     setCartItems(updatedCart);
 
     // API Call
     if (userId) {
       try {
-        await apiFetch(
+        const res = await apiFetch(
           `${CLIENT_API}/api/cart/update`,
           {
             method: "POST", // Check if your API uses POST or PUT
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              product_id: itemToUpdate.id || itemToUpdate.product_id,
+              product_id: productId,
               quantity: newQuantity,
             }),
           }
         );
+        // Roll back on failure. This matters more here than almost anywhere
+        // else: checkout bills from the DATABASE cart while the screen shows
+        // React state, so a silently dropped update means the customer is shown
+        // one quantity and charged another. See CLAUDE.md CF-17.
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (error) {
         console.error("Failed to update quantity DB:", error);
+        setDynamicCartItem(previous);
+        setCartItems(previous);
+        showToast("Couldn't update the quantity. Please try again.");
       }
     }
   };
@@ -85,7 +114,8 @@ const Cart = ({ onClose }) => {
 
   // 5. PROCEED TO CHECKOUT
   const handleProceedToCheckout = () => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed identity, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
     onClose();
 
     if (userId) {

@@ -123,14 +123,21 @@ exports.customerLogin = async (req, res, next) => {
       });
     }
 
-    // All four cookies share the session lifetime. The token is the JWT and
-    // carries its own matching `exp`; there is no separate short token expiry
-    // any more (see appDefines).
+    // Two cookies, not four. Both share the session lifetime; the token is the
+    // JWT and carries its own matching `exp` (see appDefines).
+    //
+    // role_id and pri_email are NO LONGER SET. They were write-only: both were
+    // httpOnly, so the frontend could not read them, and a grep across both
+    // backends confirms nothing ever read them either. They simply travelled on
+    // every request advertising the account's privilege level and address.
+    //
+    // role_id in particular must never come from a cookie — it is in the signed
+    // JWT, where it cannot be forged. requireAdmin reads it from the database
+    // row regardless (AB-08). Logout still CLEARS these two names so anyone
+    // holding them from an older session has them removed. See CLAUDE.md CB-09.
     const cookieSettings = [
       { key: CookiesKey.session_id, value: result.session_id },
       { key: CookiesKey.token, value: result.token },
-      { key: CookiesKey.role_id, value: result.role_id },
-      { key: CookiesKey.pri_email, value: result.pri_email },
     ];
 
     cookieSettings.forEach(({ key, value }) => {

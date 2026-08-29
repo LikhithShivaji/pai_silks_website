@@ -3,9 +3,11 @@ import WishListProductItem from "./WishListProductItem";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, Heart, ShoppingBag } from "lucide-react";
 import { CartContext } from "../CartContext"; // <--- IMPORT CONTEXT
+import { useAuth } from "../AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 
 const WishList = ({ onClose }) => {
+  const { isAuthenticated } = useAuth();
   // Use Context instead of local props for single source of truth
   const {
     wishListItems,
@@ -28,28 +30,49 @@ const WishList = ({ onClose }) => {
     if (e) e.stopPropagation();
 
     const itemToRemove = dynamicWishListItem[index];
-    const userId = localStorage.getItem("user_id");
 
-    // A. Optimistic UI Update
-    const newWishListItems = dynamicWishListItem.filter((_, i) => i !== index);
+    // Guard against a stale index.
+    //
+    // `index` is captured at RENDER time. If the list shrinks between render
+    // and click — another removal, or the context refetch landing — then
+    // `dynamicWishListItem[index]` is `undefined`, and the code below read
+    // `.id` straight off it and threw. Keyed operations should use product_id;
+    // this at least refuses to act on a row that is no longer there.
+    // See CLAUDE.md CF-12.
+    if (!itemToRemove) return;
+
+    const productId = itemToRemove.id || itemToRemove.product_id;
+    // Server-confirmed identity, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
+
+    // A. Optimistic UI Update — filtered by product_id, not by position, so a
+    // concurrent change cannot remove the wrong row.
+    const previous = dynamicWishListItem;
+    const newWishListItems = dynamicWishListItem.filter(
+      (item) => (item.id || item.product_id) !== productId
+    );
     setDynamicWishListItem(newWishListItems);
     setWishListItems(newWishListItems); // Update Context
 
     // B. API Call if User
     if (userId) {
       try {
-        await apiFetch(
+        const res = await apiFetch(
           `${CLIENT_API}/api/wishlist/remove`,
           {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              product_id: itemToRemove.id || itemToRemove.product_id,
-            }),
+            body: JSON.stringify({ product_id: productId }),
           }
         );
+        // Restore on failure. The removal was optimistic, so without this the
+        // item stayed gone from the screen while remaining in the database —
+        // and reappeared on the next reload with no explanation. CF-17.
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (err) {
         console.error("Failed to remove from DB wishlist", err);
+        setDynamicWishListItem(previous);
+        setWishListItems(previous);
       }
     }
   };
@@ -75,7 +98,8 @@ const WishList = ({ onClose }) => {
   // 3. ADD ALL TO CART
   // ---------------------------------------------------------
   const handleAddAllToCart = async () => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed identity, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
 
     // A. Loop through all items and add to Cart Context
     // We use a loop because your Context handles the "User vs Guest" logic internally for each add

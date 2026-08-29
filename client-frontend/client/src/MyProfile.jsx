@@ -5,6 +5,7 @@ import { User, Mail, Phone, Calendar as CalendarIcon, Save, Edit3, MapPinHouse, 
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import { CartContext } from "./CartContext";
+import { useAuth } from "./AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -19,6 +20,7 @@ import { Calendar } from "./components/ui/calendar";
 const MyProfile = () => {
   // --- Original Context Logic ---
   const { cartItems, setCartItems, wishListItems, setWishListItems } = useContext(CartContext);
+  const { isAuthenticated } = useAuth();
   const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
   const updateWishList = (dynamicWishListItem) => setWishListItems(dynamicWishListItem);
 
@@ -43,10 +45,10 @@ const MyProfile = () => {
   // --- 1. FETCH USER DETAILS ON MOUNT ---
   useEffect(() => {
     const fetchUserDetails = async () => {
-      const userId = localStorage.getItem("user_id");
-
-      if (!userId) {
-        console.warn("No User ID found. User might be guest.");
+      // Server-confirmed, not localStorage. This page is behind PrivateRoute,
+      // so the guard only avoids a request during the "checking" window.
+      // See CLAUDE.md CF-55.
+      if (!isAuthenticated) {
         setLoading(false);
         return;
       }
@@ -76,7 +78,9 @@ const MyProfile = () => {
     };
 
     fetchUserDetails();
-  }, []);
+    // Re-runs when auth resolves — an empty array fired before
+    // /api/verify-token had answered and gave up permanently.
+  }, [isAuthenticated]);
 
   // --- Handlers ---
   const handleChange = (e) => {

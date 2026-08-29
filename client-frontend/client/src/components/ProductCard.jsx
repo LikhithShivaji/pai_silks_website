@@ -10,7 +10,9 @@ function ProductCard({
   discounted_price,
   image1,
   onAddToCart,
-  showToast
+  showToast,
+  // Defaults to true so callers that do not pass it behave exactly as before.
+  in_stock = true,
 }) {
   const navigate = useNavigate();
 
@@ -20,6 +22,17 @@ function ProductCard({
 
   const addToCart = (e) => {
     e.stopPropagation();
+    // Out-of-stock is refused HERE rather than at the end of checkout.
+    //
+    // The storefront had no stock awareness: an unavailable saree went into the
+    // cart, showed a total, and failed only after the customer had typed their
+    // whole address — "Insufficient stock for product_id 12". The server still
+    // enforces stock at checkout; this just stops the customer wasting the trip.
+    // See CLAUDE.md CF-20.
+    if (!in_stock) {
+      showToast("Sorry, this saree is out of stock.");
+      return;
+    }
     onAddToCart();
     showToast("Added to Cart", "cart");
   };
@@ -110,9 +123,12 @@ function ProductCard({
           <h3 className="m-0 p-0 text-md font-bold">₹ {discounted_price}</h3>
         </div>
 
-        {/* ADD BUTTON */}
+        {/* ADD BUTTON — visibly disabled when out of stock, so the customer
+            can see it before clicking rather than being told afterwards. */}
         <button
           onClick={addToCart}
+          disabled={!in_stock}
+          title={in_stock ? "Add to cart" : "Out of stock"}
           className="
             w-10.5
             h-10.5
@@ -128,6 +144,8 @@ function ProductCard({
             active:scale-95
             flex justify-center items-center
             cursor-pointer
+            disabled:opacity-40 disabled:cursor-not-allowed
+            disabled:hover:scale-100 disabled:active:scale-100
           "
           style={{ backgroundImage: `url(${addButton})` }}
         ><Plus/></button>

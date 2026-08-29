@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ImageUpload from "./ImageUpload";
@@ -8,6 +8,21 @@ import { useToast } from "@/ToastContext";
 
 const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProductDetails }) => {
   const { showToast } = useToast();
+
+  // Blob URLs this component created, revoked once on unmount.
+  //
+  // Only these are revoked — `previewUrls` also holds the product's EXISTING
+  // image URLs fetched from the server, and calling revokeObjectURL on an
+  // ordinary https URL is meaningless. Tracking creations separately keeps the
+  // two apart. See CLAUDE.md AF-12.
+  const createdBlobUrls = useRef([]);
+
+  useEffect(() => {
+    const urls = createdBlobUrls.current;
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
   
   // 1. STATE
   const [imageFiles, setImageFiles] = useState([]); 
@@ -84,6 +99,11 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
     });
 
     const objectUrl = URL.createObjectURL(file);
+    // Track it for the unmount cleanup below. This form created blob URLs and
+    // NEVER revoked them — every image preview leaked until the tab was closed.
+    // See CLAUDE.md AF-12.
+    createdBlobUrls.current.push(objectUrl);
+
     setPreviewUrls((prev) => {
       const updated = [...prev, objectUrl].slice(0, 4);
       return updated;
@@ -232,7 +252,8 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
                 (String(p.id) === String(targetId) || String(p.product_id) === String(targetId) ? updatedProductForUI : p)
               );
           }
-          localStorage.setItem("categoryProducts", JSON.stringify(newPrev));
+          // Write-only localStorage cache removed — nothing ever read
+          // "categoryProducts" back. Same as AddProduct. See CLAUDE.md AF-08.
           return newPrev;
         });
       }

@@ -1,7 +1,11 @@
 const dbCmds = require('../../dbOps/adminDbOps');
-const cloudinary = require('../../config/cloudinary');
+// `cloudinary` is no longer imported here. This module used to call
+// uploader.upload() directly, re-uploading files multer had already uploaded.
+// Uploads now happen once, in the multer storage layer; deletions go through
+// utils/cloudinaryAssets. See CLAUDE.md AB-10.
 const { sanitizeError } = require('../../utils/safeError');
 const { withTransaction } = require('../../dbOps/withTransaction');
+const { destroyImagesByUrl } = require('../../utils/cloudinaryAssets');
 
 
 
@@ -42,24 +46,37 @@ const updateProduct = async (productData, files = []) => {
       ? Number(productData.is_new_release)
       : 0;
 
-  // Uploads happen BEFORE the transaction opens, deliberately.
+  // The files are ALREADY uploaded by the time this runs.
   //
-  // A rollback undoes database work only — an uploaded asset cannot be
-  // un-uploaded, and nothing in this codebase ever deletes a remote one
-  // (AB-10, and the same will be true of S3). Doing the slow network work
-  // outside the transaction also keeps it short: a long transaction holds one
-  // of only 10 pool connections and locks the rows it has touched.
-  const uploadedImages = [];
-  if (files && files.length > 0) {
-    for (let i = 0; i < files.length; i++) {
-      const uploaded = await cloudinary.uploader.upload(files[i].path, {
-        folder: `products/${productData.id}`,
-      });
+  // `upload.array('images', 10)` runs multer with CloudinaryStorage, which
+  // uploads each file and then sets `file.path = resp.secure_url` (verified in
+  // multer-storage-cloudinary/lib/index.js:108). So `file.path` is not a local
+  // temp path — it is the URL of an asset that already exists in Cloudinary.
+  //
+  // This code then called `cloudinary.uploader.upload(files[i].path, ...)`,
+  // which makes Cloudinary FETCH that URL and store a SECOND copy. Only the
+  // second URL was saved, so the first was orphaned immediately — on every
+  // image, on every product edit, permanently, in a paid account. That is
+  // CLAUDE.md AB-10.
+  //
+  // Using file.path directly removes the duplicate upload entirely.
+  const uploadedImages = (files || []).map((file, i) => ({
+    image_url: file.path,
+    is_primary_image: i === 0 ? 1 : 0
+  }));
 
-      uploadedImages.push({
-        image_url: uploaded.secure_url,
-        is_primary_image: i === 0 ? 1 : 0
-      });
+  // The URLs being replaced, captured BEFORE the transaction deletes their
+  // rows. Needed to delete the remote assets afterwards — once the rows are
+  // gone there is no record of what those files were.
+  let replacedUrls = [];
+  if (uploadedImages.length > 0) {
+    try {
+      const existing = await dbCmds.getImagesByProductId(productData.id);
+      replacedUrls = (existing || []).map((row) => row.image_url).filter(Boolean);
+    } catch (err) {
+      // Not fatal: failing to LIST the old images must not block the update.
+      // The consequence is orphans, which is exactly the status quo ante.
+      console.error("Could not list existing images for cleanup:", sanitizeError(err));
     }
   }
 
@@ -116,6 +133,23 @@ const updateProduct = async (productData, files = []) => {
     }
   });
 
+  // Remote cleanup runs AFTER the transaction commits, deliberately.
+  //
+  // Inside the transaction, a later rollback would leave the database pointing
+  // at images that had already been destroyed — unrecoverable. Running it after
+  // means the worst case is an orphaned file, which is merely wasteful.
+  // destroyImagesByUrl never throws for the same reason: a Cloudinary outage
+  // must not fail an update the admin has already been told succeeded.
+  // See CLAUDE.md AB-10.
+  if (replacedUrls.length > 0) {
+    const cleanup = await destroyImagesByUrl(replacedUrls);
+    if (cleanup.failed > 0) {
+      console.error(
+        `Image cleanup for product ${productData.id}: ${cleanup.deleted} deleted, ${cleanup.failed} orphaned`
+      );
+    }
+  }
+
   return true;
 };
 
@@ -164,33 +198,19 @@ const getAllProductDetails = async () => {
 };
 
 
-const updateImages = async (product_id, files, insertImagesFn) => {
-    if (!product_id) throw new Error("Product ID is required");
-    if (!files || files.length === 0) return [];
-
-    const uploadedImages = [];
-
-    // Upload each file to Cloudinary
-    for (let i = 0; i < files.length; i++) {
-        const uploaded = await cloudinary.uploader.upload(files[i].path, {
-            folder: `products/${product_id}`,
-        });
-        uploadedImages.push({
-            image_url: uploaded.secure_url,
-            is_primary_image: i === 0 ? 1 : 0
-        });
-    }
-
-    // Delete old images
-    await dbCmds.deleteImagesByProductId(product_id);
-
-    // Insert new images using your existing insertImages API
-    await insertImagesFn(product_id, uploadedImages);
-
-    return uploadedImages;
-};
-
-
+// REMOVED: updateImages.
+//
+// It was dead — its only caller was adminController.updateProductImages, whose
+// route is commented out in adminRoutes.js — and it carried the SAME double
+// upload as updateProduct: cloudinary.uploader.upload(files[i].path) where
+// file.path is already a Cloudinary URL. It also deleted the old image rows
+// with no attempt to delete the remote assets.
+//
+// Deleted rather than fixed. Leaving a working-looking image-replacement
+// helper in place is precisely how the bug comes back: someone uncomments that
+// route line, and every edit starts orphaning two assets again. Image
+// replacement lives in updateProduct, which uploads once and cleans up after
+// itself. See CLAUDE.md AB-10, AB-30.
 
 const insertImages = async (product_id, images) => {
   if (!product_id) {
@@ -250,7 +270,6 @@ module.exports = {
     getCategoryWiseCount,
     getAllProductDetails,
     updateProduct,
-    updateImages,
     insertImages,
     deleteProduct, 
     addCategory,

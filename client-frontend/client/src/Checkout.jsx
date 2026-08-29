@@ -1,5 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { CartContext } from "@/CartContext.jsx";
+import { useAuth } from "@/AuthContext";
+import { useToast } from "@/ToastContext";
 import CheckOutItem from "@/components/CheckOutItem.jsx";
 import { CLIENT_API, SHIPPING_FEE, apiFetch } from "@/config/api";
 import {
@@ -76,6 +78,8 @@ const checkoutSchema = z.object({
 
 export default function Checkout() {
   const { cartItems, setCartItems } = useContext(CartContext);
+  const { isAuthenticated, user } = useAuth();
+  const { showToast } = useToast();
 
   const [localTotal, setLocalTotal] = useState(0);
 
@@ -119,12 +123,14 @@ export default function Checkout() {
   }, [cartItems]);
 
   useEffect(() => {
-    const userId = localStorage.getItem("user_id");
-    const userEmail = localStorage.getItem("user_email");
-
+    // The email is prefilled from the SERVER's answer where available — it is
+    // the address the session actually belongs to. localStorage is only the
+    // fallback, and only for prefilling a form field, never for identity.
+    // See CLAUDE.md CF-55.
+    const userEmail = user?.pri_email || localStorage.getItem("user_email");
     if (userEmail) form.setValue("email", userEmail);
 
-    if (userId) {
+    if (isAuthenticated) {
       apiFetch(
         `${CLIENT_API}/api/orders/mine`
       )
@@ -168,35 +174,67 @@ export default function Checkout() {
   }, [form]);
 
   const onSubmit = async (data) => {
-    setIsSubmitting(true);
-    const userId = localStorage.getItem("user_id");
-
-    if (!userId) {
-      alert("Please login first.");
+    // The guard runs BEFORE setIsSubmitting.
+    //
+    // It used to set the flag first and then return early, skipping the `try`
+    // whose `finally` would have cleared it — so an interrupted submit left the
+    // button stuck in its spinner forever. See CLAUDE.md CF-28.
+    //
+    // The check itself is now the shared server-confirmed state, not a third
+    // independent reading of localStorage. See CLAUDE.md CF-55.
+    if (!isAuthenticated) {
+      showToast("Please log in to place your order.");
       navigate("/login", { state: { from: "checkout" } });
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
+      // ONLY the fields the server actually reads.
+      //
+      // createOrder destructures exactly three:
+      //   const { shipping_address, payment_method, phone_number } = req.body
+      // It builds the order lines from the DATABASE cart, never from the
+      // request — that is the CF-01 / CB-03 defence against a client naming its
+      // own prices. total_amount, payment_status and status are server-assigned
+      // for the same reason.
+      //
+      // ⚠️ `items` was a BREAKING leftover, not just dead weight. Phase 3 added
+      // `rejectNonScalarBody` router-wide (AB-11 / CB-29: non-scalar values
+      // corrupt mysql2 placeholders) and `items` is an array — so from that
+      // commit onward EVERY real checkout was refused with
+      //   Invalid value for "items".
+      // It went unnoticed because the curl tests for this endpoint never sent
+      // the field the actual form sends. Reproduced and confirmed 2026-08-29.
+      //
+      // `customer_name` and `email` are dropped for the same reason minus the
+      // breakage: the server reads neither, and both already live on the
+      // account row reached through the session.
       const orderPayload = {
-        customer_name: `${data.firstName} ${data.lastName}`,
-        email: data.email,
         // Was `data.phone || "9999999999"` — a field that never existed, so
         // every order got the fallback. Now the real value, in E.164.
         phone_number: toE164(data.countryCode, data.phoneNumber),
-        shipping_address: `${data.address}, ${data.city}, ${data.state} - ${data.pincode}`,
-        // total_amount, payment_status and order_status are NOT sent. The
-        // server computes the total from its own product prices, adds its own
-        // shipping fee, and assigns the statuses. A client cannot set its own
-        // price or declare its own order paid. See CF-01, CF-03, CB-03.
+        // The apartment / flat number is INCLUDED.
+        //
+        // It was collected on the form and then silently dropped from the
+        // composed address, so a flat number never reached the courier —
+        // parcels went to the building with nothing saying which door.
+        // Confirmed on a real order: "Hiranandani flat" was typed and the
+        // stored address read "B. Road Hassan, Hassan, Karnataka - 573201".
+        // See CLAUDE.md CF-23.
+        //
+        // It is optional, so it is only inserted when present — otherwise the
+        // address would carry an empty segment and read ", , Hassan".
+        shipping_address: [
+          data.address,
+          data.apartment?.trim(),
+          data.city,
+          `${data.state} - ${data.pincode}`,
+        ]
+          .filter(Boolean)
+          .join(", "),
         payment_method: "UPI",
-        items: cartItems.map((item) => ({
-          product_id: item.id || item.product_id,
-          quantity: item.quantity || 1,
-          price: Number(
-            item.discounted_price || item.selling_price || item.price
-          ),
-        })),
       };
 
       // console.log("Creating Order:", orderPayload);

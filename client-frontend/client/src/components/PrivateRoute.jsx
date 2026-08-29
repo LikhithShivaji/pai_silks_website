@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { CLIENT_API, apiFetch } from "@/config/api";
+import { useAuth } from "../AuthContext";
 
 /**
  * Route guard that asks the SERVER whether the session is valid.
@@ -19,26 +19,17 @@ import { CLIENT_API, apiFetch } from "@/config/api";
  * an empty page and nothing more.
  */
 const PrivateRoute = ({ children }) => {
-  const [status, setStatus] = useState("checking"); // checking | in | out
+  // Reads the SHARED auth state instead of making its own /api/verify-token
+  // call on every navigation.
+  //
+  // Two reasons. One: it was the only part of the app asking the server, while
+  // the header asked localStorage — so the two could disagree, and did (the
+  // storefront greeted a signed-out customer by name and then refused them
+  // their orders). Two: it re-checked on every route change, so moving between
+  // protected pages issued a request each time. One context, one answer.
+  // See CLAUDE.md CF-55.
+  const { status } = useAuth();
   const location = useLocation();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    apiFetch(`${CLIENT_API}/api/verify-token`)
-      .then((res) => {
-        if (!cancelled) setStatus(res.ok ? "in" : "out");
-      })
-      .catch(() => {
-        // Network failure is not proof of logout, but we cannot render
-        // protected content without confirmation. Fail closed.
-        if (!cancelled) setStatus("out");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [location.pathname]);
 
   if (status === "checking") {
     return (

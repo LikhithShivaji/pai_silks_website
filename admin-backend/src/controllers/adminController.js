@@ -60,13 +60,19 @@ exports.adminLogin = async (req, res, next) => {
       });
     }
 
-    // All four cookies share the session lifetime. The token is the JWT and
-    // carries its own matching `exp`.
+    // Two cookies, not four. Both share the session lifetime; the token is the
+    // JWT and carries its own matching `exp`.
+    //
+    // role_id and pri_email are NO LONGER SET — both were httpOnly and read by
+    // nothing (verified by grep across both backends), so they only advertised
+    // this account's privilege level on every request. On the admin side that
+    // is worse: a cookie announcing role_id=0 marks the request as the
+    // administrator's. requireAdmin reads the role from the database row, never
+    // from a cookie (AB-08). Logout still CLEARS both names so anyone holding
+    // them from an older session has them removed. See CLAUDE.md CB-09.
     const cookieSettings = [
       { key: CookiesKey.session_id, value: result.session_id },
       { key: CookiesKey.token, value: result.token },
-      { key: CookiesKey.role_id, value: result.role_id },
-      { key: CookiesKey.pri_email, value: result.pri_email }
     ];
 
     cookieSettings.forEach(({ key, value }) => {
@@ -305,23 +311,8 @@ exports.updateOrderStatus = async (req, res, next) => {
   }
 };
 
-exports.updateProductImages = async (req, res) => {
-    const product_id = req.params.id;
-
-    try {
-        const images = await productManager.updateImages(
-            product_id,
-            req.files,
-            admindb.insertImages.bind(admindb) // reuse your insertImages
-        );
-
-        res.status(200).json({ success: true, images });
-    } catch (err) {
-        console.error("Error updating product images:", sanitizeError(err));
-        res.status(500).json({ success: false, message: 'Something went wrong. Please try again.' });
-    }
-};
-
+// REMOVED: updateProductImages — see productManager, AB-10 / AB-30.
+// Unrouted, and it called the deleted updateImages helper.
 
 exports.deleteProduct = async (req, res) => {
   try {

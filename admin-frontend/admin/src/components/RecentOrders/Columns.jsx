@@ -11,9 +11,63 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu"
+
+import { useToast } from "@/ToastContext"
+
+/**
+ * The per-row actions menu.
+ *
+ * Extracted into a component so it can use hooks — TanStack calls `cell` as a
+ * plain function, so a hook there would be a hook outside a component.
+ *
+ * The "Copy" item had three bugs in a single line. See CLAUDE.md AF-25:
+ *
+ *   1. `event.stopPropagation()` referenced an UNDECLARED GLOBAL. It resolved
+ *      to `window.event`, which only Chrome provides, so in Firefox and Safari
+ *      it threw ReferenceError and the copy never ran.
+ *   2. The alert fired FIRST, so it announced success before that throw —
+ *      Firefox users were told the ID was copied when nothing had been.
+ *   3. It copied `payment.id`, which is the ORDER id, while labelling it a
+ *      payment ID. This object carries no payment id at all.
+ */
+const RowActions = ({ row }) => {
+  const { showToast } = useToast()
+  const order = row.original
+  const orderId = String(order.orderId ?? order.id ?? "")
+
+  const copyOrderId = async (e) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(orderId)
+      showToast(`Order ID ${orderId} copied.`, "success")
+    } catch {
+      // The Clipboard API needs a secure context and permission; it genuinely
+      // fails on plain http and in some browsers. Say so rather than claiming
+      // success, which is what the old code did.
+      showToast("Could not copy — your browser blocked clipboard access.")
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="h-8 w-8 p-0">
+          <span className="sr-only">Open menu</span>
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+        <DropdownMenuItem onClick={copyOrderId}>Copy order ID</DropdownMenuItem>
+        {/* "View customer" and "View payment details" were menu items with no
+            onClick at all — dead affordances that looked functional. Removed
+            rather than left in place; AF-30 covers the rest of that pattern. */}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
 
 export const columns = [
   {
@@ -180,31 +234,12 @@ export const columns = [
   },
   {
     id: "actions",
-    cell: ({ row }) => {
-      const payment = row.original
- 
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => {alert("Payment ID copied to the Clipboard");event.stopPropagation();navigator.clipboard.writeText(payment.id)}}
-            >
-              Copy payment ID
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>View customer</DropdownMenuItem>
-            <DropdownMenuItem>View payment details</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
-    },
+    // Rendered as a real component, not called as a plain function.
+    //
+    // `cell` is invoked by TanStack, so calling a hook directly inside it would
+    // be a hook call outside a component — unsafe. Returning <RowActions /> lets
+    // RowActions legitimately use useToast.
+    cell: ({ row }) => <RowActions row={row} />,
   },
 ]
 

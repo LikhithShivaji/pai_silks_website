@@ -82,7 +82,9 @@ upload.array("images", 5), // frontend key = "images" — runs first so multipar
 
 router.delete('/delete-product/:id', v.idParam, validate, adminController.deleteProduct);
 
-//Update product images
-//router.put('/products/:id/images', upload.array('images', 10), adminController.updateProductImages);
+// The commented-out /products/:id/images route was removed along with its
+// handler and helper (AB-10 / AB-30). Image replacement goes through
+// PUT /api/update-product, which uploads once and deletes the assets it
+// replaces. Do not reintroduce a second path for this.
 
 module.exports = router;

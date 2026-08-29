@@ -36,13 +36,36 @@ const loginLimiter = rateLimit({
  * Signup. Counts every request, successful or not — the thing being limited
  * here is bulk account creation, not guessing.
  */
+/**
+ * Signup limiter — deliberately tight, because this endpoint is an
+ * account-existence oracle.
+ *
+ * Signup answers 409 for an email that already exists and 201 for one that does
+ * not (verified). That is a direct yes/no on whether this shop has an account
+ * for any address someone cares to test, and it cannot be closed by making the
+ * responses uniform: doing so would mean telling an honest customer who
+ * mistyped nothing useful, AND promising "check your inbox" when there is no
+ * mail channel to send anything through. See CLAUDE.md CB-27.
+ *
+ * So the response stays honest and the RATE is what makes bulk probing
+ * impractical: 5 per hour instead of 10 per 15 minutes — from 40/hour down to
+ * 5/hour, an 8x reduction in how fast a list can be tested.
+ *
+ * A real shop signs up a handful of customers a day from any one IP, so this
+ * does not constrain legitimate use. Shared IPs (a college, an office, a mobile
+ * carrier NAT) are the edge case; 5/hour still clears that comfortably.
+ *
+ * The proper fix arrives with WhatsApp OTP (see Deferred work): once there IS a
+ * channel, identical responses become true rather than a lie, and the account's
+ * real owner gets told someone probed it.
+ */
 const signupLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
   message: jsonMessage(
-    'Too many signup attempts. Please try again in 15 minutes.'
+    'Too many signup attempts from this network. Please try again later.'
   ),
 });
 

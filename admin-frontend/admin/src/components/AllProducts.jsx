@@ -4,15 +4,27 @@ import { ADMIN_API, apiFetch } from "@/config/api";
 
 const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct }) => {
   const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [debugLog, setDebugLog] = useState([]);
+  // `loading` starts FALSE, not true.
+  //
+  // It used to start true while the fetch below was gated on `if (categoryName)`.
+  // Rendered without a category — which AdminHomePage does, its initial state
+  // being "" — no fetch ever started, nothing ever set loading false, and the
+  // page showed "Loading..." permanently with no data, no error and no way
+  // back. Loading is now set only when a fetch actually begins.
+  // See CLAUDE.md AF-23.
+  const [loading, setLoading] = useState(false);
+  // `debugLog` removed — it fed a panel headed "⚠️ Tips for Exact Matching"
+  // that dumped every category name in the database onto the admin's screen.
+  // Debug scaffolding shipped to production. See CLAUDE.md AF-21.
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        setLoading(true);
-
-        const res = await apiFetch(`${ADMIN_API}/api/get-all-product-details`);
+        // `signal` is what makes the abort above take effect — apiFetch passes
+        // its options through to fetch.
+        const res = await apiFetch(`${ADMIN_API}/api/get-all-product-details`, {
+          signal: controller.signal,
+        });
         const apiResponse = await res.json();
         
         const productList = apiResponse.data || [];
@@ -23,10 +35,6 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
             const sideCat = categoryName.toString().toLowerCase().trim();
             return dbCat === sideCat;
         });
-
-        if (filtered.length === 0 && productList.length > 0) {
-            setDebugLog(productList.map(p => p.category));
-        }
 
         const mapped = filtered.map((p) => {
           let rawImages = p.image_url || p.images || [];
@@ -58,13 +66,33 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
 
         setProducts(mapped);
       } catch (err) {
+        // An aborted request is not a failure — it means the admin switched
+        // category before this one finished, and its result is now unwanted.
+        if (err.name === "AbortError") return;
         console.error("Fetch Error:", err);
       } finally {
-        setLoading(false);
+        // Guarded: without this, a superseded request's `finally` would clear
+        // the loading state belonging to the request that replaced it.
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    if (categoryName) fetchProducts();
+    // AbortController — without it, switching category A → B quickly let A's
+    // slower response land AFTER B's and overwrite it, leaving the admin
+    // looking at category B with category A's products. See CLAUDE.md AF-22.
+    const controller = new AbortController();
+
+    if (categoryName) {
+      setLoading(true);
+      fetchProducts();
+    } else {
+      // No category selected: no fetch starts, so nothing would ever clear a
+      // `loading` that began as true. This is the other half of AF-23.
+      setProducts([]);
+      setLoading(false);
+    }
+
+    return () => controller.abort();
   }, [categoryName]);
 
   const handleDeleteProduct = async (productId) => {
@@ -111,19 +139,16 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
 
       {products.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
-           <p className="text-gray-500">No products found matching "{categoryName}".</p>
-           
-           <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg max-w-md text-sm text-yellow-800">
-              <p className="font-bold">⚠️ Tips for Exact Matching:</p>
-              <p>Since we switched to strict matching, your Sidebar Category must match the Database Category <strong>exactly</strong> (ignoring case).</p>
-              <p className="mt-2">Sidebar: <strong>"{categoryName}"</strong></p>
-              <p className="mt-2">Available Categories in DB:</p>
-              <ul className="list-disc pl-5 max-h-32 overflow-y-auto">
-                  {[...new Set(debugLog)].map((cat, i) => (
-                      <li key={i}>{cat || "Undefined"}</li>
-                  ))}
-              </ul>
-           </div>
+          {/* The debug panel that used to sit here — headed "⚠️ Tips for Exact
+              Matching", explaining strict category matching and listing every
+              category name in the database — has been removed. It was developer
+              scaffolding shipped to production, shown to the shop owner.
+              See CLAUDE.md AF-21. */}
+          <p className="text-gray-500">
+            {categoryName
+              ? `No products in "${categoryName}" yet.`
+              : "Select a category to see its products."}
+          </p>
         </div>
       ) : (
         <div className="grid gap-[1.7rem] p-6

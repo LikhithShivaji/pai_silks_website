@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from "react";
 import { CLIENT_API, apiFetch } from "@/config/api";
+import { useAuth } from "./AuthContext";
 
 export const CartContext = createContext();
 
@@ -32,10 +33,26 @@ export const CartProvider = ({ children }) => {
   const [total, setTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    const userId = localStorage.getItem("user_id");
+  // Whether to sync with the server is decided by the SERVER, not by a string
+  // in localStorage.
+  //
+  // Every branch below used to test `localStorage.getItem("user_id")`. When
+  // that key went stale — which it does, because it outlives the session
+  // cookie — a signed-in customer was silently treated as a guest: items were
+  // added to React state and localStorage only, never reached the database, and
+  // vanished on refresh. Reported as "the cart empties when I refresh",
+  // 2026-08-29. See CLAUDE.md CF-55.
+  //
+  // `status` is also needed, not just the boolean: while it is "checking" the
+  // answer is not yet known, and acting on "not signed in" during that window
+  // would fetch the guest cart and then have to undo it.
+  const { isAuthenticated, status: authStatus } = useAuth();
 
-    if (userId) {
+  useEffect(() => {
+    // Wait for a definitive answer before choosing a mode.
+    if (authStatus === "checking") return;
+
+    if (isAuthenticated) {
       const fetchUserData = async () => {
         try {
           const cartRes = await apiFetch(`${CLIENT_API}/api/cart/cart-data`);
@@ -88,7 +105,10 @@ export const CartProvider = ({ children }) => {
       setWishListItems(readStoredArray("wishlist"));
       setLoaded(true);
     }
-  }, []);
+    // Re-runs when auth resolves or changes. With an empty dependency array
+    // this ran once, before /api/verify-token had answered, so it always took
+    // the guest branch on a fresh load.
+  }, [isAuthenticated, authStatus]);
 
   // 2. SYNC TO LOCALSTORAGE (For Guests & Backup)
   useEffect(() => {
@@ -101,7 +121,8 @@ export const CartProvider = ({ children }) => {
 
   // 3. ADD TO CART HANDLER (Hybrid)
   const handleAddToCart = async (product) => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
     const productId = product.id || product.product_id;
 
     // Decide BEFORE touching state whether this is a genuine addition.
@@ -139,7 +160,8 @@ export const CartProvider = ({ children }) => {
 
   // 4. ADD TO WISHLIST HANDLER (Hybrid)
   const handleAddToWishList = async (product) => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
     const productId = product.id || product.product_id;
 
     // Same de-dup guard as handleAddToCart — the POST previously fired on
@@ -176,7 +198,8 @@ export const CartProvider = ({ children }) => {
   // 5. REMOVE FROM WISHLIST HANDLER (Hybrid) - NEW!
   // -----------------------------------------------------------
   const handleRemoveFromWishList = async (productId) => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
 
     // A. Immediate UI Update (Optimistic)
     setWishListItems((prev) => prev.filter((item) => (item.id || item.product_id) !== productId));
@@ -199,7 +222,8 @@ export const CartProvider = ({ children }) => {
   };
 
   const handleRemoveFromCart = async (productId) => {
-    const userId = localStorage.getItem("user_id");
+    // Server-confirmed, not a localStorage string. See CLAUDE.md CF-55.
+    const userId = isAuthenticated;
     setCartItems((prev) => prev.filter((item) => String(item.id || item.product_id) !== String(productId)));
 
     if (userId) {

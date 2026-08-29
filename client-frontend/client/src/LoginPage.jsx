@@ -1,6 +1,7 @@
 import React, { useState, useContext } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { CartContext } from "./CartContext";
+import { useAuth } from "./AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import footerBg from "@/assets/footerbgimage.webp";
 import {
@@ -16,7 +17,8 @@ import {
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const location = useLocation(); 
+  const location = useLocation();
+  const { refresh } = useAuth();
 
   const { cartItems, wishListItems, setCartItems, setWishListItems } =
     useContext(CartContext);
@@ -55,9 +57,17 @@ const LoginPage = () => {
         const userId = data.user_id;
         const userName = data.name || data.customer_name || formData.email.split("@")[0];
 
+        // These are DISPLAY hints only — a name to greet the customer with.
+        // They no longer decide whether anyone is signed in; that comes from
+        // AuthContext asking the server. See CLAUDE.md CF-55.
         localStorage.setItem("user_id", userId);
         localStorage.setItem("user_name", userName);
         localStorage.setItem("user_email", formData.email);
+
+        // Tell AuthContext the session now exists. Without this the header
+        // would keep saying "Profile" until a full page reload, because the
+        // context was populated before this login happened.
+        await refresh();
 
         try {
             const syncPromises = [];

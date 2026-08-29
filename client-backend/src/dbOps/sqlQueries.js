@@ -13,7 +13,25 @@ const sqlqueries = {
 
 
     login: {
-        getUserDetails: `SELECT * FROM master_user WHERE pri_email = ?`,
+        // Columns are named, not `SELECT *`.
+        //
+        // `pass` IS included — this query backs password verification, so the
+        // hash is genuinely needed here. What is no longer pulled is everything
+        // else the row happens to carry. The hash was never leaked to a client
+        // (verified: the login response hand-picks its fields), so this is
+        // defence in depth: one careless `res.json(user)` in future would have
+        // exposed every field this returned. See CLAUDE.md AB-11b.
+        getUserDetails: `
+            SELECT user_id, user_name, pri_email, phone_number, address,
+                   pass, role_id, is_delete
+              FROM master_user
+             WHERE pri_email = ?
+        `,
+
+        // Transparent cost upgrade at login. CB-28 raised bcrypt to cost 12 for
+        // NEW hashes only, leaving every pre-existing account at cost 10 — all
+        // 22 of them, verified. See the rehash block in customerDbOps.
+        updatePasswordHash: `UPDATE master_user SET pass = ? WHERE user_id = ?`,
         getSessionDetails: `SELECT * FROM session WHERE pri_email = ? ORDER BY login_date_time DESC LIMIT 1`,
         createNewSession: `INSERT INTO session (session_id, user_id, pri_email, token, status) VALUES (?,?,?,?,?)`,
         // NOTE: there is no `token_created_time` column in this database —
@@ -85,7 +103,13 @@ const sqlqueries = {
             WHERE session_id = ? AND user_id = ?
         `,
 
-        getUserDetails: `SELECT * FROM master_user WHERE pri_email = ?`,
+        // NOTE: `getUserDetails` is NOT redefined here.
+        //
+        // It was declared twice inside this same `login` object — once at the
+        // top and again at this position, with identical text. JavaScript keeps
+        // the LAST definition silently, so the first was dead code that looked
+        // live: editing it would have changed nothing, with no error to explain
+        // why. See CLAUDE.md CB-16.
         getUserById: `
       SELECT user_id, user_name, pri_email, phone_number, address
       FROM master_user
@@ -317,12 +341,36 @@ getProductsByCategory: `
       VALUES (?, ?);
     `,
 
-    getWishlist: `
-      SELECT 
-      w.wishlist_id, 
-      p.*, 
-      pi.image_url
-      FROM wishlist w
+    // Named columns, not `p.*`.
+      //
+      // Two problems, both verified live:
+      //
+      // 1. `p.*` leaked is_deleted, is_new_release, created_at and updated_at
+      //    into the wishlist response — the same internal-column leak closed in
+      //    getNewReleaseProducts (CB-35); this sibling was missed.
+      //
+      // 2. WishListProductItem.jsx renders `item.discounted_price`, which this
+      //    query never returned, so every saved item showed "₹ undefined" for
+      //    the whole session after login. The alias below is what the component
+      //    actually reads; selling_price is kept alongside it because other
+      //    call sites use that name. See CLAUDE.md CF-15.
+      getWishlist: `
+        SELECT
+        w.wishlist_id,
+        p.id,
+        p.name,
+        p.description,
+        p.category,
+        p.collection,
+        p.material,
+        p.product_code,
+        p.product_wash_care,
+        p.regular_price,
+        p.saree_length,
+        p.selling_price,
+        p.selling_price AS discounted_price,
+        pi.image_url
+        FROM wishlist w
       -- is_deleted = 0: same reasoning as getCart. A soft-deleted product must
       -- not keep appearing in saved items. See CLAUDE.md CB-08s.
       JOIN product p ON w.product_id = p.id AND p.is_deleted = 0
@@ -452,9 +500,10 @@ getProductsByCategory: `
 
    `,
  
-  getOrdersByUser: `
-    SELECT * FROM orders WHERE user_id = ? ORDER BY order_date DESC;
-  `,
+  // Defined once. There were two `getOrdersByUser` keys here: a `SELECT *` and
+  // the explicit column list below. The explicit one won by being last, so the
+  // SELECT * never ran despite sitting in the file looking authoritative.
+  // See CLAUDE.md CB-16.
   getOrdersByUser: `
       SELECT order_id, user_id, total_amount, shipping_address,
              payment_method, payment_status, status, order_date

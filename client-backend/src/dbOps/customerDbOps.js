@@ -3,6 +3,21 @@ const pool = require('../config/db');
 const bcrypt = require('bcrypt');
 const sqlqueries = require('../dbOps/sqlQueries');
 const { sanitizeError } = require('../utils/safeError');
+const appDefines = require('../constants/appDefines');
+
+/**
+ * A real bcrypt hash of a value that is not any user's password.
+ *
+ * Compared against on the account-not-found path so a failed login costs the
+ * same whether or not the email exists. Hardcoded rather than generated at
+ * boot: hashing at cost 12 takes ~230ms, and paying that on every process
+ * start (Render cold starts included) to produce a constant is wasteful.
+ *
+ * Generated at cost 12 to match appDefines.password.BCRYPT_COST. If that
+ * constant is ever raised, regenerate this too — a mismatched cost reintroduces
+ * the timing gap it exists to close. See CLAUDE.md AB-19e.
+ */
+const DUMMY_HASH = '$2b$12$I4dTwYOh1APoqQm65IJMjO/iIGlWTHMrZhPkyxdAWe8LGXRFBA.KW';
 
 class CustomerCmds {
 
@@ -44,15 +59,57 @@ async insertCustomerUser(userData) {
 
 
   
-  // Verify customer password
+  // Verify customer password.
+  //
+  // Constant-time-ish with respect to WHETHER THE ACCOUNT EXISTS.
+  //
+  // The old code returned null the moment the email was not found, skipping
+  // bcrypt entirely. Measured: an existing account took ~235ms (a real cost-12
+  // compare) while an unknown one returned in ~19ms. That 216ms gap is a
+  // reliable oracle — anyone could test any email address and learn whether
+  // this shop has an account for it. See CLAUDE.md AB-19e / CB-27.
+  //
+  // The miss path now burns an equivalent bcrypt compare against a fixed dummy
+  // hash, so both branches cost roughly the same. The dummy is generated at the
+  // SAME cost as new passwords (appDefines.password.BCRYPT_COST) — a cheaper
+  // dummy would simply invert the signal rather than remove it.
   async verifyCustomerPasswd(pri_email, passwd) {
     try {
       const [rows] = await pool.query(sqlqueries.login.getUserDetails, [pri_email]);
-      if (rows.length === 0) return null;
+
+      // No such account, OR the row has no usable hash. A NULL `pass` used to
+      // make bcrypt.compare reject and surface as a 500 instead of a 401.
+      if (rows.length === 0 || !rows[0].pass) {
+        await bcrypt.compare(passwd, DUMMY_HASH);
+        return null;
+      }
+
       const user = rows[0];
       const match = await bcrypt.compare(passwd, user.pass);
+      if (!match) return null;
 
-      return match ? user : null;
+      // Transparent rehash.
+      //
+      // CB-28 raised the cost from 10 to 12, but only for NEW hashes — every
+      // account created before that change is still cost 10. Verified: all 22
+      // existing rows are $2b$10$ while a fresh signup is $2b$12$. Leaving them
+      // means weaker hashes forever AND a residual timing difference, since a
+      // cost-10 compare is ~4x faster than the cost-12 dummy above.
+      //
+      // Re-hashing here is the standard fix: the plaintext is available exactly
+      // once, at login. Failure is swallowed deliberately — the user has
+      // already authenticated and must not be blocked by a background upgrade.
+      const cost = parseInt(String(user.pass).split('$')[2], 10);
+      if (Number.isFinite(cost) && cost < appDefines.password.BCRYPT_COST) {
+        try {
+          const upgraded = await bcrypt.hash(passwd, appDefines.password.BCRYPT_COST);
+          await pool.query(sqlqueries.login.updatePasswordHash, [upgraded, user.user_id]);
+        } catch (rehashErr) {
+          console.error('Password rehash failed (login still succeeded):', sanitizeError(rehashErr));
+        }
+      }
+
+      return user;
     } catch (err) {
       console.error("Error in verifyCustomerPasswd:", sanitizeError(err));
       throw err;

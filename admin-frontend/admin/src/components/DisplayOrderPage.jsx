@@ -22,10 +22,32 @@ import {
 //                                            looks like a real order date)
 //   undefined * 2                          -> NaN             -> "₹NaN"
 // See CLAUDE.md AF-C-FIX.
+// Rendered as "29 August 2026 4:24 PM" (owner's preference, 2026-08-29).
+//
+// `toLocaleString()` with no arguments produced "29/8/2026, 4:24:54 pm" — it
+// follows whatever locale the admin's machine happens to use, so the same order
+// could read 8/29/2026 on another computer. Naming the locale and the fields
+// makes the output stable regardless of who is looking at it. Seconds are
+// dropped: nobody chases an order by the second.
+//
+// `en-IN` inserts " at " between date and time and lower-cases the meridiem, so
+// both are normalised afterwards.
 const formatDate = (value) => {
   if (value === null || value === undefined || value === "") return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
+  if (Number.isNaN(d.getTime())) return "—";
+
+  return d
+    .toLocaleString("en-IN", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace(" at ", " ")
+    .replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
 };
 
 const formatMoney = (value) => {
@@ -180,15 +202,20 @@ export default function DisplayOrderPage({
           onChange={(newStatus) => onChangeStatus(newStatus)}
         />
         <div className="w-full border-1 rounded-xl p-5 flex flex-col gap-2">
+          {/* Every field falls back to an em dash. A blank after "Email:" is
+              indistinguishable from a customer who has no email — it reads as
+              missing data rather than a bug, which is exactly why the empty
+              Email line went unnoticed until an order was inspected by hand.
+              See CLAUDE.md AB-43. */}
           <p className="font-bold ">Customer</p>
           <p className="text-sm text-gray-500">
-            Full Name: {order.customerName}
+            Full Name: {order.customerName || "—"}
           </p>
-          <p className="text-sm text-gray-500">Email: {order.email}</p>
+          <p className="text-sm text-gray-500">Email: {order.email || "—"}</p>
           <p className="text-sm text-gray-500">
-            Phone Number: {order.contactNumber}
+            Phone Number: {order.contactNumber || "—"}
           </p>
-          <p className="text-sm text-gray-500">Address: {order.address}</p>
+          <p className="text-sm text-gray-500">Address: {order.address || "—"}</p>
           <p className="text-sm text-gray-500">
             Order Date: {formatDate(order.date)}
           </p>
@@ -254,17 +281,23 @@ export default function DisplayOrderPage({
               so the breakdown is spelled out. Subtotal is derived here purely
               for display; both real figures come from the server.
               See CLAUDE.md AB-16. */}
+          {/* colSpan is 7, not 6.
+              The table has EIGHT columns (Invoice, Product Image, Product Name,
+              Product Id, Quantity, Status, Method, Amount). colSpan={6} plus one
+              amount cell is only SEVEN, so every total landed in column 7 and
+              sat visibly left of the Amount column it was meant to line up
+              with. 7 + 1 = 8. See CLAUDE.md AF-30. */}
           <TableFooter>
             {Number(order.shipping_fee) > 0 && (
               <>
                 <TableRow>
-                  <TableCell colSpan={6}>Subtotal</TableCell>
+                  <TableCell colSpan={7}>Subtotal</TableCell>
                   <TableCell className="text-right">
                     ₹{(Number(order.amount) - Number(order.shipping_fee)).toFixed(2)}
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell colSpan={6}>Shipping</TableCell>
+                  <TableCell colSpan={7}>Shipping</TableCell>
                   <TableCell className="text-right">
                     ₹{Number(order.shipping_fee).toFixed(2)}
                   </TableCell>
@@ -272,8 +305,8 @@ export default function DisplayOrderPage({
               </>
             )}
             <TableRow>
-              <TableCell colSpan={6}>Total</TableCell>
-              <TableCell className="text-right">
+              <TableCell colSpan={7} className="font-semibold">Total</TableCell>
+              <TableCell className="text-right font-semibold">
                 ₹{Number(order.amount ?? 0).toFixed(2)}
               </TableCell>
             </TableRow>

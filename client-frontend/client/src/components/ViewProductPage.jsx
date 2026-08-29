@@ -83,7 +83,17 @@ function ViewProductPage() {
       return;
     }
 
-    apiFetch(`${CLIENT_API}/api/${numericId}`)
+    // AbortController + a tracked timer.
+    //
+    // Neither existed. Navigating quickly between products left two requests in
+    // flight, and whichever answered LAST won — so the page could settle on the
+    // product you had already navigated away from. The `setTimeout` in
+    // `.finally()` was never cleared either, so it fired into an unmounted tree.
+    // See CLAUDE.md CF-24.
+    const controller = new AbortController();
+    let loadingTimer;
+
+    apiFetch(`${CLIENT_API}/api/${numericId}`, { signal: controller.signal })
       .then((res) => res.json())
       .then((res) => {
         if (res.success && res.data) {
@@ -117,19 +127,34 @@ function ViewProductPage() {
         }
       })
       .catch((err) => {
+        // An abort means the visitor navigated on — not a failure, and its
+        // result must NOT clear the product the newer request is loading.
+        if (err.name === "AbortError") return;
         console.error("Failed to load product:", err);
         setProduct(null);
       })
       .finally(() => {
-        setTimeout(() => setLoading(false), 500);
+        if (controller.signal.aborted) return;
+        loadingTimer = setTimeout(() => setLoading(false), 500);
       });
+
+    return () => {
+      controller.abort();
+      clearTimeout(loadingTimer);
+    };
   }, [productId]);
 
   useEffect(() => {
     if (!product?.category) return;
 
+    // Same abort treatment as the product fetch above — and the category is
+    // encoded, since it goes into the URL path and can contain spaces
+    // ("Pure Mysore Crape Silk Sarees") or a slash. See CLAUDE.md CF-24, CF-19.
+    const controller = new AbortController();
+
     apiFetch(
-      `${CLIENT_API}/api/products/${product.category}`
+      `${CLIENT_API}/api/products/${encodeURIComponent(product.category)}`,
+      { signal: controller.signal }
     )
       .then((res) => res.json())
       .then((res) => {
@@ -157,7 +182,12 @@ function ViewProductPage() {
           setSimilarProducts(filtered);
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        if (err.name === "AbortError") return;
+        console.error("Failed to load similar products:", err);
+      });
+
+    return () => controller.abort();
   }, [product, productId]);
 
   // --- TOGGLE LOGIC ---

@@ -1,6 +1,18 @@
 const sqlqueries = {
     login: {
-        getUserDetails: `SELECT * FROM master_user WHERE pri_email = ?`,
+        // Named columns, not `SELECT *`. `pass` is included because this query
+        // backs password verification; everything else the row carries is not.
+        // The hash was never leaked (the login response hand-picks its fields),
+        // so this is defence in depth. See CLAUDE.md AB-11b.
+        getUserDetails: `
+            SELECT user_id, user_name, pri_email, phone_number, address,
+                   pass, role_id, is_delete
+              FROM master_user
+             WHERE pri_email = ?
+        `,
+
+        // Transparent bcrypt cost upgrade at login — see adminDbOps.
+        updatePasswordHash: `UPDATE master_user SET pass = ? WHERE user_id = ?`,
         getSessionDetails: `SELECT * FROM session WHERE pri_email = ? ORDER BY login_date_time DESC LIMIT 1`,
         createNewSession: `INSERT INTO session (session_id, user_id, pri_email, token, status) VALUES (?,?,?,?,?)`,
         // NOTE: there is no `token_created_time` column in this database —
@@ -261,6 +273,11 @@ const sqlqueries = {
     o.total_amount, o.shipping_fee, oi.order_item_id,
     o.payment_status, oi.product_id, oi.quantity, oi.price, s.shipment_status,
     mu.user_name,
+    -- The order-detail page renders an Email line and it was always BLANK,
+    -- because this query never selected one. Same shape as the contact-number
+    -- gap below: the field existed in the UI and nothing supplied it. Reported
+    -- by the owner from a real order, 2026-08-29. See CLAUDE.md AB-43.
+    mu.pri_email AS customer_email,
     -- The "Contact Number" column in the admin order table rendered blank for
     -- every order, and the search box labelled "Search by phone number or order
     -- ID" could never match a phone, because no phone was ever selected here.

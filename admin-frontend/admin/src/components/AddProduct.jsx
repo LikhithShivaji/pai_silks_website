@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,11 +43,24 @@ const AddProduct = ({
     isNewRelease: false, 
   });
 
+  // Every blob URL this component created, tracked in a ref.
+  //
+  // The cleanup below used to be keyed on `[previewUrls]`, so it ran on EVERY
+  // change to that array — revoking the PREVIOUS array's URLs, which were still
+  // rendered on screen. Adding a second image therefore broke the first
+  // thumbnail. See CLAUDE.md AF-12.
+  //
+  // A ref is used rather than state because the cleanup must not re-run when
+  // the list changes; it should fire exactly once, on unmount, and revoke
+  // everything this component ever created.
+  const createdBlobUrls = useRef([]);
+
   useEffect(() => {
+    const urls = createdBlobUrls.current;
     return () => {
-      previewUrls.forEach((url) => URL.revokeObjectURL(url));
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [previewUrls]);
+  }, []);
 
   useEffect(() => {
     if (loadingCollections) {
@@ -60,10 +73,23 @@ const AddProduct = ({
     };
   }, [loadingCollections]);
 
+  // .catch is required here, not optional.
+  //
+  // Without it, any network failure or non-JSON response — a 401 HTML page, a
+  // Render cold-start error page — became an unhandled rejection. And
+  // `data.success && setCollections(data.data)` could set `undefined` when the
+  // response reported success but carried no data, after which
+  // `collections.map(...)` threw during render and white-screened the whole Add
+  // Product page. Defaulting to [] means the page still works, just with an
+  // empty dropdown. See CLAUDE.md AF-13.
   useEffect(() => {
     apiFetch(`${CLIENT_API}/api/collections`)
       .then((res) => res.json())
-      .then((data) => data.success && setCollections(data.data))
+      .then((data) => setCollections(Array.isArray(data?.data) ? data.data : []))
+      .catch((err) => {
+        console.error("Could not load collections:", err);
+        setCollections([]);
+      })
       .finally(() => setLoadingCollections(false));
   }, []);
 
@@ -76,6 +102,11 @@ const AddProduct = ({
     });
 
     const objectUrl = URL.createObjectURL(file);
+    // Remember it so the unmount cleanup can revoke it. Tracking here rather
+    // than reading previewUrls means a URL dropped by the .slice(0, 4) below is
+    // still released instead of leaking. See CLAUDE.md AF-12.
+    createdBlobUrls.current.push(objectUrl);
+
     setPreviewUrls((prev) => {
       const updated = [...prev, objectUrl].slice(0, 4);
       return updated;
@@ -235,7 +266,13 @@ const AddProduct = ({
           [catKey]: [...(prev[catKey] || []), newProdForUI],
         };
 
-        localStorage.setItem("categoryProducts", JSON.stringify(updated));
+        // Removed: a WRITE-ONLY localStorage cache.
+        //
+        // Nothing ever read "categoryProducts" back — AdminHomePage carried
+        // only a comment noting its reader had been deleted. So product data
+        // including prices and stock levels accumulated in the browser
+        // indefinitely, with no invalidation and no consumer.
+        // See CLAUDE.md AF-08.
         return updated;
       });
 
