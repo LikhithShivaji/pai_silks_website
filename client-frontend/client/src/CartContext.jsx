@@ -197,26 +197,54 @@ export const CartProvider = ({ children }) => {
   // -----------------------------------------------------------
   // 5. REMOVE FROM WISHLIST HANDLER (Hybrid) - NEW!
   // -----------------------------------------------------------
+  /**
+   * Remove one product from the wishlist. THE single implementation.
+   *
+   * `WishList.jsx` used to carry a second, divergent copy of this — keyed off
+   * an array index, operating on its own `dynamicWishListItem` mirror — while
+   * Homepage and ViewProductPage used this one. Two implementations of the same
+   * operation drift, and these had: the drawer's copy had been hardened by
+   * CF-12/CF-17/CF-55 while this one had not, so whether a failed removal was
+   * rolled back depended on WHERE the customer clicked the heart.
+   *
+   * The drawer's protections were the better half and are folded in here; the
+   * copy is gone. See CLAUDE.md CF-44.
+   */
   const handleRemoveFromWishList = async (productId) => {
     // Server-confirmed, not a localStorage string. See CLAUDE.md CF-55.
     const userId = isAuthenticated;
 
+    // Snapshot BEFORE mutating so a failed request can be undone. Captured
+    // from the functional update rather than the outer `wishListItems`, which
+    // may be stale inside a handler that has already fired once.
+    let previous = null;
+
     // A. Immediate UI Update (Optimistic)
-    setWishListItems((prev) => prev.filter((item) => (item.id || item.product_id) !== productId));
+    setWishListItems((prev) => {
+      previous = prev;
+      return prev.filter((item) => (item.id || item.product_id) !== productId);
+    });
 
     // B. If Logged In -> Call API to remove from DB
     if (userId) {
       try {
-        await apiFetch(`${CLIENT_API}/api/wishlist/remove`, {
-          method: "DELETE", // Assuming DELETE method based on typical API standards
+        const res = await apiFetch(`${CLIENT_API}/api/wishlist/remove`, {
+          method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             product_id: productId
           }),
         });
-        // console.log("Removed from DB Wishlist");
+
+        // fetch only rejects on a NETWORK failure — an HTTP 500 resolves
+        // normally. Without this check a server-side failure looked identical
+        // to success: the item vanished from the screen, stayed in the
+        // database, and reappeared on the next reload with no explanation.
+        // See CLAUDE.md CF-17.
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (error) {
         console.error("Error removing from DB Wishlist:", error);
+        if (previous) setWishListItems(previous);
       }
     }
   };

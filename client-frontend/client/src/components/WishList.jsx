@@ -3,17 +3,17 @@ import WishListProductItem from "./WishListProductItem";
 import footerBg from "../assets/footerbgimage.webp";
 import { X, Heart, ShoppingBag } from "lucide-react";
 import { CartContext } from "../CartContext"; // <--- IMPORT CONTEXT
-import { useAuth } from "../AuthContext";
-import { CLIENT_API, apiFetch } from "@/config/api";
 
+// No apiFetch/CLIENT_API/useAuth here any more. This component made its own
+// wishlist-removal requests and needed all three; now it delegates to the
+// context, which owns the request, the auth check and the rollback. That is the
+// point of CF-44 — one implementation, not three.
 const WishList = ({ onClose }) => {
-  const { isAuthenticated } = useAuth();
   // Use Context instead of local props for single source of truth
   const {
     wishListItems,
-    setWishListItems,
     handleAddToCart,
-    cartItems, // Needed to check if already in cart
+    handleRemoveFromWishList,
   } = useContext(CartContext);
 
   const [dynamicWishListItem, setDynamicWishListItem] = useState([]);
@@ -24,57 +24,23 @@ const WishList = ({ onClose }) => {
   }, [wishListItems]);
 
   // ---------------------------------------------------------
-  // 1. REMOVE FROM WISHLIST (Hybrid: API + Local)
+  // 1. REMOVE FROM WISHLIST
   // ---------------------------------------------------------
-  const handleWishListProductRemove = async (e, index) => {
+  // Delegates to the context. This component used to carry its own full copy of
+  // the removal logic — API call, optimistic update and rollback — operating on
+  // `dynamicWishListItem` while Homepage and ViewProductPage used the context
+  // version. Two implementations of one operation, and they had already
+  // diverged: only this one checked `res.ok` and rolled back, so whether a
+  // failed removal was undone depended on which screen the customer clicked.
+  //
+  // Those protections now live in the context (CF-44), so this is a thin
+  // adapter: stop the click bubbling to the row, resolve the id, delegate. The
+  // local mirror below re-syncs from context via the existing useEffect.
+  const handleWishListProductRemove = async (e, item) => {
     if (e) e.stopPropagation();
+    if (!item) return;
 
-    const itemToRemove = dynamicWishListItem[index];
-
-    // Guard against a stale index.
-    //
-    // `index` is captured at RENDER time. If the list shrinks between render
-    // and click — another removal, or the context refetch landing — then
-    // `dynamicWishListItem[index]` is `undefined`, and the code below read
-    // `.id` straight off it and threw. Keyed operations should use product_id;
-    // this at least refuses to act on a row that is no longer there.
-    // See CLAUDE.md CF-12.
-    if (!itemToRemove) return;
-
-    const productId = itemToRemove.id || itemToRemove.product_id;
-    // Server-confirmed identity, not a localStorage string. See CLAUDE.md CF-55.
-    const userId = isAuthenticated;
-
-    // A. Optimistic UI Update — filtered by product_id, not by position, so a
-    // concurrent change cannot remove the wrong row.
-    const previous = dynamicWishListItem;
-    const newWishListItems = dynamicWishListItem.filter(
-      (item) => (item.id || item.product_id) !== productId
-    );
-    setDynamicWishListItem(newWishListItems);
-    setWishListItems(newWishListItems); // Update Context
-
-    // B. API Call if User
-    if (userId) {
-      try {
-        const res = await apiFetch(
-          `${CLIENT_API}/api/wishlist/remove`,
-          {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ product_id: productId }),
-          }
-        );
-        // Restore on failure. The removal was optimistic, so without this the
-        // item stayed gone from the screen while remaining in the database —
-        // and reappeared on the next reload with no explanation. CF-17.
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      } catch (err) {
-        console.error("Failed to remove from DB wishlist", err);
-        setDynamicWishListItem(previous);
-        setWishListItems(previous);
-      }
-    }
+    await handleRemoveFromWishList(item.id || item.product_id);
   };
 
   // ---------------------------------------------------------
@@ -84,53 +50,44 @@ const WishList = ({ onClose }) => {
     // 1. Add to Cart (Context handles DB sync automatically!)
     await handleAddToCart(product);
 
-    // 2. Remove from Wishlist (since it's moved)
-    // Find index of this product
-    const index = dynamicWishListItem.findIndex(
-      (item) => item.id === product.id
-    );
-    if (index !== -1) {
-      handleWishListProductRemove(null, index);
-    }
+    // 2. Remove from Wishlist (since it's moved). Keyed by product id — this
+    // previously did a findIndex and then removed BY POSITION, which is the
+    // stale-index hazard CF-12 describes, reintroduced one call later.
+    await handleRemoveFromWishList(product.id || product.product_id);
   };
 
   // ---------------------------------------------------------
   // 3. ADD ALL TO CART
   // ---------------------------------------------------------
   const handleAddAllToCart = async () => {
-    // Server-confirmed identity, not a localStorage string. See CLAUDE.md CF-55.
-    const userId = isAuthenticated;
+    // Snapshot before anything mutates, so a partial failure is recoverable.
+    const items = [...dynamicWishListItem];
 
-    // A. Loop through all items and add to Cart Context
-    // We use a loop because your Context handles the "User vs Guest" logic internally for each add
-    for (const item of dynamicWishListItem) {
+    // A. Add every item to the cart. Sequential because the context de-dups
+    // against current cart state per call (CF-02) — firing these in parallel
+    // races that check and can create duplicate rows.
+    for (const item of items) {
       await handleAddToCart(item);
     }
 
-    // B. Clear Wishlist (UI + Context)
-    setDynamicWishListItem([]);
-    setWishListItems([]);
-
-    // C. If User -> Clear Wishlist in DB or Move All API
-    if (userId) {
-      // Option 1: Call your specific "Move All" API if you have one
-      // Option 2: Just loop delete from wishlist since we added them to cart above
-      try {
-        await Promise.all(
-          dynamicWishListItem.map((item) =>
-            apiFetch(
-              `${CLIENT_API}/api/wishlist/remove`,
-              {
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: userId, product_id: item.id }),
-              }
-            )
-          )
-        );
-      } catch (err) {
-        console.error("Error syncing empty wishlist to DB", err);
-      }
+    // B. Remove each from the wishlist through the context — the SAME single
+    // implementation the drawer and the product pages use.
+    //
+    // This block previously did its own thing, and it was the third copy of
+    // wishlist removal in the codebase. It was also the most broken:
+    //   - it cleared the wishlist BEFORE the requests, then mapped over the
+    //     already-emptied state to build them, working only by accident of the
+    //     closure capturing the pre-clear array;
+    //   - it sent `user_id` in the body, which the server ignores — identity
+    //     comes from the session cookie (CF-55);
+    //   - it read `item.id` only, so any item shaped with `product_id` sent
+    //     `product_id: undefined` and silently deleted nothing;
+    //   - and one `catch` around a `Promise.all` meant a single failure logged
+    //     once while the UI showed the whole wishlist emptied — items stayed in
+    //     the database and reappeared on the next reload (CF-17).
+    // Delegating fixes all four, and each removal now rolls back on its own.
+    for (const item of items) {
+      await handleRemoveFromWishList(item.id || item.product_id);
     }
 
     // Optional: Close wishlist after adding all
@@ -197,7 +154,7 @@ const WishList = ({ onClose }) => {
               </button>
             </div>
           ) : (
-            dynamicWishListItem.map((item, index) => (
+            dynamicWishListItem.map((item) => (
               <div
                 key={item.id}
                 className="bg-white/60 backdrop-blur-md rounded-lg border border-white/10 hover:shadow-lg overflow-hidden transition-all duration-300"
@@ -205,7 +162,6 @@ const WishList = ({ onClose }) => {
                 {/* Pass the new MoveToCart handler down to the child */}
                 <WishListProductItem
                   item={item}
-                  index={index}
                   onRemove={handleWishListProductRemove}
                   onMoveToCart={() => handleMoveToCart(item)}
                 />

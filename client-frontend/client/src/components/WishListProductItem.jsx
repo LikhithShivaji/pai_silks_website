@@ -1,9 +1,14 @@
 import React from "react";
 import { Trash2, ShoppingBag } from "lucide-react";
 
-function WishListProductItem({ item, index, onRemove, onMoveToCart }) {
+// `index` is deliberately no longer a prop. It used to be passed straight back
+// out via onRemove(e, index), which made the parent look the item up by
+// position — and position is captured at RENDER time, so if the list shrank
+// between render and click the lookup hit the wrong row or undefined (CF-12).
+// The item is already in hand here, so pass the item. See CLAUDE.md CF-44.
+function WishListProductItem({ item, onRemove, onMoveToCart }) {
   const removeItem = (e) => {
-    onRemove(e, index);
+    onRemove(e, item);
   };
 
   const imageSrc = item.image1 || item.image_url || item.image || item.product_image || item.primary_image ||"https://placehold.co/100";
