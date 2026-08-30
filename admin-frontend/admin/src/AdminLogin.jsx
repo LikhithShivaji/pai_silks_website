@@ -1,7 +1,11 @@
 import { useState } from "react"; // Removed useContext and ContextApp
 import { useNavigate } from "react-router-dom";
 import { ADMIN_API, apiFetch } from "@/config/api";
-import "./AdminLogin.css";
+// AdminLogin.css deleted — 74 lines whose selectors (.login-page, .login-area,
+// .admin-image-section, .login-credentials-section, .form) matched no element in
+// this component. The layout is Tailwind. Verified before removal: the only
+// "form" matches in this file were `formData` and the `<form>` tag itself.
+// See CLAUDE.md CF-50 / AF-37.
 import logo from "./assets/pai-silks-logo.png";
 import { Loader2 } from "lucide-react";
 

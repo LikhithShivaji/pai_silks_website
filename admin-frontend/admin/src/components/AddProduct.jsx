@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/select";
 
 const AddProduct = ({
-  setCategoryProducts,
   categoryName,
   onBack,
   categories,
@@ -220,8 +219,9 @@ const AddProduct = ({
         (created.data && created.data.insertId) ||
         (created.data && created.data.product_id);
 
-      let finalImagesForUI = previewUrls; 
-
+      // `finalImagesForUI` was tracked here purely to hand to setCategoryProducts,
+      // which is gone (AF-08). The upload below still runs and is still checked —
+      // only the unread bookkeeping was removed.
       if (imageFiles.length > 0 && newProductId) {
         const formData = new FormData();
 
@@ -241,12 +241,9 @@ const AddProduct = ({
 
         const imgData = await imgRes.json();
 
-        if (imgData.success === "true" || imgData.success === true) {
-
-          if (imgData.images && Array.isArray(imgData.images)) {
-            finalImagesForUI = imgData.images.map((img) => img.image_url);
-          }
-        } else {
+        // Inverted from `if (success) {...} else {warn}` — the success branch only
+        // existed to populate finalImagesForUI. The warning behaviour is identical.
+        if (!(imgData.success === "true" || imgData.success === true)) {
           console.warn("Image upload did not report success.");
           alert("Product created, but check image upload status.");
         }
@@ -254,27 +251,16 @@ const AddProduct = ({
 
       alert(`Success! Product added successfully`);
 
-      setCategoryProducts((prev = {}) => {
-        const newProdForUI = {
-          ...(created || payload),
-          id: newProductId || Date.now(),
-          images: finalImagesForUI,
-        };
-
-        const updated = {
-          ...prev,
-          [catKey]: [...(prev[catKey] || []), newProdForUI],
-        };
-
-        // Removed: a WRITE-ONLY localStorage cache.
-        //
-        // Nothing ever read "categoryProducts" back — AdminHomePage carried
-        // only a comment noting its reader had been deleted. So product data
-        // including prices and stock levels accumulated in the browser
-        // indefinitely, with no invalidation and no consumer.
-        // See CLAUDE.md AF-08.
-        return updated;
-      });
+      // The setCategoryProducts(...) call that stood here is gone, and so is the
+      // `categoryProducts` state in AdminHomePage that it wrote into.
+      //
+      // AF-08 removed a write-only localStorage cache; this was the same
+      // write-only pattern one level up. Two forms pushed the newly created
+      // product into a state object that NOTHING read — not this component, not
+      // AdminHomePage, not AllProducts. AllProducts refetches from the server,
+      // which is why nobody ever noticed. Removing the state alone would have
+      // left these callers referencing an undefined setter, so the prop, both
+      // pass sites and both calls go together. See CLAUDE.md AF-08.
 
       // Reset Form
       setImageFiles([]);

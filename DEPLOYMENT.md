@@ -83,6 +83,44 @@ grep -o "localhost:903[0-9]" dist/assets/*.js      # expect no output
 
 ---
 
+## ⚠️ The `shared/` folder changes how the backends must be deployed
+
+`shared/` holds the code both backends use — `sanitizeError`, `validate`,
+`rejectNonScalarBody`, `withTransaction`. There is one copy, and each backend
+requires it via `../../shared/...`.
+
+**`shared/` is NOT a service.** It does not run, listen on a port, or have a
+URL. It is files read at boot, like anything in `node_modules`. **No third
+Render service, no extra cost.**
+
+But it does change two things about each backend's Render configuration:
+
+| Setting | Was | Must become |
+|---|---|---|
+| Root Directory | `client-backend` | **blank** (the repo root) |
+| Build Command | `npm ci` | `npm --prefix shared ci && cd client-backend && npm ci` |
+| Start Command | `npm start` | `cd client-backend && npm start` |
+
+(and the same for `admin-backend`).
+
+**Why Root Directory must be blank:** Render uploads only the directory you name.
+With it set to `client-backend`, the `shared/` folder — one level up — is not on
+the server, and the service dies on boot with `MODULE_NOT_FOUND`.
+
+**Why `npm --prefix shared ci` is required:** `shared/` has its own
+`package.json` and depends on `express-validator`. Node resolves that by walking
+*up* from `shared/` looking for `node_modules`, and finds none — the backends'
+copies are in their own folders, not above `shared/`. Verified locally: without
+installing `shared/`, both backends fail with
+`Cannot find module 'express-validator'` from `shared/validate.js`. Its
+`package-lock.json` is committed, so `npm ci` is reproducible.
+
+> This was hit and fixed during development, not discovered in production.
+> If a backend ever fails to boot on Render with `MODULE_NOT_FOUND` pointing at
+> `shared/`, one of these two settings is wrong.
+
+---
+
 ## Deploying a backend
 
 Backends read config from `process.env` at **runtime**, so they work

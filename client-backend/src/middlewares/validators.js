@@ -76,7 +76,9 @@ const signup = [
   // Length is enforced here AND in the handler. The handler check stays because
   // it guards bcrypt's silent 72-byte truncation, which is a correctness issue
   // rather than a validation preference. See CB-28.
-  body('password')
+  // `passwd`, matching both login endpoints. This was `password` while login
+  // took `passwd` — one API, two names for the same field. See CLAUDE.md CB-40.
+  body('passwd')
     .isString().withMessage('Password is required.')
     .isLength({ min: PW_MIN }).withMessage(`Password must be at least ${PW_MIN} characters.`)
     .custom((v) => Buffer.byteLength(v, 'utf8') <= PW_MAX)

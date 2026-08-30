@@ -13,19 +13,16 @@ const sqlqueries = {
 
         // Transparent bcrypt cost upgrade at login — see adminDbOps.
         updatePasswordHash: `UPDATE master_user SET pass = ? WHERE user_id = ?`,
-        getSessionDetails: `SELECT * FROM session WHERE pri_email = ? ORDER BY login_date_time DESC LIMIT 1`,
         createNewSession: `INSERT INTO session (session_id, user_id, pri_email, token, status) VALUES (?,?,?,?,?)`,
-        // NOTE: there is no `token_created_time` column in this database —
-        // adminAuthManager.js:29 reads it and always gets undefined, so
-        // `now - new Date(undefined)` is NaN and the token-age check silently
-        // never passes. AB-11 assumed the column existed but was NULL; it does
-        // not exist at all.
+        // `getSessionDetails`, `updateToken` and `updateSessionStatus` were
+        // removed with the pre-Phase-2 session helpers that were their only
+        // callers. See CLAUDE.md AB-30.
         //
-        // Not adding it: from Phase 2 the JWT carries its own `exp` claim, so a
-        // separate DB timestamp is redundant. The renewal path that reads it is
-        // replaced in Slice 5. See CLAUDE.md AB-11.
-        updateToken: `UPDATE session SET token = ? WHERE sid = ?`,
-        updateSessionStatus: `UPDATE session SET status = ?, logout_date_time = ? WHERE sid = ?`,
+        // Retained note from `updateToken` (still true, and worth keeping):
+        // there is no `token_created_time` column in this database. AB-11
+        // assumed it existed but was NULL; it does not exist at all. Not adding
+        // it — from Phase 2 the JWT carries its own `exp` claim, so a separate
+        // DB timestamp is redundant.
 
         // --- Phase 2 auth ---------------------------------------------------
 
@@ -101,7 +98,10 @@ const sqlqueries = {
         // so updating a nonexistent row reported success.
         updateProduct: `UPDATE product SET name = ?, description = ?, category = ?, collection = ?, material = ?, product_code = ?, product_wash_care = ?, regular_price = ?, selling_price = ?, saree_length = ?, is_new_release = ? WHERE id = ? AND is_deleted = 0`,
         insertImage: `INSERT INTO product_images (product_id, image_url, is_primary_image) VALUES ?`,
-        resetPrimaryImageByImageId: `UPDATE product_images SET is_primary_image = 0 WHERE product_id = (SELECT product_id FROM product_images WHERE id = ?)`,
+        // `resetPrimaryImageByImageId` removed with its only caller — see
+        // CLAUDE.md AB-30 and the Deferred "set cover image" entry. It cleared
+        // is_primary_image for every image of a product without setting a new
+        // one, which would drop the product's picture from the storefront.
         getImagesByProductId: `SELECT * FROM product_images WHERE product_id = ?`,
         deleteImagesByProductId: `DELETE FROM product_images WHERE product_id = ?`,
         insertProductStock: `INSERT INTO product_stock (product_id, stock_qty) VALUES (?, ?)`,

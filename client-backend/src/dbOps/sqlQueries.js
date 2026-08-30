@@ -32,19 +32,16 @@ const sqlqueries = {
         // NEW hashes only, leaving every pre-existing account at cost 10 — all
         // 22 of them, verified. See the rehash block in customerDbOps.
         updatePasswordHash: `UPDATE master_user SET pass = ? WHERE user_id = ?`,
-        getSessionDetails: `SELECT * FROM session WHERE pri_email = ? ORDER BY login_date_time DESC LIMIT 1`,
         createNewSession: `INSERT INTO session (session_id, user_id, pri_email, token, status) VALUES (?,?,?,?,?)`,
-        // NOTE: there is no `token_created_time` column in this database —
-        // customerAuthManager.js:29 reads it and always gets undefined, so
-        // `now - new Date(undefined)` is NaN and the token-age check silently
-        // never passes. AB-11 assumed the column existed but was NULL; it does
-        // not exist at all.
+        // `getSessionDetails`, `updateToken` and `updateSessionStatus` were
+        // removed with the pre-Phase-2 session helpers that were their only
+        // callers. See CLAUDE.md AB-30 (client twin).
         //
-        // Not adding it: from Phase 2 the JWT carries its own `exp` claim, so a
-        // separate DB timestamp is redundant. The renewal path that reads it is
-        // replaced in Slice 4. See CLAUDE.md AB-11.
-        updateToken: `UPDATE session SET token = ? WHERE sid = ?`,
-        updateSessionStatus: `UPDATE session SET status = ?, logout_date_time = ? WHERE sid = ?`,
+        // Retained note from `updateToken` (still true, and worth keeping):
+        // there is no `token_created_time` column in this database. AB-11
+        // assumed it existed but was NULL; it does not exist at all. Not adding
+        // it — from Phase 2 the JWT carries its own `exp` claim, so a separate
+        // DB timestamp is redundant.
 
         // --- Phase 2 auth ---------------------------------------------------
 

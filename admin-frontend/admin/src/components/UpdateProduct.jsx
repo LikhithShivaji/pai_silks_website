@@ -6,7 +6,7 @@ import ImageIcon from "@/assets/svg/ImageIcon.svg?react";
 import { ADMIN_API, apiFetch } from "@/config/api";
 import { useToast } from "@/ToastContext";
 
-const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProductDetails }) => {
+const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
   const { showToast } = useToast();
 
   // Blob URLs this component created, revoked once on unmount.
@@ -210,53 +210,16 @@ const UpdateProduct = ({ setCategoryProducts, categoryName, onBack, updateProduc
         throw new Error(`Server Error (${res.status}): ${errText}`);
       }
 
-      const responseData = await res.json();
-
-      // --- STEP B: Update UI ---
-      // We grab new image URLs if the backend sends them back
-      let finalImages = previewUrls.filter(url => !url.startsWith('blob:')); // Keep old real URLs
-      
-      if (responseData.images && Array.isArray(responseData.images)) {
-         // If backend returns the new list of images, use that!
-         const newUrls = responseData.images.map(img => img.image_url || img);
-         finalImages = [...finalImages, ...newUrls];
-      } else if (responseData.data && responseData.data.images) {
-         // Check inside 'data' object if structure differs
-         finalImages = responseData.data.images;
-      }
-
-      if (typeof setCategoryProducts === "function") {
-        setCategoryProducts((prev = {}) => {
-          const cat = catKey;
-          const updatedProductForUI = {
-            ...updateProductDetails,
-            id: targetId,
-            name: newProduct.name,
-            description: newProduct.description,
-            category: catKey,
-            collection: newProduct.collection,
-            material: newProduct.material,
-            product_code: newProduct.code,
-            product_wash_care: newProduct.washCare,
-            saree_length: newProduct.length,
-            regular_price: Number(newProduct.regularPrice),
-            selling_price: Number(newProduct.discountedPrice),
-            stock_qty: Number(newProduct.stockQty),
-            is_new_release: newProduct.isNewRelease ? 1 : 0,
-            images: finalImages,
-          };
-
-          const newPrev = { ...prev };
-          if(newPrev[cat]) {
-              newPrev[cat] = newPrev[cat].map((p) => 
-                (String(p.id) === String(targetId) || String(p.product_id) === String(targetId) ? updatedProductForUI : p)
-              );
-          }
-          // Write-only localStorage cache removed — nothing ever read
-          // "categoryProducts" back. Same as AddProduct. See CLAUDE.md AF-08.
-          return newPrev;
-        });
-      }
+      // The "STEP B: Update UI" block that stood here is gone, along with the
+      // `categoryProducts` state in AdminHomePage it fed — the same write-only
+      // pattern removed from AddProduct. It parsed the response, merged old and
+      // new image URLs into `finalImages`, rebuilt a full product object, and
+      // mapped it into a state tree that NOTHING ever read. Removing the setter
+      // left the whole chain — responseData, finalImages, the merge — orphaned.
+      //
+      // The success of the request is still checked, by the `res.ok` guard above.
+      // AllProducts refetches from the server on return, which is why this
+      // bookkeeping never mattered. See CLAUDE.md AF-08.
 
       alert("Product updated successfully!");
       onBack && onBack();

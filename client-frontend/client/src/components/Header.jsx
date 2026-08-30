@@ -11,7 +11,12 @@ import { ShoppingCart } from 'lucide-react';
 import { Heart } from 'lucide-react';
 import { Menu } from 'lucide-react';
 
-function Header({ cartItems, onUpdate, wishListItems, onWishListUpdate }) {
+// Takes no props. It used to accept cartItems/onUpdate/wishListItems/
+// onWishListUpdate from all six pages purely to forward them to <Cart> and
+// <WishList> — and both of those are `({ onClose })` and read CartContext
+// directly, so every one of those props was discarded on arrival.
+// See CLAUDE.md CF-34.
+function Header() {
   const [isProfileSectionOpen, setIsProfileSectionOpen] = useState(false);
   const [isWishListOpen, setIsWishListOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -91,21 +96,9 @@ function Header({ cartItems, onUpdate, wishListItems, onWishListUpdate }) {
         <ProfileSection onClose={() => setIsProfileSectionOpen(false)} />
       )}
 
-      {isWishListOpen && (
-        <WishList
-          onClose={() => setIsWishListOpen(false)}
-          wishListItems={wishListItems}
-          onWishListUpdate={onWishListUpdate}
-        />
-      )}
+      {isWishListOpen && <WishList onClose={() => setIsWishListOpen(false)} />}
 
-      {isCartOpen && (
-        <Cart
-          onClose={() => setIsCartOpen(false)}
-          cartItems={cartItems}
-          onUpdate={onUpdate}
-        />
-      )}
+      {isCartOpen && <Cart onClose={() => setIsCartOpen(false)} />}
     </>
   );
 }

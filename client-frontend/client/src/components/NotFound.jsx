@@ -1,9 +1,8 @@
-import React, { useContext } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 
 import Header from "./Header";
 import Footer from "./Footer";
-import { CartContext } from "../CartContext";
 
 /**
  * 404 page.
@@ -22,17 +21,11 @@ import { CartContext } from "../CartContext";
  * ends.
  */
 const NotFound = () => {
-  const { cartItems, setCartItems, wishListItems, setWishListItems } =
-    useContext(CartContext);
-
+  // No CartContext subscription here any more: the four values this page pulled
+  // out existed solely to be passed to <Header>, which discarded them. CF-34.
   return (
     <div className="font-['Poppins'] flex flex-col min-h-screen">
-      <Header
-        cartItems={cartItems}
-        onUpdate={setCartItems}
-        wishListItems={wishListItems}
-        onWishListUpdate={setWishListItems}
-      />
+      <Header />
 
       <main className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
         <p className="text-6xl md:text-8xl font-bold text-[#551920]">404</p>

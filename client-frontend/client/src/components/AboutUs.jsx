@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React from "react";
 import Header from "./Header";
 import Footer from "./Footer";
 
@@ -8,7 +8,6 @@ import instagram from "../assets/instagram.svg";
 import call from "../assets/call.svg";
 import maps from "../assets/map-trifold.svg";
 
-import { CartContext } from "../CartContext";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // Using the pattern as a subtle texture overlay instead of a heavy background
@@ -16,13 +15,10 @@ import footerBgPattern from "@/assets/footerbgimage.webp";
 import { ArrowLeft } from "lucide-react";
 
 const AboutUs = () => {
-  const { cartItems, setCartItems, wishListItems, setWishListItems } =
-    useContext(CartContext);
-    const navigate = useNavigate();
-
-  const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
-  const updateWishList = (dynamicWishListItem) =>
-    setWishListItems(dynamicWishListItem);
+  // The CartContext destructure and the updateCart/updateWishList wrappers that
+  // stood here existed only to be handed to <Header>, which discarded them.
+  // CF-34.
+  const navigate = useNavigate();
 
   const socialIcons = [
     { icon: whatsapp, alt: "WhatsApp" },
@@ -33,12 +29,7 @@ const AboutUs = () => {
 
   return (
     <div className="font-['Poppins']">
-      <Header
-        cartItems={cartItems}
-        onUpdate={updateCart}
-        wishListItems={wishListItems}
-        onWishListUpdate={updateWishList}
-      />
+      <Header />
 
         <div className="h-2 w-full bg-[#68232B]" />
 

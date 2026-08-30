@@ -1,28 +1,25 @@
-import React, { useState, useEffect, useContext } from "react";
-import { User, Mail, Phone, Calendar as CalendarIcon, Save, Edit3, MapPinHouse, Loader2, ArrowLeft } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { User, Mail, Phone, Save, Edit3, MapPinHouse, Loader2, ArrowLeft } from "lucide-react";
 
 // Keep your original imports
 import Header from "./components/Header";
 import Footer from "./components/Footer";
-import { CartContext } from "./CartContext";
 import { useAuth } from "./AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import { useNavigate, useLocation } from "react-router-dom";
 
-// Shadcn Imports
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "./components/ui/popover";
-import { Calendar } from "./components/ui/calendar";
+// The Popover + Calendar imports that used to sit here backed a Date-of-Birth
+// field that was commented out of the JSX. Because the imports stayed live,
+// Vite still pulled react-day-picker and date-fns into the customer bundle for
+// a control nobody could see. Removing them lets both packages leave
+// package.json. If DOB is ever wanted, it needs a `dob` column on `customers`
+// and a field in the update endpoint first — neither exists. See CLAUDE.md CF-40.
 
 const MyProfile = () => {
-  // --- Original Context Logic ---
-  const { cartItems, setCartItems, wishListItems, setWishListItems } = useContext(CartContext);
+  // The CartContext destructure and the updateCart/updateWishList wrappers that
+  // stood here existed only to be handed to <Header>, which discarded them.
+  // CF-34.
   const { isAuthenticated } = useAuth();
-  const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
-  const updateWishList = (dynamicWishListItem) => setWishListItems(dynamicWishListItem);
 
   const navigate = useNavigate();
 
@@ -40,7 +37,6 @@ const MyProfile = () => {
   });
 
   const [isEditing, setIsEditing] = useState(false);
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   // --- 1. FETCH USER DETAILS ON MOUNT ---
   useEffect(() => {
@@ -87,18 +83,6 @@ const MyProfile = () => {
     const { name, value } = e.target;
     setUser((prev) => ({ ...prev, [name]: value }));
   };
-
-  // const handleDateSelect = (date) => {
-  //   if (date) {
-  //     // Create YYYY-MM-DD string using standard JS logic to avoid timezone shifts
-  //     const offset = date.getTimezoneOffset();
-  //     const localDate = new Date(date.getTime() - (offset * 60 * 1000));
-  //     const formattedDate = localDate.toISOString().split('T')[0];
-      
-  //     setUser((prev) => ({ ...prev, dob: formattedDate }));
-  //     setIsCalendarOpen(false); 
-  //   }
-  // };
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -156,12 +140,7 @@ const MyProfile = () => {
 
   return (
     <>
-      <Header
-        cartItems={cartItems}
-        onUpdate={updateCart}
-        wishListItems={wishListItems}
-        onWishListUpdate={updateWishList}
-      />
+      <Header />
 
       {/* Main Background Section */}
       <div className="bg-white/5 backdrop-blur-md min-h-screen">
@@ -271,55 +250,6 @@ const MyProfile = () => {
                     />
                   </div>
 
-                  {/* DOB Field */}
-                  {/* <div className="hidden flex-col md:flex-row md:items-center justify-between py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-4 text-gray-500 mb-2 md:mb-0">
-                      <CalendarIcon className="w-5 h-5 text-[#68232B]" />
-                      <span className="font-medium text-gray-600">Date of Birth</span>
-                    </div>
-                    
-                    <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                      <PopoverTrigger asChild>
-                        <button
-                          disabled={!isEditing}
-                          className={`gap-5 text-right font-semibold text-gray-900 w-full md:w-2/3 px-2 py-1 transition-all flex justify-end items-center ${
-                            isEditing
-                              ? "bg-red-50/50 border-none cursor-pointer rounded"
-                              : "bg-transparent border-none cursor-default"
-                          }`}
-                        >
-                          {user.dob ? (
-                            new Date(user.dob).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            })
-                          ) : (
-                            <span className="text-gray-400">Pick a date</span>
-                          )}
-                          <CalendarIcon className="w-5 h-5 text-[#68232B]" />
-                        </button>
-                      </PopoverTrigger>
-
-                      <PopoverContent
-                        className="w-auto p-0 bg-white border border-[#68232B]/20 shadow-xl rounded-xl"
-                        align="end"
-                      >
-                        <Calendar
-                          mode="single"
-                          selected={user.dob ? new Date(user.dob) : undefined}
-                          onSelect={handleDateSelect}
-                          initialFocus
-                          className="rounded-md border-none"
-                          classNames={{
-                            day_selected:
-                              "bg-[#68232B] text-white hover:bg-[#68232B] focus:bg-[#68232B]",
-                            day_today: "bg-red-50 text-[#68232B]",
-                          }}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div> */}
                 </div>
               )}
 

@@ -116,17 +116,6 @@ async insertCustomerUser(userData) {
     }
   }
 
-  // Get last session for given customer email
-  async getCustomerLastSessionByEmail(pri_email) {
-    try {
-      const [rows] = await pool.query(sqlqueries.login.getSessionDetails, [pri_email]);
-      return rows[0] || null;
-    } catch (err) {
-      console.error("Error in getCustomerLastSessionByEmail:", sanitizeError(err));
-      throw err;
-    }
-  }
-
   // Create a new customer session
   async insertNewCustomerSession(user_id, pri_email, session_id, login_token, SESSION_ACTIVE, conn = null) {
     try {
@@ -176,25 +165,11 @@ async getUserById(user_id) {
     }
   }
 
-  // Update customer session token
-  async updateCustomerToken(token, sid) {
-    try {
-      await pool.query(sqlqueries.login.updateToken, [token, sid]);
-    } catch (err) {
-      console.error("Error in updateCustomerToken:", sanitizeError(err));
-      throw err;
-    }
-  }
-
-  // Update session status (logout etc.)
-  async updateCustomerSessionStatus(logoutTime, status, sid) {
-    try {
-      await pool.query(sqlqueries.login.updateSessionStatus, [status, logoutTime, sid]);
-    } catch (err) {
-      console.error("Error in updateCustomerSessionStatus:", sanitizeError(err));
-      throw err;
-    }
-  }
+  // `getCustomerLastSessionByEmail`, `updateCustomerToken` and
+  // `updateCustomerSessionStatus` were removed here (CLAUDE.md AB-30, client
+  // twin). Same story as the admin side: the pre-Phase-2 session layer, zero
+  // call sites, superseded by `getActiveSessionById` and
+  // `logoutSessionBySessionId` below. Their SQL went with them.
 
   // --- Phase 2 auth ------------------------------------------------------
 

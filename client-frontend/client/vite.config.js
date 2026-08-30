@@ -11,9 +11,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
-  server: {
-    allowedHosts: [
-      'fleshly-succulently-jona.ngrok-free.dev', // 👈 add your ngrok domain here
-    ],
-  },
+  // The `server.allowedHosts` block that stood here listed a developer's
+  // personal ngrok subdomain, committed to a public repo. It was added for a
+  // one-off demo tunnel that is no longer in use (owner confirmed 2026-08-30).
+  //
+  // Dev-server only — `server.*` never reaches a production build, and the
+  // hostname was verified absent from dist/ before removal. If a tunnel is
+  // needed again, drive it from an env var rather than hardcoding a hostname:
+  //   server: { allowedHosts: [process.env.VITE_DEV_ALLOWED_HOST].filter(Boolean) }
+  // See CLAUDE.md CF-48.
 })

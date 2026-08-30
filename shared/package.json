@@ -1,0 +1,11 @@
+{
+  "name": "@pai-silks/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Code shared by admin-backend and client-backend. Not a service — it never runs on its own.",
+  "main": "index.js",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "express-validator": "^7.3.2"
+  }
+}

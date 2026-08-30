@@ -1,89 +1,37 @@
 /**
- * Strip the sensitive parts off an error before it reaches a log.
+ * Error sanitising for the ADMIN backend.
  *
- * mysql2 errors leak customer data in FOUR places, not one. Verified against a
- * real duplicate-key error on this database:
- *
- *   code       ER_DUP_ENTRY
- *   message    Duplicate entry 'likhith@gmail.com' for key 'master_user.pri_email'
- *   sqlMessage same as message
- *   sql        INSERT INTO master_user (...) VALUES ('X','likhith@gmail.com',
- *              '9876543210','12 MG Road, Bengaluru 560001','$2b$12$...',...)
- *   stack      begins "Error: <message>", so it reproduces the value again
- *
- * So a bare `console.error("signup failed:", err)` wrote a customer's name,
- * email, phone, postal address and password hash to stdout — and then into
- * whatever aggregates those logs. See CLAUDE.md AB-32, CB-38.
- *
- * `sql` is dropped outright. `message`, `sqlMessage` and `stack` are kept but
- * with every single-quoted literal redacted, because that is where the driver
- * puts the offending VALUE.
- *
- * The cost is losing the constraint name, which is also quoted. That is an
- * acceptable trade: `code` plus the log's own context string identifies the
- * failure well enough, and no amount of debugging convenience justifies
- * writing customer addresses to a log file.
+ * The logic lives in `shared/safeError.js` — one copy, used by both services.
+ * This file exists to keep the import path (`utils/safeError`) unchanged for
+ * the files that require it, and to declare the one thing that IS specific to
+ * this service: which UNIQUE constraints it can actually violate.
  */
-
-// Replaces the contents of every '...'-quoted run. Handles escaped quotes so a
-// value containing an apostrophe cannot terminate the match early and leave the
-// remainder of the string exposed.
-const redactQuoted = (text) =>
-  typeof text === 'string'
-    ? text.replace(/'(?:[^'\\]|\\.)*'/g, "'[redacted]'")
-    : text;
-
-const sanitizeError = (err) => {
-  if (!err || typeof err !== 'object') return err;
-
-  return {
-    name: err.name,
-    code: err.code,        // ER_DUP_ENTRY, ER_BAD_FIELD_ERROR, ... — safe
-    errno: err.errno,
-    sqlState: err.sqlState,
-    message: redactQuoted(err.message),
-    sqlMessage: redactQuoted(err.sqlMessage),
-    // The stack must be redacted too. Its first line is "Error: <message>", so
-    // an unredacted stack reproduces the offending value verbatim even after
-    // message and sqlMessage have been cleaned. Found by testing.
-    stack: redactQuoted(err.stack),
-    // Deliberately omitted: `sql` — the full query with values interpolated.
-  };
-};
+const { sanitizeError, redactQuoted, makeDescribeDuplicate } = require('../../../shared/safeError');
 
 /**
- * Map a UNIQUE-constraint violation onto the field a human can act on.
+ * UNIQUE constraints reachable from THIS service.
  *
- * Every UNIQUE index in this schema was audited against its write path
- * (2026-08-25). Three were unhandled and surfaced as a generic 500, leaving the
- * admin with no idea which field was the problem:
+ * Derived from the tables admin-backend writes to: category, product,
+ * product_images, product_stock, orders, session, master_user.
  *
- *   product.product_code   creating a product with a code already in use
- *   category.name          adding a category that already exists
- *   master_user.pri_email  handled already, in customerSignup
+ * Deliberately does NOT list the cart or wishlist constraints — the admin panel
+ * never touches either, so those violations are unreachable from here.
  *
- * mysql2 puts the constraint name in err.message, e.g.
- *   Duplicate entry 'DUPTEST-1' for key 'product.product_code'
- * The offending VALUE is deliberately not echoed back — for pri_email that
- * would confirm to an attacker that an account exists (CB-27).
+ * `pri_email` IS listed despite there being no admin signup: `SEC-02b` changes
+ * the admin's email address, and `master_user.pri_email` is UNIQUE, so that
+ * operation can collide. See CLAUDE.md DEP-13.
  *
- * @returns {{field:string, message:string}|null} null when not a duplicate error
+ * ⚠️ If this service ever starts writing to a new table with a UNIQUE index,
+ * add it here — otherwise the violation falls through to the generic
+ * "That value is already in use." message.
  */
 const DUPLICATE_FIELDS = [
   { key: 'product_code', field: 'product_code', message: 'That product code is already in use.' },
-  { key: 'category.name', field: 'name',        message: 'That category already exists.' },
-  { key: 'pri_email',    field: 'pri_email',    message: 'Email already registered.' },
-  { key: 'uniq_cart_user_product',     field: 'product_id', message: 'That item is already in the cart.' },
+  { key: 'category.name', field: 'name', message: 'That category already exists.' },
   { key: 'uniq_product_stock_product', field: 'product_id', message: 'That product already has a stock record.' },
+  { key: 'pri_email', field: 'pri_email', message: 'That email address is already in use.' },
 ];
 
-const describeDuplicate = (err) => {
-  if (!err || err.code !== 'ER_DUP_ENTRY') return null;
-  const raw = String(err.message || '');
-  const hit = DUPLICATE_FIELDS.find(({ key }) => raw.includes(key));
-  return hit
-    ? { field: hit.field, message: hit.message }
-    : { field: null, message: 'That value is already in use.' };
-};
+const describeDuplicate = makeDescribeDuplicate(DUPLICATE_FIELDS);
 
 module.exports = { sanitizeError, redactQuoted, describeDuplicate };

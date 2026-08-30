@@ -11,20 +11,28 @@ const { withTransaction } = require('../dbOps/withTransaction');
 
 exports.customerSignup = async (req, res) => {
   try {
-    const { user_name, pri_email, phone_number, address, password } = req.body;
+    // Field is `passwd`, not `password`.
+    //
+    // Signup used to accept `password` while BOTH login endpoints (customer and
+    // admin) accept `passwd`. Same concept, two names, on adjacent endpoints of
+    // the same API — an integrator posting the signup shape to login got a
+    // "Password is required." 400 with a correct password. Standardised on
+    // `passwd`: it was already 2 of the 3 auth endpoints and it matches the
+    // abbreviated `pri_email` convention used throughout. See CLAUDE.md CB-40.
+    const { user_name, pri_email, phone_number, address, passwd } = req.body;
 
-    if (!user_name || !pri_email || !password || !phone_number) {
+    if (!user_name || !pri_email || !passwd || !phone_number) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields',
       });
     }
 
-    // Password policy. Previously the only check was `!password`, so "a" was a
+    // Password policy. Previously the only check was `!passwd`, so "a" was a
     // valid password. See CLAUDE.md CB-28.
     const { MIN_LENGTH, MAX_BYTES, BCRYPT_COST } = appDefines.password;
 
-    if (typeof password !== 'string' || password.length < MIN_LENGTH) {
+    if (typeof passwd !== 'string' || passwd.length < MIN_LENGTH) {
       return res.status(400).json({
         success: false,
         message: `Password must be at least ${MIN_LENGTH} characters.`,
@@ -33,14 +41,14 @@ exports.customerSignup = async (req, res) => {
 
     // bcrypt silently truncates past 72 BYTES. Rejecting is honest; accepting
     // and ignoring the remainder would give the user false confidence.
-    if (Buffer.byteLength(password, 'utf8') > MAX_BYTES) {
+    if (Buffer.byteLength(passwd, 'utf8') > MAX_BYTES) {
       return res.status(400).json({
         success: false,
         message: `Password is too long (maximum ${MAX_BYTES} bytes).`,
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, BCRYPT_COST);
+    const hashedPassword = await bcrypt.hash(passwd, BCRYPT_COST);
 
     const result = await customerSignupManager.registerCustomer({
       user_name,

@@ -2,8 +2,10 @@ import React, { useEffect } from "react";
 import PaiLogo from "./assets/PaiLogo.svg";
 import { useState, useRef } from "react";
 
-import data from "@/productData.json";
-
+// `import data from "@/productData.json"` removed along with the file. It was a
+// two-line stub — {"categories": []} — and the binding was shadowed by a local
+// `const data` in every function that used that name, so the import was never
+// read. It was also one of the standing no-unused-vars lint errors (AF-33).
 import DashBoard from "./components/DashBoard";
 import AllProducts from "./components/AllProducts";
 import OrderList from "./components/OrderList";
@@ -28,7 +30,9 @@ const AdminHomePage = () => {
 
   // Changed: Categories will now store objects from DB: [{id: 1, name: "Silk"}]
   const [categories, setCategories] = useState([]);
-  const [categoryProducts, setCategoryProducts] = useState({});
+  // `categoryProducts` state removed — the last remnant of AF-08. It backed a
+  // localStorage cache whose writes were deleted in Phase 5.5 Slice 4; the state
+  // itself was then never read and never set, but still read like a live cache.
 
   const [newCategory, setNewCategory] = useState("");
   const [isAdding, setIsAdding] = useState(false);
@@ -399,7 +403,6 @@ const AdminHomePage = () => {
             // Map objects back to strings for child component compatibility
             categories={categories.map(c => c.name)}
             categoryName={selectedCategory}
-            setCategoryProducts={setCategoryProducts}
             onBack={() => setCurrentView("allProducts")}
           />
         );
@@ -408,7 +411,6 @@ const AdminHomePage = () => {
         return (
           <UpdateProduct
             categoryName={selectedCategory}
-            setCategoryProducts={setCategoryProducts}
             onBack={() => setCurrentView("allProducts")}
             updateProductDetails={updateProductDetails}
           />

@@ -95,9 +95,14 @@ const SignupPage = () => {
 
     try {
       // countryCode is a UI concern only — the server stores one E.164 string.
-      const { countryCode, phone_number, ...rest } = formData;
+      // `password` is the local form field; the API field is `passwd`, matching
+      // both login endpoints. The signup endpoint used to accept `password`,
+      // which made it the odd one out of the three auth endpoints.
+      // See CLAUDE.md CB-40. LoginPage.jsx and AdminLogin.jsx map the same way.
+      const { countryCode, phone_number, password, ...rest } = formData;
       const payload = {
         ...rest,
+        passwd: password,
         phone_number: toE164(countryCode, phone_number),
       };
 

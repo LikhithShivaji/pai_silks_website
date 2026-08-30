@@ -22,13 +22,10 @@ const App = () => {
   const navigate = useNavigate();
   const location = useLocation(); // ✅ Hook to receive state
 
-  const {
-    cartItems,
-    setCartItems,
-    wishListItems,
-    setWishListItems,
-    handleAddToCart,
-  } = useContext(CartContext);
+  // cartItems/setCartItems/wishListItems/setWishListItems were pulled out only
+  // to feed <Header>, which discarded them (CF-34). handleAddToCart is the one
+  // this page genuinely uses.
+  const { handleAddToCart } = useContext(CartContext);
 
   const { showToast } = useToast();
 
@@ -171,12 +168,7 @@ const App = () => {
 
   return (
     <>
-      <Header
-        cartItems={cartItems}
-        onUpdate={setCartItems}
-        wishListItems={wishListItems}
-        onWishListUpdate={setWishListItems}
-      />
+      <Header />
 
       {/* ================= Filter Bar ================= */}
       <div

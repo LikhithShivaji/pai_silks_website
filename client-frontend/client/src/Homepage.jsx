@@ -9,7 +9,6 @@ import { useNavigate } from "react-router-dom";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import frame from "./assets/heroframe.svg";
 import finisher from "./assets/finisher.svg";
-import trendingProducts from "./products.js";
 import { categories } from "./categoryData";
 import reviews from "./reviews.js";
 import React, { useEffect, useState, useContext } from "react";
@@ -29,11 +28,13 @@ import { Sparkle } from "lucide-react";
 
 function Homepage() {
   const navigate = useNavigate();
+  // setCartItems/setWishListItems dropped — they only backed the updateCart and
+  // updateWishList wrappers passed to <Header>, which discarded them (CF-34).
+  // cartItems and wishListItems stay: this page reads both to decide whether an
+  // item is already saved.
   const {
     cartItems,
-    setCartItems,
     wishListItems,
-    setWishListItems,
     handleAddToCart,
     handleAddToWishList,
     handleRemoveFromWishList,
@@ -42,7 +43,11 @@ function Homepage() {
 
   const { showToast } = useToast();
 
-  const topFourProducts = trendingProducts.slice(0, 9);
+  // `topFourProducts` removed along with products.js — it sliced 9 entries out
+  // of 328 lines of FABRICATED products (invented names and prices) and was
+  // never rendered anywhere. Tree-shaking kept it out of the bundle, but it sat
+  // one careless line away from putting fake sarees at fake prices on the
+  // storefront. See CLAUDE.md CF-50.
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [collections, setCollections] = useState([]);
@@ -73,9 +78,6 @@ function Homepage() {
     .map((item, index) => ({ ...item, originalIndex: index }))
     .filter((item) => item.originalIndex !== currentBestIndex)
     .slice(0, 3);
-
-  const updateCart = (c) => setCartItems(c);
-  const updateWishList = (w) => setWishListItems(w);
 
   const handleSvgClick = () => {
     setFillColor((c) => (c === "transparent" ? "#ffc780" : "transparent"));
@@ -250,12 +252,7 @@ function Homepage() {
 
   return (
     <div className="scrollbar-hide w-full">
-      <Header
-        cartItems={cartItems}
-        onUpdate={updateCart}
-        wishListItems={wishListItems}
-        onWishListUpdate={updateWishList}
-      />
+      <Header />
 
       <section
         className="text-white text-center py-4 bg-cover bg-fixed w-full"

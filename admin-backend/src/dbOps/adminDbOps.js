@@ -59,17 +59,6 @@ class Cmds {
         }
     }
 
-    // Get last session for given email
-    async getAdminLastSessionByEmail(pri_email) {
-        try {
-            const [rows] = await pool.query(sqlqueries.login.getSessionDetails, [pri_email]);
-            return rows[0] || null;
-        } catch (err) {
-            console.error("Error in getAdminLastSessionByEmail:", sanitizeError(err));
-            throw err;
-        }
-    }
-
     //create a new session
     async insertNewSession(user_id, pri_email, session_id, login_token, SESSION_ACTIVE, conn = null) {
         try {
@@ -84,25 +73,12 @@ class Cmds {
         }
     }
 
-    // Update session token
-    async updateToken(token, sid) {
-        try {
-            await pool.query(sqlqueries.login.updateToken, [token, sid]);
-        } catch (err) {
-            console.error("Error in updateToken:", sanitizeError(err));
-            throw err;
-        }
-    }
-
-    // Update session status and logout time
-    async updateSessionStatus(logoutTime, status, sid) {
-        try {
-            await pool.query(sqlqueries.login.updateSessionStatus, [status, logoutTime, sid]);
-        } catch (err) {
-            console.error("Error in updateSessionStatus:", sanitizeError(err));
-            throw err;
-        }
-    }
+    // `getAdminLastSessionByEmail`, `updateToken` and `updateSessionStatus` were
+    // removed here (CLAUDE.md AB-30). They were the pre-Phase-2 session layer and
+    // had zero call sites — the live path uses `getActiveSessionById` on every
+    // request and `logoutSessionBySessionId` on logout, both below. Their SQL
+    // (`login.getSessionDetails`, `login.updateToken`, `login.updateSessionStatus`)
+    // went with them, since nothing else referenced it.
 
     // --- Phase 2 auth --------------------------------------------------
 
@@ -191,7 +167,10 @@ class Cmds {
         
             return result.insertId;
         } catch (err) {
-            console.error("Error in updateSessionStatus:", sanitizeError(err));
+            // Was logging "Error in updateSessionStatus" — a copy-paste label from
+            // the session helper this was cloned from. A failed product insert
+            // would have pointed whoever read the logs at the wrong function.
+            console.error("Error in createProduct:", sanitizeError(err));
             throw err;
         }
     }
@@ -382,10 +361,14 @@ async updateProductStockCAS(product_id, stock_qty, expected_stock_qty, conn = nu
         return rows;
     }
 
-    // Optional: reset primary image
-    async resetPrimaryImageByImageId(image_id) {
-        await pool.query(sqlqueries.product.resetPrimaryImageByImageId, [image_id]);
-    }
+    // `resetPrimaryImageByImageId` removed (CLAUDE.md AB-30). It cleared
+    // is_primary_image for ALL of a product's images — the first half of a
+    // "set a new cover image" operation whose second half was never written.
+    // Called alone it leaves a product with no primary image, and the 9
+    // storefront queries that join `AND pi.is_primary_image = 1` then return
+    // NULL for image_url, so the product silently loses its picture on the shop.
+    // Cover-image selection is recorded in CLAUDE.md Deferred work; it needs
+    // both statements in one transaction, not this half on its own.
 
 
     async insertImages(product_id, images, conn = null) {

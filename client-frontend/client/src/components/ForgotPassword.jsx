@@ -1,10 +1,9 @@
-import React, { useContext } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { Mail, Phone } from "lucide-react";
 
 import Header from "./Header";
 import Footer from "./Footer";
-import { CartContext } from "../CartContext";
 
 /**
  * Password-reset help page.
@@ -26,17 +25,11 @@ const SHOP_EMAIL = "paisilks@gmail.com";
 const SHOP_PHONE = "+91 98745 60759";
 
 const ForgotPassword = () => {
-  const { cartItems, setCartItems, wishListItems, setWishListItems } =
-    useContext(CartContext);
-
+  // No CartContext subscription: the four values pulled out here only fed
+  // <Header>, which discarded them. CF-34.
   return (
     <div className="font-['Poppins'] flex flex-col min-h-screen">
-      <Header
-        cartItems={cartItems}
-        onUpdate={setCartItems}
-        wishListItems={wishListItems}
-        onWishListUpdate={setWishListItems}
-      />
+      <Header />
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-20">
         <div className="w-full max-w-md text-center">

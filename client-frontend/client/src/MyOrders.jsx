@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState } from "react";
 import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag, ArrowLeft } from "lucide-react";
 
-import { CartContext } from "@/CartContext";
 import { useAuth } from "@/AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import Header from "@/components/Header";
@@ -126,12 +125,11 @@ const OrderCard = ({ order }) => {
 
 // --- Main Component ---
 const MyOrders = () => {
-  const { cartItems, setCartItems, wishListItems, setWishListItems } = useContext(CartContext);
+  // The CartContext destructure and the updateCart/updateWishList wrappers that
+  // stood here existed only to be handed to <Header>, which discarded them.
+  // CF-34.
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  
-  const updateCart = (dynamicCartItem) => setCartItems(dynamicCartItem);
-  const updateWishList = (dynamicWishListItem) => setWishListItems(dynamicWishListItem);
 
   const [recentOrders, setRecentOrders] = useState([]);
   const [previousOrders, setPreviousOrders] = useState([]);
@@ -216,12 +214,7 @@ const MyOrders = () => {
 
   return (
     <>
-      <Header
-        cartItems={cartItems}
-        onUpdate={updateCart}
-        wishListItems={wishListItems}
-        onWishListUpdate={updateWishList}
-      />
+      <Header />
 
       {/* Main Container */}
       <div className="min-h-screen backdrop-blur-md bg-[#FFF8F0] relative font-['Poppins'] pb-20">

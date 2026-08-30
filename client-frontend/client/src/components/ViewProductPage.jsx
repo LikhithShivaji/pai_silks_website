@@ -37,11 +37,13 @@ function ViewProductPage() {
   const { productId } = useParams();
   const navigate = useNavigate();
 
+  // setCartItems/setWishListItems dropped — they only backed the updateCart and
+  // updateWishList wrappers passed to <Header>, which discarded them (CF-34).
+  // cartItems and wishListItems stay: this page reads both to decide whether
+  // this product is already in the cart or saved.
   const {
     cartItems,
-    setCartItems,
     wishListItems,
-    setWishListItems,
     handleAddToCart,
     handleAddToWishList,
     handleRemoveFromCart,
@@ -54,9 +56,6 @@ function ViewProductPage() {
   const [similarProducts, setSimilarProducts] = useState([]);
   const [fillColor, setFillColor] = useState("transparent");
   const [loading, setLoading] = useState(true);
-
-  const updateCart = (c) => setCartItems(c);
-  const updateWishList = (w) => setWishListItems(w);
 
   const handleSvgClick = () => {
     setFillColor((c) => (c === "transparent" ? "#ffc780" : "transparent"));
@@ -264,12 +263,7 @@ function ViewProductPage() {
       className="min-h-screen bg-cover bg-fixed bg-center bg-no-repeat m-0 w-full"
       style={{ backgroundImage: `url(${bgImage})` }}
     >
-      <Header
-        cartItems={cartItems}
-        onUpdate={updateCart}
-        wishListItems={wishListItems}
-        onWishListUpdate={updateWishList}
-      />
+      <Header />
 
       <button
           onClick={() => navigate("/shop")}
