@@ -154,10 +154,18 @@ app.use((err, req, res, next) => {
 // the deploy is marked failed with the service apparently "running fine" in its
 // own logs. The literal is the local development default only.
 // See CLAUDE.md AB-37.
-const PORT = Number(process.env.PORT) || 9032;
+// `??` rather than `||`. PORT=0 is a legitimate, meaningful value — it asks the
+// OS for any free port, which is how CI and test harnesses start a server
+// without picking one. `Number(process.env.PORT) || 9032` treated that 0 as
+// "unset" and silently bound 9032 instead, so a caller asking for an ephemeral
+// port got a fixed one and a port clash looked like the setting being ignored.
+const PORT = Number(process.env.PORT ?? 9032);
 
+// Logs the port actually BOUND, read back from the server, rather than the one
+// requested. With PORT=0 the requested value is 0 and the real port is assigned
+// by the OS, so echoing the request would print a port nothing is listening on.
 const server = app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
+  console.log(`Server running on port ${server.address().port}`)
 );
 
 // --- Graceful shutdown ---------------------------------------------------

@@ -37,7 +37,11 @@ const AdminHomePage = () => {
   const [newCategory, setNewCategory] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(null);
-  const [actionOpenIndex, setActionOpenIndex] = useState(null);
+  // `actionOpenIndex` state removed — it tracked which row's action menu was
+  // open, but nothing ever read it, so no menu was driven by it. Its single
+  // setter call (closing the menu after a category delete) went with it.
+  // Checked case-insensitively before removal, which is how the sibling
+  // `setCategoryProducts` was missed earlier in this phase. See CLAUDE.md AF-33.
   const [selectedCategory, setSelectedCategory] = useState("");
   const [updateProductDetails, setUpdateProductDetails] = useState(null);
   const containerRef = useRef(null);
@@ -482,7 +486,6 @@ const AdminHomePage = () => {
 
       if (res.ok) {
         fetchCategories(); // Refresh list
-        setActionOpenIndex(null);
       } else {
         alert("Failed to delete category");
       }

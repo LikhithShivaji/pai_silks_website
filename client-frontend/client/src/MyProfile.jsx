@@ -6,7 +6,7 @@ import Header from "./components/Header";
 import Footer from "./components/Footer";
 import { useAuth } from "./AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 // The Popover + Calendar imports that used to sit here backed a Date-of-Birth
 // field that was commented out of the JSX. Because the imports stayed live,
@@ -23,8 +23,12 @@ const MyProfile = () => {
 
   const navigate = useNavigate();
 
-  // API Base URL
-  const API_BASE = CLIENT_API;
+  // `const API_BASE = CLIENT_API` was removed and CLIENT_API is now used
+  // directly. The alias was re-created on every render, so the effect below
+  // took it as a dependency it did not declare — a react-hooks/exhaustive-deps
+  // warning. CLIENT_API is a module-level constant read once from
+  // import.meta.env, so it belongs outside the component entirely, and using it
+  // directly removes the dependency rather than suppressing the warning.
 
   // --- State ---
   const [loading, setLoading] = useState(true);
@@ -50,7 +54,7 @@ const MyProfile = () => {
       }
 
       try {
-        const response = await apiFetch(`${API_BASE}/api/me`);
+        const response = await apiFetch(`${CLIENT_API}/api/me`);
         const result = await response.json();
 
         if (result.success && result.data) {
@@ -97,7 +101,7 @@ const MyProfile = () => {
       // which is read-only, and anything a later feature adds to this object.
       // The server ignores unknown keys, but a payload that quietly grows is how
       // a field nobody meant to expose ends up being written.
-      const response = await apiFetch(`${API_BASE}/api/update-profile`, {
+      const response = await apiFetch(`${CLIENT_API}/api/update-profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

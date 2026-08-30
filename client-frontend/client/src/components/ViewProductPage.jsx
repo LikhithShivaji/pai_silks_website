@@ -54,12 +54,12 @@ function ViewProductPage() {
 
   const [product, setProduct] = useState(null);
   const [similarProducts, setSimilarProducts] = useState([]);
-  const [fillColor, setFillColor] = useState("transparent");
   const [loading, setLoading] = useState(true);
 
-  const handleSvgClick = () => {
-    setFillColor((c) => (c === "transparent" ? "#ffc780" : "transparent"));
-  };
+  // `fillColor` state and `handleSvgClick` removed. Their only references were
+  // inside the commented-out wishlist Heart block further down, so the linter
+  // was right that nothing used them — a plain grep is misleading here, because
+  // it matches text inside JSX comments. See CLAUDE.md DEP-09.
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -318,15 +318,11 @@ function ViewProductPage() {
                 <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold font-['Poppins'] text-[#FFCB85] leading-tight">
                   {product.name}
                 </h1>
-                {/* <Heart size={40}
-                  className="cursor-pointer flex-shrink-0 hover:scale-110 transition-transform mt-2"
-                  fill={fillColor}
-                  color="#FFCB85"
-                  onClick={() => {
-                    handleAddToWishList(product);
-                    handleSvgClick();
-                  }}
-                /> */}
+                {/* A wishlist Heart button was commented out here. It is the
+                    only thing that referenced the fillColor state removed
+                    above. The page still offers wishlist add/remove through
+                    the buttons below, so this is not a missing feature — just
+                    an abandoned second entry point. */}
               </div>
 
               <p className="text-base md:text-lg text-[#FFCB85]/90 leading-relaxed">

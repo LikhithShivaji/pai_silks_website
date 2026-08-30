@@ -171,7 +171,20 @@ export default function Checkout() {
         })
         .catch((err) => console.error("Failed to auto-fill details:", err));
     }
-  }, [form]);
+    // `isAuthenticated` and `user?.pri_email` added — this was NOT just a lint
+    // warning, it was the same late-auth bug already fixed in MyProfile.
+    //
+    // `useAuth` resolves asynchronously via /api/verify-token. With only
+    // `[form]` here the effect ran ONCE, on mount, while isAuthenticated was
+    // still unresolved — so the `if (isAuthenticated)` branch was false, the
+    // autofill fetch never fired, and it never re-ran when auth landed. A
+    // customer navigating straight to /checkout got an empty form even though
+    // the server had their details. It only appeared to work when auth happened
+    // to resolve before this component mounted.
+    //
+    // These two values settle once per session, so this re-runs at most once
+    // more — it cannot loop.
+  }, [form, isAuthenticated, user?.pri_email]);
 
   const onSubmit = async (data) => {
     // The guard runs BEFORE setIsSubmitting.

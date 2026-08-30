@@ -227,7 +227,10 @@ const AddProduct = ({
 
         formData.append("product_id", newProductId);
 
-        imageFiles.forEach((file, index) => {
+        // No `index` param — it was declared and never used. Every file goes
+        // under the same "images" field name, which is what multer's
+        // .array("images") expects.
+        imageFiles.forEach((file) => {
           formData.append("images", file);
         });
 

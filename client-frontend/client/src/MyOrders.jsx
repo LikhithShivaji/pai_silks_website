@@ -5,7 +5,7 @@ import { useAuth } from "@/AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const OrderCard = ({ order }) => {
   const status = order.order_status || order.status || "Pending";

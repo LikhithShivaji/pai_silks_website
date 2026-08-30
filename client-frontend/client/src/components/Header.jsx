@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import logo from "../assets/logo.svg";
-import heart from "../assets/Heart.svg";
-import cart from "../assets/ShoppingBag.svg";
-import filtersort from "../assets/List.svg";
+// Three SVG imports stood here — Heart.svg, ShoppingBag.svg and List.svg —
+// superseded by the lucide-react icons imported below (Heart, ShoppingCart,
+// Menu) and never removed. This was their ONLY importer, so the asset files
+// went with them.
 import ProfileSection from "./ProfileSection";
 import Cart from "./Cart";
 import WishList from "./WishList";

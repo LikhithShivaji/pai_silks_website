@@ -53,7 +53,6 @@ function Homepage() {
   const [collections, setCollections] = useState([]);
   const [loadingCollections, setLoadingCollections] = useState(true);
   const [loadingBestSellers, setLoadingBestSellers] = useState(true);
-  const [fillColor, setFillColor] = useState("transparent");
   const [bestSellers, setBestSellers] = useState([]);
   const [currentBestIndex, setCurrentBestIndex] = useState(0);
   const currentProduct = bestSellers[currentBestIndex];
@@ -79,10 +78,9 @@ function Homepage() {
     .filter((item) => item.originalIndex !== currentBestIndex)
     .slice(0, 3);
 
-  const handleSvgClick = () => {
-    setFillColor((c) => (c === "transparent" ? "#ffc780" : "transparent"));
-  };
-
+  // `fillColor` state and `handleSvgClick` removed — they toggled the fill on a
+  // wishlist heart icon that is no longer rendered on this page. Nothing read
+  // either one. See CLAUDE.md DEP-09.
   const collectionImages = {
     "Casual Wear": casualcoll,
     "Festive Collections": festivecoll,

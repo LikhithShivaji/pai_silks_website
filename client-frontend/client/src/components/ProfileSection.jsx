@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useContext } from "react";
 import footerBg from "../assets/footerbgimage.webp";
 import { useNavigate } from "react-router-dom";
 import { CartContext } from "../CartContext";

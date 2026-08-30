@@ -1,0 +1,172 @@
+name: CI
+
+# Runs on Linux, which is the point. macOS and Windows have case-INSENSITIVE
+# filesystems, so `import { columns } from "./Columns"` resolves fine locally and
+# fails hard on any Linux build host. That exact bug (AF-17) shipped in this repo
+# and was only caught by deliberately building on a case-sensitive volume.
+# See CLAUDE.md DEP-12.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run — no point finishing a
+# build for a commit that has already been superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backends:
+    name: Backend — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # report BOTH services' failures, not just the first
+      matrix:
+        service: [client-backend, admin-backend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20' # matches the "node": ">=20" both backends declare
+          cache: npm
+          cache-dependency-path: |
+            shared/package-lock.json
+            ${{ matrix.service }}/package-lock.json
+
+      # shared/ MUST be installed first and separately. Both backends require it,
+      # it has its own package.json, and Node resolves its dependencies by
+      # walking UP from shared/ — not into the backend's node_modules. Skipping
+      # this is the "Cannot find module 'express-validator'" failure that broke
+      # the first boot after the module was extracted. Render's build command
+      # carries the same requirement; see DEPLOYMENT.md.
+      - name: Install shared module
+        working-directory: shared
+        run: npm ci
+
+      - name: Install ${{ matrix.service }}
+        working-directory: ${{ matrix.service }}
+        run: npm ci
+
+      # Parse-check every source file. Catches the class of error a syntax slip
+      # inside a template literal produces — a backtick in a SQL comment once
+      # truncated a query here and surfaced as a misleading "Unknown column"
+      # error at runtime rather than at load.
+      - name: Syntax check
+        run: |
+          find ${{ matrix.service }}/src shared -name '*.js' -not -path '*/node_modules/*' -print0 \
+            | xargs -0 -r -n1 node --check
+          echo "All files parsed."
+
+      # Boot the service for real. A missing require, a bad export or a trailing
+      # comma after a class method only surfaces when the file is LOADED, and
+      # `node --check` will not find any of them.
+      #
+      # The server listens and never exits, so `timeout` stops it and exit code
+      # 124 (timed out = still running = healthy) is the success case. Any other
+      # non-zero code means it crashed on startup.
+      - name: Server boots
+        working-directory: ${{ matrix.service }}
+        env:
+          # db.js fails loudly on missing variables — by design. These are
+          # syntactically valid placeholders so the module graph can load.
+          # Nothing here connects to a database; the pool is lazy.
+          DB_HOST: localhost
+          DB_USER: ci
+          DB_PASS: ci
+          DB_NAME: ci
+          DB_PORT: '3306'
+          JWT_SECRET: ci-not-a-real-secret
+          NODE_ENV: test
+          PORT: '0' # let the OS pick — proves PORT is read from the environment
+        run: |
+          set +e
+          timeout 15s node src/server.js
+          code=$?
+          set -e
+          if [ "$code" -eq 124 ]; then
+            echo "Server started and stayed up."
+          else
+            echo "::error::Server exited with code $code instead of staying up."
+            exit 1
+          fi
+
+      - name: Audit (high and above)
+        working-directory: ${{ matrix.service }}
+        run: npm audit --audit-level=high
+        continue-on-error: true # reports without blocking; see DEP-14
+
+  frontends:
+    name: Frontend — ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: client-frontend
+            path: client-frontend/client
+          - app: admin-frontend
+            path: admin-frontend/admin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
+
+      - name: Install
+        working-directory: ${{ matrix.path }}
+        run: npm ci
+
+      # Both frontends pass with ZERO problems as of Phase 6 Slice 5. This step
+      # is what keeps that true — without it the count silently climbs again.
+      - name: Lint
+        working-directory: ${{ matrix.path }}
+        run: npm run lint
+
+      # THE reason this pipeline exists. A case-mismatched relative import
+      # builds fine on a developer's Mac and fails here.
+      - name: Build (Linux, case-sensitive)
+        working-directory: ${{ matrix.path }}
+        run: npm run build
+
+      - name: Audit (high and above)
+        working-directory: ${{ matrix.path }}
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  # Fails if a real secret is committed. SEC-01 in CLAUDE.md exists because a
+  # Cloudinary API secret reached this repo's history while it was public, so
+  # this guards the specific mistake already made once.
+  secrets:
+    name: No committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for tracked .env files
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::A .env file is tracked by git. Remove it and rotate anything it contained."
+            exit 1
+          fi
+          echo "No tracked .env files."
+
+      - name: Check for credential literals
+        run: |
+          # Assignments to a non-empty literal. Deliberately narrow: broad secret
+          # scanning belongs in a dedicated tool, and a noisy check everyone
+          # learns to ignore is worse than no check at all.
+          if git grep -nE "(CLOUDINARY_API_SECRET|JWT_SECRET|DB_PASS)[[:space:]]*[:=][[:space:]]*['\"][^'\"]{8,}" \
+               -- ':!*.example' ':!CLAUDE.md' ':!DEPLOYMENT.md' ':!.github'; then
+            echo "::error::A credential literal appears to be committed."
+            exit 1
+          fi
+          echo "No credential literals found."

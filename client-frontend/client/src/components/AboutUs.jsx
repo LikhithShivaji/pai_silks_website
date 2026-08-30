@@ -8,10 +8,11 @@ import instagram from "../assets/instagram.svg";
 import call from "../assets/call.svg";
 import maps from "../assets/map-trifold.svg";
 
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-// Using the pattern as a subtle texture overlay instead of a heavy background
-import footerBgPattern from "@/assets/footerbgimage.webp";
+// `footerBgPattern` was imported here as "a subtle texture overlay" and then
+// never applied to anything. Removed rather than wired in — inventing where a
+// background belongs is a design decision, not a lint fix.
 import { ArrowLeft } from "lucide-react";
 
 const AboutUs = () => {
