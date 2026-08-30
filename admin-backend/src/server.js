@@ -1,13 +1,21 @@
+// Loaded FIRST and explicitly. Keep this above every local require: anything
+// that reads process.env at module scope (config/db.js does) must not be
+// loaded before this line, or it sees an empty environment.
+require("dotenv").config();
+
 const express = require('express');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const adminRoutes = require('./routes/adminRoutes');
 const controllers = require('./controllers/adminController')
 const cors = require('cors');
-require("dotenv").config();
 
 const { loginLimiter, writeLimiter } = require('./middlewares/rateLimiters');
 const { sanitizeError } = require('./utils/safeError');
+// Imported so the graceful-shutdown handler below can drain it. This is the
+// same singleton pool every dbOps module uses — requiring it here does not
+// create a second one.
+const pool = require('./config/db');
 
 const app = express();
 
@@ -66,7 +74,41 @@ app.use(
 );
 
 app.use(express.json());
+
+// Form-encoded bodies. Without this, a request sent as
+// application/x-www-form-urlencoded — the default for a plain HTML <form>, and
+// what most API clients fall back to — arrives with `req.body` undefined rather
+// than parsed. The validators then report every field as missing, producing a
+// 400 that blames the caller for a body the server never read. The 100kb limit
+// mirrors express.json's default rather than leaving it unbounded.
+//
+// Note this does NOT affect /api/insert-image: multipart/form-data is parsed by
+// multer, which is mounted on that route separately.
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+
 app.use(cookieParser());
+
+// --- Health check --------------------------------------------------------
+// Mounted at /health, deliberately NOT under /api: writeLimiter is applied to
+// everything under /api, and a platform polling its health check every few
+// seconds would eventually throttle itself and report the service as down.
+//
+// Reports readiness, not just liveness. A process that is running but cannot
+// reach MySQL can serve nothing useful, so answering 200 in that state would
+// tell Render to keep routing traffic to a service that 500s every request.
+//
+// The response body is deliberately minimal — this endpoint is unauthenticated,
+// so it must never leak the database name, host, versions or error text. The
+// reason for a failure goes to the logs, not to the caller.
+app.get('/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    return res.status(200).json({ status: 'ok', db: 'up' });
+  } catch (err) {
+    console.error('[health] database unreachable:', err.code || err.message);
+    return res.status(503).json({ status: 'degraded', db: 'down' });
+  }
+});
 
 // Brute-force protection: 5 FAILED attempts per IP per 15 min. See AB-03.
 app.post('/api/admin-login', loginLimiter, controllers.adminLogin);
@@ -105,5 +147,73 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = 9032;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// --- Listen -------------------------------------------------------------
+// The port MUST come from the environment. Render assigns a port at runtime,
+// publishes it as PORT, and routes traffic only there — a hardcoded 9032 binds
+// somewhere the platform is not listening, so the health check never passes and
+// the deploy is marked failed with the service apparently "running fine" in its
+// own logs. The literal is the local development default only.
+// See CLAUDE.md AB-37.
+const PORT = Number(process.env.PORT) || 9032;
+
+const server = app.listen(PORT, () =>
+  console.log(`Server running on port ${PORT}`)
+);
+
+// --- Graceful shutdown ---------------------------------------------------
+// Render sends SIGTERM on every deploy, restart and scale event, then SIGKILLs
+// after a grace period. With no handler the process dies instantly and every
+// in-flight request is cut off mid-response. On this service that includes a
+// product write inside withTransaction and an image upload already in flight to
+// Cloudinary — the latter can leave an asset paid for and stored with no
+// database row pointing at it, which is exactly the orphan class AB-10 fixed.
+//
+// Closing the pool matters too: without it MySQL keeps up to 10 connections per
+// instance open until they time out server-side, and a redeploy loop can pile
+// up connections faster than they are reclaimed.
+let shuttingDown = false;
+
+const shutdown = (signal) => {
+  if (shuttingDown) return; // a second signal must not re-enter this
+  shuttingDown = true;
+  console.log(`[${signal}] shutting down`);
+
+  // Stop accepting new connections; the callback fires once in-flight requests
+  // have finished.
+  server.close(async () => {
+    try {
+      await pool.end();
+      console.log('HTTP server closed, database pool drained');
+    } catch (err) {
+      console.error('Error draining pool:', sanitizeError(err));
+    }
+    process.exit(0);
+  });
+
+  // Backstop: never hang forever waiting on a stuck connection. Render's grace
+  // period is short, so exit on our own terms before it escalates to SIGKILL.
+  // .unref() so this timer alone does not keep the process alive.
+  setTimeout(() => {
+    console.error('Shutdown timed out after 10s, forcing exit');
+    process.exit(1);
+  }, 10_000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT')); // Ctrl+C in local development
+
+// --- Last-resort process handlers ----------------------------------------
+// An unhandled rejection is a bug, not a recoverable state: the process is in
+// an unknown condition, so log it and let the platform restart us cleanly
+// rather than serving requests from a corrupted state. Logging via
+// sanitizeError keeps SQL and bound parameters out of the logs, exactly as the
+// request-level error handler above does.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', sanitizeError(reason));
+  shutdown('unhandledRejection');
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', sanitizeError(err));
+  shutdown('uncaughtException');
+});

@@ -196,7 +196,10 @@ const AdminHomePage = () => {
     setOrdersError(null);
     setOrdersLoading(true);
     try {
-      const res = await apiFetch(`${ADMIN_API}/api/get-order-detils`);
+      // Spelling corrected from `get-order-detils` (AB-37). The backend keeps
+      // the misspelt path as a deprecated alias, so this is safe to deploy
+      // before the backend if the two ever ship out of step.
+      const res = await apiFetch(`${ADMIN_API}/api/get-order-details`);
       // Check ok BEFORE parsing: an HTML error page or an empty body throws on
       // .json(), which previously surfaced as a generic swallowed error.
       if (!res.ok) {

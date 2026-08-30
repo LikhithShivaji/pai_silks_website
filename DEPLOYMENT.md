@@ -145,6 +145,36 @@ JWT_SECRET    (added in Phase 2)
 
 `admin-backend` additionally needs the three `CLOUDINARY_*` keys.
 
+### Health check path — set this for both services
+
+Set **Health Check Path** to `/health` on both Render services.
+
+```
+Health Check Path    /health
+```
+
+Both backends expose `GET /health` (Phase 6 Slice 3). It is mounted outside
+`/api` **on purpose**: everything under `/api` is rate-limited, and a health
+check polled every few seconds would eventually throttle itself and make a
+healthy service look down.
+
+It reports **readiness, not just liveness** — it runs `SELECT 1` and returns:
+
+| DB state | Status | Body |
+|---|---|---|
+| reachable | `200` | `{"status":"ok","db":"up"}` |
+| unreachable | `503` | `{"status":"degraded","db":"down"}` |
+
+So Render will not route traffic to an instance that is running but cannot
+reach MySQL. The body carries no host, database name, version or error text —
+it is unauthenticated, so the reason for a failure goes to the logs only.
+
+⚠️ **`PORT` was hardcoded until Phase 6 Slice 3** (`9034`/`9032`). This file
+already documented the rule; the code simply did not follow it. Had it shipped,
+each service would have bound to a port Render was not routing to — the health
+check would never pass, the deploy would be marked failed, and the service's own
+log would read `Server running on port 9032` the whole time.
+
 > **The backends now refuse to start if any `DB_*` variable is missing.** That
 > is deliberate — they previously fell back to `root`/`admin123` silently. If a
 > Render deploy crashes on boot, check the logs for

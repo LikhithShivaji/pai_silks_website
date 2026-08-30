@@ -63,7 +63,17 @@ router.delete('/categories/:id', v.idParam, validate, adminController.deleteCate
 
 router.get('/get-all-product-details', adminController.getAllProductDetails);
 
-router.get('/get-order-detils',adminController.getOrderDetails);
+// Spelling corrected from `/get-order-detils`. The misspelling was in the route
+// AND in its single caller (AdminHomePage.jsx), so it worked — it was a typo
+// baked into the contract, which is the kind of thing that survives forever
+// because fixing it later means touching both sides at once.
+//
+// The old path is kept as a deprecated alias rather than deleted: this API is
+// about to be handed over, and a 404 on a path that worked yesterday is a
+// worse failure than a duplicate route. Remove the alias once the client
+// confirms nothing external calls it. See CLAUDE.md AB-37.
+router.get('/get-order-details', adminController.getOrderDetails);
+router.get('/get-order-detils', adminController.getOrderDetails); // deprecated alias
 
 // REMOVED: a second `router.put('/update-product', ...)` was registered here
 // without the upload middleware. Express matches the first registration, so it

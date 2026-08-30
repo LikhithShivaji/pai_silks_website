@@ -38,7 +38,35 @@ const pool = mysql.createPool({
   port: Number(process.env.DB_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+
+  // Finite, was 0 (unbounded). With an unbounded queue a database stall does
+  // not fail — it accumulates: every request waits for a connection that never
+  // frees, the queue grows with memory, and each customer's browser spins until
+  // it times out on its own. Nothing sheds load and nothing reports a problem.
+  //
+  // 50 is 5x connectionLimit — roughly a quarter-second of backlog at ~50ms per
+  // query — so ordinary traffic spikes still queue and succeed, while a genuine
+  // stall rejects the 51st waiter immediately. That surfaces as the generic 500
+  // from the error handler in server.js, which is a far better outcome than a
+  // hung request holding the connection open.
+  //
+  // Tune this from real traffic once the shop is live rather than leaving it
+  // unbounded in the meantime. See CLAUDE.md CB-37 / AB-39.
+  queueLimit: 50
+});
+
+// Pool-level errors arrive on the pool itself, not on any query's promise, so
+// nothing above ever sees them. An idle connection dropped by the server —
+// PROTOCOL_CONNECTION_LOST, ECONNRESET, or the MySQL `wait_timeout` reaping a
+// connection that has sat unused — is emitted here.
+//
+// Without a listener this is not merely unlogged: an 'error' event with no
+// handler is re-thrown by EventEmitter as an uncaught exception, which would
+// take the whole process down for a condition mysql2 recovers from on its own
+// by opening a fresh connection. Logging and continuing is the correct
+// response. See CLAUDE.md CB-37.
+pool.on('error', (err) => {
+  console.error('[db pool]', err.code || err.message);
 });
 
 module.exports = pool;
