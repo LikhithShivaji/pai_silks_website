@@ -195,6 +195,10 @@ class Cmds {
     // drives the count directly from the enum. See CLAUDE.md AB-17 (a).
     async getOrderStats() {
         try {
+            // Both are arrays, both expand to `IN (?)`. ORDER_STATUS_TERMINAL
+            // became a list when Cancelled/Refunded were added — passing it to
+            // the old `status = ?` would have silently dropped those orders
+            // from both dashboard cards (AB-17).
             const [rows] = await pool.query(sqlqueries.dashBoard.getOrderStats, [
                 appDefines.ORDER_STATUS_ACTIVE,
                 appDefines.ORDER_STATUS_TERMINAL
@@ -209,7 +213,15 @@ class Cmds {
     async getBestSellers(limit = appDefines.DASHBOARD_LIMITS.BEST_SELLERS) {
         try {
             const [rows] = await pool.query(sqlqueries.dashBoard.getBestSellers, [
-                appDefines.ORDER_STATUS_TERMINAL,
+                // ORDER_STATUS_DELIVERED, not ORDER_STATUS_TERMINAL.
+                //
+                // The query is `WHERE o.status = ?` — a single value — and
+                // TERMINAL is now a LIST, so passing it here would break the
+                // binding. More importantly the two mean different things:
+                // 'Cancelled' and 'Refunded' are terminal but are NOT sales.
+                // Counting them would inflate best-sellers and revenue with
+                // orders whose money went back to the customer.
+                appDefines.ORDER_STATUS_DELIVERED,
                 // Coerced and clamped: LIMIT cannot be a placeholder in every
                 // MySQL configuration path, and an unbounded caller-supplied
                 // limit would re-open the DoS this LIMIT exists to close.
@@ -341,6 +353,46 @@ async updateProductStockCAS(product_id, stock_qty, expected_stock_qty, conn = nu
             return result.affectedRows;
         } catch (error) {
             console.error("Error in updateOrderStatus:", error.code || error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Update status together with the dispatch details, in one statement.
+     *
+     * `carrier` and `consignment_number` are written as a pair so an order can
+     * never be left marked Shipped with no way to track it. Pass null for both
+     * to clear them (e.g. moving an order back out of a dispatched state).
+     *
+     * See CLAUDE.md DB-09.
+     */
+    async updateOrderDispatch(order_id, new_status, carrier, consignment_number) {
+        try {
+            const [result] = await pool.query(
+                sqlqueries.orders.updateOrderDispatch,
+                [new_status, carrier ?? null, consignment_number ?? null, order_id]
+            );
+            return result.affectedRows;
+        } catch (error) {
+            console.error("Error in updateOrderDispatch:", sanitizeError(error));
+            throw error;
+        }
+    }
+
+    /**
+     * Returns the order_id already carrying this consignment number, or null.
+     *
+     * Excludes `excludeOrderId` so re-saving the same order is not a clash.
+     */
+    async findOrderByConsignment(consignment_number, excludeOrderId) {
+        try {
+            const [rows] = await pool.query(
+                sqlqueries.orders.findOrderByConsignment,
+                [consignment_number, excludeOrderId]
+            );
+            return rows.length ? rows[0].order_id : null;
+        } catch (error) {
+            console.error("Error in findOrderByConsignment:", sanitizeError(error));
             throw error;
         }
     }

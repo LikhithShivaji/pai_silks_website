@@ -48,7 +48,24 @@ module.exports = {
         'Packed',
         'Shipped',
         'Out for Delivery',
-        'Delivered'
+        'Delivered',
+
+        // --- Terminal states other than a successful delivery -------------
+        // Added 2026-09-07 because the published Refund & Cancellation Policy
+        // commits the shop to two outcomes the system could not previously
+        // record at all:
+        //
+        //   'Cancelled' — the shop cannot fulfil the order. The policy's
+        //     out-of-stock clause promises a full refund including shipping,
+        //     and there was no state to put such an order into.
+        //   'Refunded'  — money has gone back to the customer, whether after
+        //     an accepted damage claim or an unfulfillable order.
+        //
+        // 'Returned' was deliberately NOT added: under the policy a damage
+        // return always ends in a refund, so it would be a state every order
+        // passes straight through. Fewer states, fewer places to disagree.
+        'Cancelled',
+        'Refunded'
     ],
 
     /**
@@ -87,10 +104,70 @@ module.exports = {
         BCRYPT_COST: 12
     },
 
-    ORDER_STATUS_TERMINAL: 'Delivered',
+    /**
+     * Statuses where the order is finished and needs no further action.
+     *
+     * ⚠️ This was the single string 'Delivered' and is now a LIST, because
+     * 'Cancelled' and 'Refunded' are equally finished — an order in either is
+     * not waiting on anybody. Leaving it as one value would have made both new
+     * states count as ACTIVE (see the getter below, which is "everything that
+     * is not terminal"), so the admin's "active orders" card would have
+     * included every cancelled and refunded order forever.
+     *
+     * That is exactly AB-17 again: a status counted in the wrong bucket with
+     * nothing to reveal it. Adding a status is therefore a TWO-part change —
+     * add it to ORDER_STATUSES, then decide here whether it is terminal.
+     *
+     * ORDER_STATUS_DELIVERED is kept separate because "sold" is not the same
+     * question as "finished": a refunded order is finished but must NOT count
+     * towards best-sellers or revenue.
+     */
+    ORDER_STATUS_TERMINAL: ['Delivered', 'Cancelled', 'Refunded'],
 
+    /** The one status that means the customer received and kept the goods. */
+    ORDER_STATUS_DELIVERED: 'Delivered',
+
+    /**
+     * Carriers the shop despatches with. See CLAUDE.md DB-09.
+     *
+     * A closed list, not free text, because the storefront builds a tracking
+     * URL from this value — an unrecognised carrier produces a link to nowhere.
+     * `product.category` is the cautionary tale here: a free-text column that
+     * drifted out of step with the table it was meant to mirror (AB-31/DB-06).
+     *
+     * Adding a carrier means adding it here AND adding its tracking URL to the
+     * storefront's carrier config, or the value saves fine and the customer
+     * gets a dead link.
+     */
+    CARRIERS: ['DTDC', 'India Post'],
+
+    /**
+     * Statuses that may not be set without a consignment number and carrier.
+     *
+     * Once an order is out of the shop's hands, the customer must be able to
+     * find it. Nothing fills these fields automatically at launch — DTDC issues
+     * API credentials only after go-live, and a tracking API takes the number
+     * as INPUT rather than supplying it — so this requirement is what
+     * guarantees a dispatched order is trackable.
+     *
+     * Derived from ORDER_STATUSES rather than retyped, so a typo here cannot
+     * silently disable the rule. Terminal states are excluded: an order already
+     * Delivered, Cancelled or Refunded is not awaiting a parcel, and a
+     * cancelled order legitimately has no consignment number at all.
+     */
+    get STATUSES_REQUIRING_TRACKING() {
+        const dispatched = ['Shipped', 'Out for Delivery'];
+        return this.ORDER_STATUSES.filter((s) => dispatched.includes(s));
+    },
+
+    /**
+     * Everything still in flight. Derived, never hand-listed — listing states
+     * twice is what produced AB-17.
+     */
     get ORDER_STATUS_ACTIVE() {
-        return this.ORDER_STATUSES.filter((s) => s !== this.ORDER_STATUS_TERMINAL);
+        return this.ORDER_STATUSES.filter(
+            (s) => !this.ORDER_STATUS_TERMINAL.includes(s)
+        );
     },
 
     // Dashboard list caps. Both queries were named "best sellers" and "recent

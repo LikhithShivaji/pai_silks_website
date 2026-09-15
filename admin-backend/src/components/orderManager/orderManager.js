@@ -28,6 +28,13 @@ const getOrderDetails = async () => {
                     payment_method: row.payment_method,
                     payment_status: row.payment_status,
                     shipment_status: row.shipment_status,
+                    // Dispatch details (DB-09). Explicitly null rather than
+                    // undefined when absent: this object is serialised to JSON,
+                    // and `undefined` keys are DROPPED entirely, so the admin UI
+                    // could not tell "not yet dispatched" from "field missing
+                    // from the API".
+                    carrier: row.carrier ?? null,
+                    consignment_number: row.consignment_number ?? null,
                     // Taken from the order row, NOT recomputed from the joined
                     // line items. See the note on getAllOrderData: re-summing
                     // double-counts whenever a non-1:1 join duplicates rows,
@@ -74,7 +81,34 @@ const updateOrderStatus = async (order_id, new_status) => {
     }
 };
 
+/**
+ * Status plus dispatch details, written together. See CLAUDE.md DB-09.
+ */
+const updateOrderDispatch = async (order_id, new_status, carrier, consignment_number) => {
+    try {
+        return await dbCmds.updateOrderDispatch(order_id, new_status, carrier, consignment_number);
+    } catch (error) {
+        error.httpCode = error.httpCode || appConstants.HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR;
+        throw error;
+    }
+};
+
+/**
+ * The order already carrying this consignment number, or null.
+ * Used to refuse scanning one receipt against two different orders.
+ */
+const findOrderByConsignment = async (consignment_number, excludeOrderId) => {
+    try {
+        return await dbCmds.findOrderByConsignment(consignment_number, excludeOrderId);
+    } catch (error) {
+        error.httpCode = error.httpCode || appConstants.HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR;
+        throw error;
+    }
+};
+
 module.exports = {
     getOrderDetails,
-    updateOrderStatus
+    updateOrderStatus,
+    updateOrderDispatch,
+    findOrderByConsignment
 }

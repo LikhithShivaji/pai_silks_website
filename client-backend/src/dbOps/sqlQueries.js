@@ -54,7 +54,11 @@ const sqlqueries = {
         // forgotten check cannot let a stale session through.
         getActiveSessionById: `
             SELECT s.sid, s.session_id, s.user_id, s.pri_email, s.status,
-                   s.login_date_time, u.role_id, u.is_delete
+                   s.login_date_time, u.role_id, u.is_delete,
+                   -- Added so the greeting can come from the SERVER instead of
+                   -- localStorage. The join to master_user already existed, so
+                   -- this costs nothing extra. See CLAUDE.md CF-46.
+                   u.user_name
             FROM session s
             JOIN master_user u ON u.user_id = s.user_id
             WHERE s.session_id = ?
@@ -503,7 +507,13 @@ getProductsByCategory: `
   // See CLAUDE.md CB-16.
   getOrdersByUser: `
       SELECT order_id, user_id, total_amount, shipping_address,
-             payment_method, payment_status, status, order_date
+             payment_method, payment_status, status, order_date,
+             -- Dispatch details (DB-09). Both NULL until the admin records
+             -- them. Listed explicitly rather than SELECT *, so a future column
+             -- on \`orders\` is never silently exposed to customers — the lesson
+             -- of CB-35 and CF-15, where p.* leaked is_deleted and internal
+             -- timestamps into storefront responses.
+             carrier, consignment_number
       FROM orders
       WHERE user_id = ?
       ORDER BY order_date DESC;

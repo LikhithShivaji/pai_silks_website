@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { SelectComponent } from "./ui/SelectComponent";
+import DispatchEntry from "./DispatchEntry";
 
 import {
 
@@ -60,6 +61,7 @@ export default function DisplayOrderPage({
   order,
   onBack = () => {},
   onChangeStatus,
+  onSaveDispatch,
 }) {
   useEffect(() => {
   }, []);
@@ -200,6 +202,17 @@ export default function DisplayOrderPage({
         <SelectComponent
           value={order.status ?? "Pending"}
           onChange={(newStatus) => onChangeStatus(newStatus)}
+        />
+
+        {/* Dispatch details, directly under the status control because the two
+            are one action in practice: the admin returns from the courier and
+            records "this went out, here is the number". The server refuses to
+            set a dispatched status without them (DB-09). */}
+        <DispatchEntry
+          orderId={order.orderId ?? order.id}
+          currentCarrier={order.carrier}
+          currentConsignment={order.consignment_number}
+          onSave={onSaveDispatch}
         />
         <div className="w-full border-1 rounded-xl p-5 flex flex-col gap-2">
           {/* Every field falls back to an em dash. A blank after "Email:" is

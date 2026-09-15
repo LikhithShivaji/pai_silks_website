@@ -30,14 +30,36 @@ export const ORDER_STATUSES = [
   "Shipped",
   "Out for Delivery",
   "Delivered",
+
+  // Added 2026-09-07, mirroring admin-backend appDefines.ORDER_STATUSES.
+  // The published Refund & Cancellation Policy commits the shop to refunding
+  // unfulfillable orders and accepted damage claims, and there was no state to
+  // record either. 'Returned' was deliberately not added — a damage return
+  // always ends in a refund, so it would be a pass-through state.
+  "Cancelled",
+  "Refunded",
 ];
 
-/** The one terminal state. Everything else is still in flight. */
-export const ORDER_STATUS_TERMINAL = "Delivered";
+/**
+ * Statuses where the order is finished. ⚠️ A LIST, not a single value.
+ *
+ * Was `"Delivered"`. 'Cancelled' and 'Refunded' are equally finished, and
+ * because ACTIVE below is "everything not terminal", leaving this as one string
+ * would have counted every cancelled and refunded order as still in flight.
+ * That is AB-17 repeating: a status landing in the wrong bucket with nothing to
+ * reveal it.
+ *
+ * Adding a status is a TWO-part change: add it above, then decide here whether
+ * it is terminal.
+ */
+export const ORDER_STATUS_TERMINAL = ["Delivered", "Cancelled", "Refunded"];
+
+/** The one status meaning the customer received and kept the goods. */
+export const ORDER_STATUS_DELIVERED = "Delivered";
 
 /** Derived, never hand-listed — see the note above. */
 export const ORDER_STATUS_ACTIVE = ORDER_STATUSES.filter(
-  (s) => s !== ORDER_STATUS_TERMINAL
+  (s) => !ORDER_STATUS_TERMINAL.includes(s)
 );
 
 /**
@@ -129,6 +151,11 @@ export const countOrderStats = (orders) => {
   const list = Array.isArray(orders) ? orders : [];
   const isActive = inGroup(ORDER_STATUS_ACTIVE);
   const active = list.filter(isActive).length;
-  const completed = list.filter(inGroup([ORDER_STATUS_TERMINAL])).length;
+  // `ORDER_STATUS_TERMINAL` passed directly — it is already a list. It used to
+  // be a single string wrapped here as `[ORDER_STATUS_TERMINAL]`; leaving that
+  // wrapper would have produced `[["Delivered","Cancelled","Refunded"]]`, a
+  // nested array that matches no status, so `completed` would have silently
+  // read 0 and `active + completed === total` would have stopped holding.
+  const completed = list.filter(inGroup(ORDER_STATUS_TERMINAL)).length;
   return { total: list.length, active, completed };
 };

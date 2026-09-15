@@ -169,10 +169,19 @@ const sqlqueries = {
         // and two strings in the same object, so `stats.active + 1` would have
         // produced "01". Counts are integers; money stays DECIMAL.
         // See CLAUDE.md AB-17 (a).
+        // `completedOrders` binds a LIST now, not a single value.
+        //
+        // It was `SUM(status = ?)` against the one terminal status 'Delivered'.
+        // With 'Cancelled' and 'Refunded' added as terminal states (2026-09-07),
+        // an equality test would have counted them in NEITHER card: not active
+        // (they are terminal) and not completed (they are not 'Delivered'). That
+        // is precisely the AB-17 failure — orders vanishing from both totals —
+        // so both halves are `IN (?)` and `active + completed = total` holds for
+        // every status in the enum.
         getOrderStats: `
             SELECT COUNT(*) AS totalOrders,
                    CAST(COALESCE(SUM(status IN (?)), 0) AS UNSIGNED) AS activeOrders,
-                   CAST(COALESCE(SUM(status = ?),   0) AS UNSIGNED) AS completedOrders
+                   CAST(COALESCE(SUM(status IN (?)), 0) AS UNSIGNED) AS completedOrders
               FROM orders
         `,
         // p.is_deleted = 0 — a product removed from the catalogue should not
@@ -271,6 +280,10 @@ const sqlqueries = {
         getAllOrderData: `SELECT
     o.order_id, o.order_date, o.status, o.shipping_address, o.payment_method,
     o.total_amount, o.shipping_fee, oi.order_item_id,
+    -- Dispatch details (DB-09). Both NULL until the admin records them; the
+    -- admin table shows them so staff can see at a glance which despatched
+    -- orders are still missing tracking.
+    o.carrier, o.consignment_number,
     o.payment_status, oi.product_id, oi.quantity, oi.price, s.shipment_status,
     mu.user_name,
     -- The order-detail page renders an Email line and it was always BLANK,
@@ -315,8 +328,36 @@ const sqlqueries = {
     LEFT JOIN master_user mu ON mu.user_id = o.user_id 
     LEFT JOIN product p ON p.id = oi.product_id
     LEFT JOIN product_images pi ON pi.product_id = oi.product_id AND pi.is_primary_image = 1`,
-        updateOrderStatus: `UPDATE orders SET status = ? WHERE order_id = ?`
-    }   
+        updateOrderStatus: `UPDATE orders SET status = ? WHERE order_id = ?`,
+
+        // Status plus dispatch details in ONE statement.
+        //
+        // Separate queries would mean an order could end up marked Shipped with
+        // no consignment number (or the reverse) if the second write failed —
+        // and "Shipped with no tracking" is the exact dead end DB-09 exists to
+        // remove. One UPDATE makes the pair atomic without needing a
+        // transaction for two columns on one row.
+        updateOrderDispatch: `
+            UPDATE orders
+               SET status = ?, carrier = ?, consignment_number = ?
+             WHERE order_id = ?
+        `,
+
+        // Guards against scanning the right receipt into the wrong order.
+        //
+        // With a barcode scanner a typo is unlikely, but having order #53 open
+        // while scanning #52's receipt is easy — and that failure is invisible:
+        // both orders look tracked, one customer follows a stranger's parcel.
+        // Excludes the order being updated so re-saving the same order with the
+        // same number is not treated as a clash.
+        findOrderByConsignment: `
+            SELECT order_id
+              FROM orders
+             WHERE consignment_number = ?
+               AND order_id <> ?
+             LIMIT 1
+        `
+    }
 
 };
 (module.exports = sqlqueries);

@@ -150,6 +150,60 @@ const updateOrderStatus = [
     .trim()
     .isIn(appDefines.ORDER_STATUSES)
     .withMessage(`Status must be one of: ${appDefines.ORDER_STATUSES.join(', ')}.`),
+
+  // --- Dispatch details (DB-09) ------------------------------------------
+  //
+  // `carrier` is constrained to a known list rather than accepted as free
+  // text. The storefront builds a tracking URL from this value, so an
+  // unrecognised carrier means a link that goes nowhere — and `product.category`
+  // is already a cautionary tale in this codebase about free-text columns
+  // drifting away from the list they are supposed to match (AB-31 / DB-06).
+  body('carrier')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isIn(appDefines.CARRIERS)
+    .withMessage(`Carrier must be one of: ${appDefines.CARRIERS.join(', ')}.`),
+
+  // Normalised before the format check: barcode scanners and hand entry both
+  // produce stray whitespace, and carriers print numbers in lower case as often
+  // as upper. Stored upper-case so the duplicate check compares like with like.
+  body('consignment_number')
+    .optional({ values: 'falsy' })
+    .trim()
+    .toUpperCase()
+    .isLength({ min: 6, max: 50 })
+    .withMessage('Consignment number looks too short or too long.')
+    .matches(/^[A-Z0-9-]+$/)
+    .withMessage('Consignment number may contain only letters, digits and hyphens.'),
+
+  // A consignment number without a carrier is unusable — nothing can be built
+  // from it — so the pair is required together rather than individually.
+  body('carrier').custom((carrier, { req }) => {
+    const cn = req.body.consignment_number;
+    if (cn && !carrier) throw new Error('Select a carrier for this consignment number.');
+    if (carrier && !cn) throw new Error('Enter a consignment number for this carrier.');
+    return true;
+  }),
+
+  // Dispatched statuses must carry tracking.
+  //
+  // Without this an order can be marked Shipped with no consignment number,
+  // which is precisely the dead end DB-09 removes — and the Shipping Policy
+  // now tells customers they can see their order's progress. Nothing populates
+  // this automatically at launch (DTDC assigns API credentials only after
+  // go-live, and a TRACKING api would not supply the number anyway), so the
+  // requirement is what guarantees the field is filled.
+  body('status').custom((status, { req }) => {
+    if (
+      appDefines.STATUSES_REQUIRING_TRACKING.includes(status) &&
+      !req.body.consignment_number
+    ) {
+      throw new Error(
+        `A consignment number and carrier are required to mark an order "${status}".`
+      );
+    }
+    return true;
+  }),
 ];
 
 const addCategory = [

@@ -283,11 +283,47 @@ exports.updateProduct = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res, next) => {
   try {
-    // Both fields are validated upstream: order_id is a positive integer and
-    // status is one of appDefines.ORDER_STATUSES. See AB-13.
-    const { order_id, status } = req.body;
+    // All four fields are validated upstream: order_id is a positive integer,
+    // status is one of appDefines.ORDER_STATUSES, carrier is one of
+    // appDefines.CARRIERS, and consignment_number is normalised, length- and
+    // charset-checked. The validator also enforces that carrier and
+    // consignment_number arrive together, and that a dispatched status carries
+    // both. See AB-13 and DB-09.
+    const { order_id, status, carrier, consignment_number } = req.body;
 
-    const affectedRows = await orderManager.updateOrderStatus(order_id, status);
+    // Refuse a consignment number already recorded against a different order.
+    //
+    // With a barcode scanner a mistyped number is unlikely; scanning the RIGHT
+    // receipt while the WRONG order is open is not. That failure is silent —
+    // both orders look tracked, and one customer follows a stranger's parcel
+    // all the way to someone else's door. Checked before writing anything.
+    if (consignment_number) {
+      const clash = await orderManager.findOrderByConsignment(
+        consignment_number,
+        order_id
+      );
+      if (clash) {
+        return res.status(409).json({
+          success: false,
+          message:
+            `Consignment number ${consignment_number} is already recorded ` +
+            `against order ${clash}. Check you have the right receipt.`,
+        });
+      }
+    }
+
+    // One statement for status + dispatch details when tracking is supplied, so
+    // an order cannot end up Shipped-with-no-number if a second write failed.
+    // Plain status update otherwise — a status change with no dispatch details
+    // must not blank the tracking already on the order.
+    const affectedRows = consignment_number
+      ? await orderManager.updateOrderDispatch(
+          order_id,
+          status,
+          carrier,
+          consignment_number
+        )
+      : await orderManager.updateOrderStatus(order_id, status);
 
     // Previously this always returned 200, even for an order id that does not
     // exist — the affectedRows guard in the dbOp was dead code because the
@@ -305,6 +341,12 @@ exports.updateOrderStatus = async (req, res, next) => {
       message: "Order status updated successfully",
       order_id,
       status,
+      // Echoed back so the admin UI can render what was actually stored rather
+      // than what it hoped was stored — the number is normalised (trimmed and
+      // upper-cased) during validation, so the saved value may differ from what
+      // was scanned or typed.
+      carrier: carrier ?? null,
+      consignment_number: consignment_number ?? null,
     });
   } catch (error) {
     return next(error);
