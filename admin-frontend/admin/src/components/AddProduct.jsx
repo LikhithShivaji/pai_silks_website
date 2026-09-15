@@ -61,16 +61,20 @@ const AddProduct = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (loadingCollections) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, [loadingCollections]);
+  // The body scroll lock that stood here is gone. See CLAUDE.md AF-31.
+  //
+  // It froze the WHOLE PAGE while the collections dropdown loaded — and the
+  // only sign anything was loading was the word "Loading..." inside that one
+  // `<select>` (`:374`). So the admin opened Add Product, saw a complete form,
+  // and could not scroll it, with nothing on screen explaining why.
+  //
+  // Two further problems with the approach itself: a child component writing to
+  // `document.body` fights the app shell for control of scrolling, and the
+  // cleanup reset to the hardcoded "auto" rather than restoring the previous
+  // value, so it would clobber any other lock that happened to be active.
+  //
+  // Nothing replaces it: the dropdown already says "Loading...", and every
+  // other field on the form is usable while it arrives.
 
   // .catch is required here, not optional.
   //
@@ -569,13 +573,13 @@ const AddProduct = ({
               Cancel
             </button>
 
-            <button
-              type="button"
-              onClick={() => alert("Update logic not implemented yet")}
-              className="border-1 rounded-xl p-3 flex justify-center items-center cursor-pointer w-full bg-gray-400 text-white"
-            >
-              Update
-            </button>
+            {/* An "Update" button stood here whose entire behaviour was
+                alert("Update logic not implemented yet"). See CLAUDE.md AF-30.
+                Removed rather than implemented: this is the ADD Product form,
+                and updating is already a separate, working screen
+                (UpdateProduct.jsx, reached from the product list). The button
+                was a leftover from before that screen existed, and its only
+                effect was to show the shop owner a developer's note. */}
 
             <button
               type="submit"

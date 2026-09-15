@@ -5,7 +5,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="./src/assets/pai-silks-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Panel</title>
+
+    <!-- AF-35. Referrer policy: without it the full admin URL — which can carry
+         an order id — is sent to every third-party origin the page contacts.
+         `strict-origin-when-cross-origin` keeps the path for our own API and
+         leaks only the bare origin elsewhere. -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Keep the admin panel out of search results. It is a login page on a
+         public domain; there is no reason for it to be indexed, and an indexed
+         admin URL is free reconnaissance. -->
+    <meta name="robots" content="noindex, nofollow" />
+
+    <meta name="theme-color" content="#68232B" />
+
+    <!-- ⚠️ CONTENT-SECURITY-POLICY IS DELIBERATELY NOT SET AS A META TAG.
+         AF-35 asks for one, and it is genuinely wanted — but not here:
+
+         1. It must allow the API origin, which differs per environment
+            (VITE_ADMIN_API_BASE). A meta tag is baked in at build time, so a
+            policy correct for production would break local development and
+            vice versa.
+         2. A `connect-src` that omits the real API origin does not degrade —
+            it blocks every request, and the panel simply stops working, with
+            the cause visible only in the browser console.
+
+         The right place is a response header from whatever serves these static
+         files (Hostinger), where it can be set per environment and changed
+         without a rebuild. Recorded in DEPLOYMENT.md rather than shipped as a
+         meta tag that would have to be wrong somewhere. -->
+
+    <title>Admin Panel — PAI Silks</title>
   </head>
   <body>
     <div id="root"></div>

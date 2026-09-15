@@ -164,9 +164,47 @@ const PORT = Number(process.env.PORT ?? 9032);
 // Logs the port actually BOUND, read back from the server, rather than the one
 // requested. With PORT=0 the requested value is 0 and the real port is assigned
 // by the OS, so echoing the request would print a port nothing is listening on.
-const server = app.listen(PORT, () =>
-  console.log(`Server running on port ${server.address().port}`)
-);
+const server = app.listen(PORT, () => {
+  // Report the port actually BOUND, and report NOTHING if the bind failed.
+  //
+  // `server.address()` is null when the socket is not bound. Two earlier
+  // versions of this line were both wrong:
+  //
+  //   server.address().port          -> TypeError on any listen failure, which
+  //                                     surfaced via uncaughtException as
+  //                                     "Cannot read properties of null" and
+  //                                     completely hid the real cause.
+  //   server.address()?.port ?? PORT -> no crash, but it PRINTED
+  //                                     "Server running on port 9032" for a
+  //                                     server that had not started. A false
+  //                                     success line is worse than none: the
+  //                                     log then contradicts itself.
+  //
+  // Both observed against a port already in use. The error handler below is
+  // what speaks when the bind fails. See CLAUDE.md AB-38.
+  const address = server.address();
+  if (address) console.log(`Server running on port ${address.port}`);
+});
+
+// Report why the server could not start, in words.
+//
+// Without this, a failed bind reaches the uncaughtException handler and is
+// logged as a generic error, so the single most common startup problem — the
+// port is already taken, usually by an instance left running from earlier —
+// reads as an internal fault. EADDRINUSE is called out by name because it is
+// both the most frequent and the most trivially fixable.
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `Port ${PORT} is already in use. Another instance is probably still ` +
+      `running — find it with \`lsof -ti tcp:${PORT}\` and stop it, or set a ` +
+      `different PORT.`
+    );
+  } else {
+    console.error(`Server failed to start: ${err.code || err.message}`);
+  }
+  process.exit(1);
+});
 
 // --- Graceful shutdown ---------------------------------------------------
 // Render sends SIGTERM on every deploy, restart and scale event, then SIGKILLs

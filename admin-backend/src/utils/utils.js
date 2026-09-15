@@ -18,31 +18,77 @@ if (!JWT_SECRET) {
 
 class Utils {
 
+    /**
+     * `success` is DERIVED from the status code, never asserted.
+     *
+     * It was hardcoded `true`, so a caller passing a 4xx got
+     * `{ success: true }` alongside an error status — a response contradicting
+     * itself, where a client checking `body.success` concluded the opposite of
+     * a client checking `res.ok`. Every current call site passes the default
+     * 200, so nothing changes today; the point is that the wrong answer is no
+     * longer one argument away. See CLAUDE.md AB-34.
+     */
     sendResponse(res, data = null, message = 'Success', status = 200) {
         return res.status(status).json({
-            success: true,
+            success: status >= 200 && status < 400,
             data,
             message
         });
     }
 
     sendError(res, error, status = 500) {
+        // `|| error` removed from the message. It read
+        // `'Something went wrong. Please try again.' || error`, and a non-empty
+        // string is always truthy, so the right-hand side was unreachable —
+        // dead code that looked like a fallback. Sending the generic text is
+        // correct (CB-12/AB-18: raw error messages leak SQL and bound
+        // parameters), so the behaviour is unchanged; only the pretence is gone.
+        // The real error is logged by the caller via sanitizeError.
         return res.status(status).json({
             success: false,
-            message: 'Something went wrong. Please try again.' || error
+            message: 'Something went wrong. Please try again.'
         });
     }
-    
-    handleMissingParams(res, msg) {
-        return res.status(400).json({ error: msg });
+
+    /**
+     * ONE response shape for errors: { success, message }.
+     *
+     * These three returned `{ error: msg }` while every other response in both
+     * services returns `{ success, message }`. The frontends read
+     * `body?.message` — see AdminHomePage's status-update handler — so an error
+     * from one of these arrived with `message` undefined and the UI fell back
+     * to a generic "Could not update the order", discarding the specific reason
+     * the server had gone to the trouble of sending. Verified before changing:
+     * nothing in either frontend reads `body.error`. See CLAUDE.md AB-35.
+     *
+     * `localeKey` is accepted and echoed rather than ignored. Callers already
+     * pass one — `adminController.js:19` and `customerController.js:93` both
+     * pass a third argument to a two-parameter function, so the key was
+     * silently dropped. Accepting it makes those calls honest; omitting it
+     * stays valid.
+     */
+    handleMissingParams(res, msg, localeKey) {
+        return res.status(400).json({
+            success: false,
+            message: msg,
+            ...(localeKey ? { localeKey } : {})
+        });
     }
 
-    handleInternalError(res, msg) {
-        return res.status(500).json({ error: msg });
+    handleInternalError(res, msg, localeKey) {
+        return res.status(500).json({
+            success: false,
+            message: msg,
+            ...(localeKey ? { localeKey } : {})
+        });
     }
 
-    handleError(res, code, msg) {
-        return res.status(code).json({ error: msg });
+    handleError(res, code, msg, localeKey) {
+        return res.status(code).json({
+            success: code >= 200 && code < 400,
+            message: msg,
+            ...(localeKey ? { localeKey } : {})
+        });
     }
 
     /**

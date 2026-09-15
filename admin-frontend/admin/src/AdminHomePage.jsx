@@ -22,7 +22,8 @@ import { useToast } from "@/ToastContext";
 
 const AdminHomePage = () => {
   const { showToast } = useToast();
-  const notifications = 3;
+  // `const notifications = 3` removed with the badge it drove — a hardcoded
+  // count that never changed and never meant anything. See CLAUDE.md AF-30.
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [activeView, setActiveView] = useState("dashboard");
@@ -301,15 +302,34 @@ const AdminHomePage = () => {
    * The optimistic update is KEPT — it makes the dropdown feel instant — but
    * the previous value is captured first and restored if the server refuses.
    */
-  const changeOrderStatus = async (orderId, newStatus) => {
-    // Captured BEFORE mutating, so a failure can put it back.
-    const previousStatus = orders.find(
-      (o) => String(o.id) === String(orderId)
-    )?.status;
+  const changeOrderStatus = async (orderId, newStatus, dispatch = null) => {
+    // `dispatch` is { carrier, consignment_number } when the admin is recording
+    // a despatch, and null for a plain status change. Sent only when present —
+    // omitting the keys leaves any tracking already on the order untouched,
+    // whereas sending nulls would wipe it. See CLAUDE.md DB-09.
+
+    // Captured BEFORE mutating, so a failure can put it back. All three fields,
+    // not just the status: a rejected despatch must restore the carrier and
+    // consignment number too, or the row keeps values the server never accepted.
+    const previous = orders.find((o) => String(o.id) === String(orderId));
+    const previousStatus = previous?.status;
+    const previousCarrier = previous?.carrier ?? null;
+    const previousConsignment = previous?.consignment_number ?? null;
 
     setOrders((prev) =>
       prev.map((o) =>
-        String(o.id) === String(orderId) ? { ...o, status: newStatus } : o
+        String(o.id) === String(orderId)
+          ? {
+              ...o,
+              status: newStatus,
+              ...(dispatch
+                ? {
+                    carrier: dispatch.carrier,
+                    consignment_number: dispatch.consignment_number,
+                  }
+                : {}),
+            }
+          : o
       )
     );
 
@@ -317,7 +337,14 @@ const AdminHomePage = () => {
       if (previousStatus === undefined) return;
       setOrders((prev) =>
         prev.map((o) =>
-          String(o.id) === String(orderId) ? { ...o, status: previousStatus } : o
+          String(o.id) === String(orderId)
+            ? {
+                ...o,
+                status: previousStatus,
+                carrier: previousCarrier,
+                consignment_number: previousConsignment,
+              }
+            : o
         )
       );
     };
@@ -326,8 +353,18 @@ const AdminHomePage = () => {
       const res = await apiFetch(`${ADMIN_API}/api/update-order-status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // Exactly the two fields the server destructures.
-        body: JSON.stringify({ order_id: orderId, status: newStatus }),
+        // Exactly the fields the server destructures. The dispatch pair is
+        // spread in only when recording a despatch — see the note above.
+        body: JSON.stringify({
+          order_id: orderId,
+          status: newStatus,
+          ...(dispatch
+            ? {
+                carrier: dispatch.carrier,
+                consignment_number: dispatch.consignment_number,
+              }
+            : {}),
+        }),
       });
 
       // res.ok BEFORE parsing. A 401 HTML page or an empty body makes .json()
@@ -347,21 +384,50 @@ const AdminHomePage = () => {
         }
         rollback();
         showToast(message);
-        return;
+        // Returned as well as toasted so DispatchEntry can render it beside the
+        // field. A 409 ("that number is already on order 13") is a correction
+        // the admin must act on with the receipt in hand — a toast that fades
+        // is the wrong place for it.
+        return message;
       }
 
       const data = await res.json();
       if (!data.success) {
         rollback();
-        showToast(data.message || "Could not update the order.");
-        return;
+        const message = data.message || "Could not update the order.";
+        showToast(message);
+        return message;
       }
 
-      showToast(`Order #${orderId} set to ${newStatus}.`, "success");
+      // Adopt the server's stored values rather than the submitted ones. The
+      // consignment number is normalised server-side (trimmed, upper-cased), so
+      // showing what was typed would display something other than what is
+      // actually recorded against the order.
+      if (dispatch) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            String(o.id) === String(orderId)
+              ? {
+                  ...o,
+                  carrier: data.carrier ?? null,
+                  consignment_number: data.consignment_number ?? null,
+                }
+              : o
+          )
+        );
+        showToast(
+          `Order #${orderId}: ${data.carrier} ${data.consignment_number} recorded.`,
+          "success"
+        );
+      } else {
+        showToast(`Order #${orderId} set to ${newStatus}.`, "success");
+      }
     } catch (err) {
       console.error("Order status update failed:", err);
       rollback();
-      showToast("Could not reach the server. The order was not updated.");
+      const message = "Could not reach the server. The order was not updated.";
+      showToast(message);
+      return message;
     }
   };
 
@@ -395,6 +461,22 @@ const AdminHomePage = () => {
             onBack={handleOrderList}
             onChangeStatus={(status) =>
               changeOrderStatus(selectedOrderId, status)
+            }
+            // Keeps the order's CURRENT status — this records the despatch, it
+            // does not advance the workflow. The admin sets "Shipped" with the
+            // dropdown; the server then refuses that status unless tracking is
+            // present, so the two operations stay independent but consistent.
+            //
+            // Returns the failure message (or undefined on success) so
+            // DispatchEntry can show it inline — above all the server's 409
+            // when this number already belongs to another order, which needs to
+            // appear next to the field rather than as a toast that scrolls away.
+            onSaveDispatch={(dispatch) =>
+              changeOrderStatus(
+                selectedOrderId,
+                selectedOrder?.status ?? "Pending",
+                dispatch
+              )
             }
           />
         );
@@ -649,16 +731,22 @@ const AdminHomePage = () => {
                 </button>
             </div>
             <div className="flex gap-5 items-center">
+                {/* Notification bell, now honest. See CLAUDE.md AF-30.
+                    It carried a hardcoded red "3" badge that never changed and
+                    never corresponded to anything, and clicking it fired
+                    alert("Go to OrderSection") — a developer note shown to the
+                    shop owner as if it were the product. Three permanent
+                    unread notifications also train the user to ignore the
+                    badge, so it would be worthless even once real.
+                    The bell now goes to the order list, which is what the alert
+                    text said it was for. The badge is gone until something
+                    real can populate it. */}
                 <div
                     className="relative inline-block cursor-pointer"
-                    onClick={() => alert("Go to OrderSection")}
+                    onClick={handleOrderList}
+                    title="Orders"
                 >
                     <Bell className="w-6 h-6 text-gray-800" />
-                    {notifications > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                        {notifications}
-                    </span>
-                    )}
                 </div>
                 <button
                     onClick={handleLogout}

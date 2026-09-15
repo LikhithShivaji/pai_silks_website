@@ -145,15 +145,14 @@ function AdminLogin() {
                 />
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox id="keep-logged-in" defaultChecked className="data-[state=checked]:bg-[#68232B] border-[#68232B]" />
-                <label
-                  htmlFor="keep-logged-in"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Keep me logged in
-                </label>
-              </div>
+              {/* "Keep me logged in" removed. See CLAUDE.md AF-26.
+                  It was `defaultChecked` with no `checked`, no `onChange` and
+                  no reference anywhere in the submit handler — permanently
+                  ticked, and doing nothing. Removed rather than wired because
+                  session lifetime is set server-side by the JWT's `exp` claim
+                  (Phase 2); honouring this box would mean issuing tokens with
+                  different expiries, which is a real auth change and not
+                  something to infer from an unwired checkbox. */}
 
               <Button 
                 type="submit" 
