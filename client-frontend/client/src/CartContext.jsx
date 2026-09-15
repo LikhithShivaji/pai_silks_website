@@ -275,10 +275,23 @@ export const CartProvider = ({ children }) => {
       wishListItems, setWishListItems,
       dynamicCartItem, setDynamicCartItem,
       total, setTotal,
-      handleAddToCart, 
+
+      // Whether the cart has finished hydrating — from the API for a logged-in
+      // customer, from localStorage for a guest. Set in BOTH branches of the
+      // effect above (the authenticated one sets it in `finally`, so a failed
+      // fetch still resolves rather than hanging).
+      //
+      // Exposed because "cartItems is empty" and "cartItems has not loaded yet"
+      // are indistinguishable from the outside, and both look like `[]`. Any
+      // consumer that acts on an empty cart — Checkout redirects on one — must
+      // wait for this, or it will act on the gap before the data arrives.
+      // See CLAUDE.md CF-29.
+      cartLoaded: loaded,
+
+      handleAddToCart,
       handleAddToWishList,
       handleRemoveFromWishList, // <--- EXPORTED HERE
-      handleRemoveFromCart 
+      handleRemoveFromCart
     }}>
       {children}
     </CartContext.Provider>

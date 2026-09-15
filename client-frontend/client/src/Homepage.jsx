@@ -98,16 +98,22 @@ function Homepage() {
         (currentProduct.product_id || currentProduct.id)
     );
 
-  useEffect(() => {
-    if (loadingBestSellers || loadingCollections) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "auto";
-    }
-    return () => {
-      document.body.style.overflow = "auto";
-    };
-  }, [loadingCollections, loadingBestSellers]);
+  // The body scroll lock that stood here is gone. See CLAUDE.md CF-27.
+  //
+  // It set `document.body.style.overflow = "hidden"` while the collections and
+  // bestsellers requests were in flight. That would be reasonable behind a
+  // full-screen loader — but PeacockLoader renders INLINE, inside each section
+  // (`:285` and `:397`). So the hero, the category strip and the footer were all
+  // visible and readable while the page refused to scroll, for as long as two
+  // network requests took. On a slow connection the homepage simply appeared
+  // frozen, with nothing to explain why.
+  //
+  // It also reset to the hardcoded value "auto" rather than restoring whatever
+  // was there before, so it would have clobbered any other scroll lock — a
+  // modal or drawer open at the same time — on cleanup.
+  //
+  // Nothing replaces it: the inline loaders already communicate that those two
+  // sections are still arriving, and the rest of the page is usable meanwhile.
 
   /* Reviews auto-scroll */
   useEffect(() => {
@@ -119,10 +125,15 @@ function Homepage() {
   }, []);
 
   /* Collections */
+  // `.catch` added (CF-26). `.finally` cleared the loading flag but did not
+  // handle rejection, so any non-JSON response — a Render cold-start HTML error
+  // page is exactly that — made res.json() reject with nothing to catch it: an
+  // unhandled promise rejection, and a section stuck empty with no explanation.
   useEffect(() => {
     apiFetch(`${CLIENT_API}/api/collections`)
       .then((res) => res.json())
       .then((data) => data.success && setCollections(data.data))
+      .catch((err) => console.error("Failed to load collections:", err))
       .finally(() => setLoadingCollections(false));
   }, []);
 
@@ -131,6 +142,7 @@ function Homepage() {
     apiFetch(`${CLIENT_API}/api/bestsellers`)
       .then((res) => res.json())
       .then((res) => res.success && setBestSellers(res.data))
+      .catch((err) => console.error("Failed to load bestsellers:", err))
       .finally(() => setLoadingBestSellers(false));
   }, []);
 
@@ -480,6 +492,14 @@ function Homepage() {
                             image_url: currentProduct.primary_image,
                           };
                           handleAddToCart(productForCart);
+                          // CF-36: this was the ONLY add-to-cart path in the app
+                          // with no confirmation. Compare :259 and
+                          // ProductCard.jsx — everywhere else toasts. A customer
+                          // clicking the bestseller's Add to Cart got silence,
+                          // so the usual response is to click again, which the
+                          // CF-02 de-dup guard absorbs but which reads as the
+                          // button being broken.
+                          showToast("Added to Cart", "cart");
                         }
                       }}
                       className={`flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white  shadow-lg shadow-orange-900/20 cursor-pointer  border-2 border-[#FEDB87]  transition-all duration-200 active:scale-95

@@ -18,16 +18,42 @@ if (!JWT_SECRET) {
 
 class Utils {
     
-    handleMissingParams(res, msg) {
-        return res.status(400).json({ error: msg });
+    /**
+     * ONE response shape for errors: { success, message }. Mirrors the admin
+     * backend's utils — see the fuller note there. See CLAUDE.md AB-35.
+     *
+     * These returned `{ error: msg }` while every other response in this service
+     * returns `{ success, message }`, so the storefront — which reads
+     * `body?.message` — got `undefined` and fell back to a generic message,
+     * discarding the specific reason the server had sent. Verified before
+     * changing: nothing in either frontend reads `body.error`.
+     *
+     * `localeKey` is accepted and echoed rather than dropped;
+     * `customerController.js:93` already passes one to what was a
+     * two-parameter function.
+     */
+    handleMissingParams(res, msg, localeKey) {
+        return res.status(400).json({
+            success: false,
+            message: msg,
+            ...(localeKey ? { localeKey } : {})
+        });
     }
 
-    handleInternalError(res, msg) {
-        return res.status(500).json({ error: msg });
+    handleInternalError(res, msg, localeKey) {
+        return res.status(500).json({
+            success: false,
+            message: msg,
+            ...(localeKey ? { localeKey } : {})
+        });
     }
 
-    handleError(res, code, msg) {
-        return res.status(code).json({ error: msg });
+    handleError(res, code, msg, localeKey) {
+        return res.status(code).json({
+            success: code >= 200 && code < 400,
+            message: msg,
+            ...(localeKey ? { localeKey } : {})
+        });
     }
 
     /**

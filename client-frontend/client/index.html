@@ -5,7 +5,39 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="./src/assets/websitepagelogo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pai Silks</title>
+
+    <!-- CF-47: the page had a title and nothing else. A shop that wants to be
+         found needs to describe itself, and a link shared on WhatsApp — which
+         is how most of this shop's customers will share it — renders as a bare
+         URL without Open Graph tags. -->
+    <meta name="description" content="PAI Silks — silk sarees and traditional wear from Hassan, Karnataka. Kanchipuram, Mysore crape, georgette and art silk sarees, delivered across India." />
+    <meta name="theme-color" content="#68232B" />
+
+    <!-- Referrer policy. Without it the full URL of the page a customer came
+         from is sent to every third party the page talks to. `strict-origin-
+         when-cross-origin` sends the full path to our own API and only the bare
+         origin to anyone else. -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Open Graph / WhatsApp / Facebook link previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PAI Silks" />
+    <meta property="og:title" content="PAI Silks — Silk Sarees &amp; Traditional Wear" />
+    <meta property="og:description" content="Kanchipuram, Mysore crape, georgette and art silk sarees. Delivered across India." />
+    <meta property="og:locale" content="en_IN" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PAI Silks — Silk Sarees &amp; Traditional Wear" />
+    <meta name="twitter:description" content="Kanchipuram, Mysore crape, georgette and art silk sarees. Delivered across India." />
+
+    <!-- ⚠️ og:image and og:url are deliberately NOT set here.
+         Both must be ABSOLUTE URLs to work, and the production domain is not
+         known at build time — it comes from the deploy. A relative or wrong
+         value is worse than none: the preview renders broken rather than
+         plain. Set both to https://paisilks.com/... once the domain is live
+         (INFRA-01), pointing og:image at a real 1200x630 image. -->
+
+    <title>PAI Silks — Silk Sarees &amp; Traditional Wear</title>
   </head>
   <body>
     <div id="root"></div>

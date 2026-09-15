@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag, ArrowLeft } from "lucide-react";
+import { Package, Calendar, ChevronRight, Clock, CheckCircle, Loader2, ShoppingBag, ArrowLeft, Truck } from "lucide-react";
 
 import { useAuth } from "@/AuthContext";
 import { CLIENT_API, apiFetch } from "@/config/api";
+import { trackingTarget } from "@/config/carriers";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useNavigate } from "react-router-dom";
 
 const OrderCard = ({ order }) => {
+  // OrderCard's own navigate. The one in MyOrders below is a different scope —
+  // this component is declared outside it, not nested inside.
+  const navigate = useNavigate();
+
   const status = order.order_status || order.status || "Pending";
   const price = order.total_amount || order.price || 0;
   const dateStr = order.created_at || order.order_date || new Date().toISOString();
@@ -55,6 +60,27 @@ const OrderCard = ({ order }) => {
     ? `${rawName} ${extraCount > 0 ? `+ ${extraCount} others` : ""}` 
     : `Order #${orderId}`;
 
+  // The product this card links to: the first item in the order.
+  //
+  // `getOrderItems` returns `product_id` alongside the name and primary image,
+  // so the card can link straight to that product's page. Null when the order
+  // has no items — an order with zero items is a real, reachable state (see
+  // CF-16) — and the card is then rendered non-interactive rather than linking
+  // nowhere.
+  //
+  // ⚠️ On a multi-item order this links to the FIRST product only, which is the
+  // same one whose name and image the card already shows. Every order in the
+  // database today has exactly one distinct product, so the choice is currently
+  // invisible; once real multi-product orders exist, an order-detail page is the
+  // honest destination. See CLAUDE.md CF-37.
+  const linkProductId = firstItem?.product_id ?? null;
+
+  // Dispatch details (DB-09). Both null until the admin records a despatch, so
+  // the tracking row simply does not render for an order still being packed.
+  const carrierName = order.carrier ?? null;
+  const consignmentNumber = order.consignment_number ?? null;
+  const track = trackingTarget(carrierName, consignmentNumber);
+
   const getStatusStyle = (s) => {
     switch (s) {
       case "Delivered": return "bg-green-100 text-green-700 border-green-200";
@@ -69,8 +95,35 @@ const OrderCard = ({ order }) => {
     year: "numeric", month: "short", day: "numeric"
   });
 
+  // Whole card is the control now, replacing a "View Details" button that had
+  // no onClick at all — it carried a hover style and `cursor-pointer`, so it
+  // looked live and did nothing on every order a customer had. See CF-37.
+  //
+  // Rendered as a <button> rather than a <div onClick>: it is keyboard
+  // focusable and Enter/Space activate it for free, which a clickable div does
+  // not give you. `text-left` undoes the browser's centring so the existing
+  // layout is unchanged.
+  const cardClasses =
+    "group w-full text-left flex flex-col md:flex-row items-center gap-6 p-6 mb-6 bg-white/40 backdrop-blur-md border border-white/40 rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] transition-all duration-300";
+
+  const Card = ({ children }) =>
+    linkProductId ? (
+      <button
+        type="button"
+        onClick={() => navigate(`/product/${linkProductId}`)}
+        aria-label={`View ${rawName}`}
+        className={`${cardClasses} hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] cursor-pointer`}
+      >
+        {children}
+      </button>
+    ) : (
+      // No item to link to. Deliberately NOT a button: a control that goes
+      // nowhere is the bug being fixed, not a smaller version of it.
+      <div className={cardClasses}>{children}</div>
+    );
+
   return (
-    <div className="group flex flex-col md:flex-row items-center gap-6 p-6 mb-6 bg-white/40 backdrop-blur-md border border-white/40 rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-300">
+    <Card>
       
       {/* Image Section */}
       <div className="relative w-full md:w-32 aspect-4/5 md:aspect-square shrink-0 overflow-hidden rounded-2xl border border-stone-200 bg-white flex items-center justify-center">
@@ -109,16 +162,76 @@ const OrderCard = ({ order }) => {
             <p className="font-bold text-[#68232B] text-lg">₹ {price}</p>
           </div>
         </div>
+
+        {/* --- Tracking (DB-09) --------------------------------------------
+            Shown only once the admin has recorded a despatch. Before this the
+            customer saw a badge reading "Shipped" and nothing else — no number,
+            no link, no way to find the parcel without messaging the shop.
+
+            There is no carrier API at launch, so this is the consignment number
+            plus a link to the carrier's own tracking page. That needs nobody's
+            permission and works on day one.
+
+            ⚠️ The <span> and stopPropagation exist because the whole card is a
+            <button> that navigates to the product (CF-37). A nested <a> inside
+            a <button> is invalid HTML and browsers handle it inconsistently, so
+            this is a span that opens the URL itself and stops the click from
+            also triggering the card's navigation — otherwise one click would
+            both open the tracking page AND navigate away behind it. */}
+        {consignmentNumber && (
+          <div className="mt-4 pt-4 border-t border-[#68232B]/10 flex flex-wrap items-center justify-center md:justify-start gap-x-3 gap-y-1 text-sm">
+            <Truck size={16} className="text-[#68232B] shrink-0" />
+            {carrierName && (
+              <span className="text-gray-600">{carrierName}</span>
+            )}
+            <span className="font-mono text-[#68232B] font-medium select-all">
+              {consignmentNumber}
+            </span>
+            {track && (
+              <span
+                role="link"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(track.url, "_blank", "noopener,noreferrer");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.open(track.url, "_blank", "noopener,noreferrer");
+                }}
+                className="underline underline-offset-2 text-[#68232B] hover:text-[#8B2E39] cursor-pointer"
+              >
+                {/* Wording follows where the link actually LANDS.
+                    A direct link goes to this parcel's status, so "Track your
+                    parcel" is honest. The fallback lands on the carrier's
+                    tracking form with nothing filled in — promising "track your
+                    parcel" there sets the customer up to arrive at an empty
+                    search box and think the link is broken. Naming the carrier
+                    tells them what to expect and what to do. */}
+                {track.isDirect ? "Track your parcel" : `Track on ${carrierName}`}
+              </span>
+            )}
+          </div>
+        )}
+        {track && !track.isDirect && (
+          <p className="mt-1 text-xs text-gray-500 text-center md:text-left">
+            Copy the number above and paste it on the {carrierName} tracking page.
+          </p>
+        )}
       </div>
 
-      {/* Action Button */}
-      <div className="w-full md:w-auto mt-4 md:mt-0">
-        <button className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-white border border-[#68232B]/30 text-[#68232B] font-medium hover:bg-[#68232B] hover:text-[#FFCB85] transition-all duration-300 shadow-sm cursor-pointer">
-          View Details
-          <ChevronRight size={16} />
-        </button>
-      </div>
-    </div>
+      {/* The "View Details" button that stood here is gone — it had no onClick
+          and never did anything. The whole card now navigates to the product.
+          A chevron remains as the affordance, so the card still reads as
+          interactive without promising a page that does not exist. */}
+      {linkProductId && (
+        <div className="w-full md:w-auto mt-4 md:mt-0 flex justify-center md:justify-end text-[#68232B]/40 group-hover:text-[#68232B] transition-colors">
+          <ChevronRight size={24} />
+        </div>
+      )}
+    </Card>
   );
 };
 
@@ -186,8 +299,16 @@ const MyOrders = () => {
           const orderDate = new Date(rawDate);
           
           // Calculate difference safely
-          const diffTime = Math.abs(today - orderDate);
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+          // Signed, not Math.abs. See CLAUDE.md CF-39.
+          //
+          // Math.abs made a FUTURE date look like a past one: an order dated
+          // two months ahead produced a distance of 60 and landed in "previous
+          // orders", as though it had already happened. Clock skew on the
+          // customer's device is enough to produce one, and it reads as the shop
+          // having lost track of the order. A negative difference now means
+          // "not yet", which falls through to the recent bucket below.
+          const diffTime = today - orderDate;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
           if (diffDays <= 30) {
             recent.push(item);
@@ -264,7 +385,7 @@ const MyOrders = () => {
                     </div>
                   ) : (
                     recentOrders.map((order) => (
-                      <OrderCard key={order.id || order.order_id || Math.random()} order={order} />
+                      <OrderCard key={order.id ?? order.order_id} order={order} />
                     ))
                   )}
                 </div>
@@ -284,7 +405,7 @@ const MyOrders = () => {
                     </div>
                   ) : (
                     previousOrders.map((order) => (
-                      <OrderCard key={order.id || order.order_id || Math.random()} order={order} />
+                      <OrderCard key={order.id ?? order.order_id} order={order} />
                     ))
                   )}
                 </div>

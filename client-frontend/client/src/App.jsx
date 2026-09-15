@@ -143,15 +143,27 @@ const App = () => {
         filters.categories.length === 0 ||
         filters.categories.includes(product.category);
 
-      // 3. ✅ Collection Filter (The new logic)
+      // 3. Collection Filter — matched on the `collection` FIELD only.
+      //
+      // This used to be `pColl === target || pDesc.includes(target)`, i.e. it
+      // also searched the product DESCRIPTION for the collection name. A saree
+      // whose description happened to read "perfect for party wear" would then
+      // appear under Party Wear regardless of the collection it was actually
+      // assigned to — the merchant's own categorisation silently overridden by
+      // prose. See CLAUDE.md CF-32.
+      //
+      // Verified against live data before removing: with the six collections in
+      // use (Wedding Collection, Casual Wear, Under 2000, Party Wear, Festive
+      // Collections, Ethnic Wear), **zero** products currently reach a
+      // collection through the description fallback, so nothing on the site
+      // changes today. It was a landmine, not an active fault: the first
+      // description mentioning another collection's name would have triggered
+      // it, with no error and no way for the admin to understand why.
       let collectionMatch = true;
       if (activeCollection) {
         const target = activeCollection.toLowerCase().trim();
         const pColl = (product.collection || "").toLowerCase().trim();
-        const pDesc = (product.description || "").toLowerCase();
-
-        // Match 'collection' field OR check if description contains it
-        collectionMatch = pColl === target || pDesc.includes(target);
+        collectionMatch = pColl === target;
       }
 
       return priceMatch && catMatch && collectionMatch;
@@ -164,7 +176,29 @@ const App = () => {
       return 0;
     });
 
-  const categories = [...new Set(normalizedProducts.map((p) => p.category))];
+  // Blank categories are excluded from the filter list.
+  //
+  // `product.category` is a nullable free-text column, and 3 of the 35 live
+  // products have it NULL or empty (verified 2026-08-30). Those fed straight
+  // through this Set, so the filter panel rendered an extra checkbox with
+  // `key={null}` and an empty label — a tickable, nameless filter.
+  //
+  // Filtering here rather than in the normaliser: a product with no category is
+  // still a valid product and must keep showing in the unfiltered grid. It
+  // simply cannot be filtered TO, which is correct — it has no category to
+  // filter by. Ordering is deliberately left as-is (product order), since
+  // changing it would reorder the panel the customer sees.
+  //
+  // The underlying problem is that `product.category` is denormalised free text
+  // disagreeing with the `category` table — see CLAUDE.md AB-31 / DB-06. This
+  // stops the symptom reaching the UI; it does not fix the data.
+  const categories = [
+    ...new Set(
+      normalizedProducts
+        .map((p) => p.category)
+        .filter((c) => typeof c === "string" && c.trim() !== "")
+    ),
+  ];
 
   return (
     <>

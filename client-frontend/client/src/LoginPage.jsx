@@ -54,15 +54,15 @@ const LoginPage = () => {
       const data = await response.json();
 
       if (data.user_id) {
-        const userId = data.user_id;
-        const userName = data.name || data.customer_name || formData.email.split("@")[0];
-
-        // These are DISPLAY hints only — a name to greet the customer with.
-        // They no longer decide whether anyone is signed in; that comes from
-        // AuthContext asking the server. See CLAUDE.md CF-55.
-        localStorage.setItem("user_id", userId);
-        localStorage.setItem("user_name", userName);
-        localStorage.setItem("user_email", formData.email);
+        // The `user_id` / `user_name` / `user_email` writes that stood here are
+        // gone. See CLAUDE.md CF-46.
+        //
+        // CF-55 already stopped these deciding whether anyone was signed in, so
+        // they had been reduced to display hints. They are now unnecessary
+        // altogether: /api/verify-token returns `user_name` alongside
+        // `pri_email`, so the greeting and the checkout prefill both come from
+        // the server's answer instead of three editable strings sitting next to
+        // a `user_id` in the visitor's own browser.
 
         // Tell AuthContext the session now exists. Without this the header
         // would keep saying "Profile" until a full page reload, because the

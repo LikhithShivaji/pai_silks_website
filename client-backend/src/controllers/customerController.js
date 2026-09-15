@@ -974,6 +974,12 @@ exports.verifyToken = async (req, res) => {
       user_id: req.user.user_id,
       pri_email: req.user.pri_email,
       role_id: req.user.role_id,
+      // Included so the storefront can greet the customer by name from the
+      // SERVER's answer. Without it, ProfileSection read the name out of
+      // localStorage — a value the visitor can edit — which kept the
+      // identity keys alive after CF-55 had already made the session the
+      // authority for everything else. See CLAUDE.md CF-46.
+      user_name: req.user.user_name ?? null,
     },
   });
 };

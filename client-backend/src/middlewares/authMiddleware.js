@@ -83,6 +83,11 @@ const authMiddleware = async (req, res, next) => {
       session_id: session.session_id,
       sid: session.sid,
       pri_email: session.pri_email,
+      // Display name, from the master_user row joined in the session query.
+      // Carried so /api/verify-token can return it and the storefront can greet
+      // the customer from the SERVER's answer instead of an editable
+      // localStorage string. See CLAUDE.md CF-46.
+      user_name: session.user_name,
     };
 
     return next();

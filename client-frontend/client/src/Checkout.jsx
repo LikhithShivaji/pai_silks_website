@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { CartContext } from "@/CartContext.jsx";
 import { useAuth } from "@/AuthContext";
 import { useToast } from "@/ToastContext";
@@ -30,7 +30,6 @@ import {
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 const checkoutSchema = z.object({
@@ -59,7 +58,6 @@ const checkoutSchema = z.object({
   state: z.string().min(1, "State is required"),
   pincode: z.string().regex(/^\d{6}$/, "Pincode must be 6 digits"),
   paymentMethod: z.literal("razorpay"),
-  rememberMe: z.boolean().optional(),
 })
   // Cross-field: the number is only meaningful against a country, so the rule
   // has to run after both are known. India requires 10 digits starting 6-9;
@@ -77,7 +75,7 @@ const checkoutSchema = z.object({
   });
 
 export default function Checkout() {
-  const { cartItems, setCartItems } = useContext(CartContext);
+  const { cartItems, setCartItems, cartLoaded } = useContext(CartContext);
   const { isAuthenticated, user } = useAuth();
   const { showToast } = useToast();
 
@@ -85,6 +83,39 @@ export default function Checkout() {
 
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Set the instant an order succeeds, BEFORE the cart is cleared.
+  //
+  // A ref, not state: the empty-cart guard below must see the new value in the
+  // same render pass that the cart becomes empty, and a state update would not
+  // be visible until the next one — which is exactly the window the guard runs in.
+  const orderPlacedRef = useRef(false);
+
+  // --- Empty-cart guard ---------------------------------------------------
+  // /checkout was reachable with nothing in the cart. It rendered an empty
+  // summary, a total of just the ₹100 shipping fee, and a live "Pay Now" that
+  // came back 400 "Cart is empty" — a checkout page offering to charge for
+  // nothing. See CLAUDE.md CF-29.
+  //
+  // Two things make this trickier than `if (empty) redirect`:
+  //
+  // 1. `cartLoaded`. An un-hydrated cart and an empty cart are both `[]`. The
+  //    cart arrives asynchronously — over the network for a logged-in customer
+  //    — so redirecting on length alone would bounce a real customer with a
+  //    full cart off the page before their data landed. Same late-resolve trap
+  //    as the auth bug fixed in the effect further down.
+  //
+  // 2. `orderPlacedRef`. A SUCCESSFUL order clears the cart and then navigates
+  //    to /my-orders. Between those two statements the cart is legitimately
+  //    empty, and without this flag the guard would fire in that gap and send a
+  //    customer who has just paid to /shop instead of their order confirmation.
+  useEffect(() => {
+    if (!cartLoaded) return;          // still hydrating — say nothing yet
+    if (orderPlacedRef.current) return; // just ordered; the cart SHOULD be empty
+    if (cartItems.length > 0) return;
+
+    navigate("/shop", { replace: true });
+  }, [cartLoaded, cartItems.length, navigate]);
 
   const form = useForm({
     resolver: zodResolver(checkoutSchema),
@@ -100,7 +131,6 @@ export default function Checkout() {
       state: "",
       pincode: "",
       paymentMethod: "razorpay",
-      rememberMe: false,
     },
   });
 
@@ -127,7 +157,12 @@ export default function Checkout() {
     // the address the session actually belongs to. localStorage is only the
     // fallback, and only for prefilling a form field, never for identity.
     // See CLAUDE.md CF-55.
-    const userEmail = user?.pri_email || localStorage.getItem("user_email");
+    // Server only. The `|| localStorage.getItem("user_email")` fallback that
+    // stood here is gone with the writes that fed it (CF-46) — nothing sets
+    // that key any more, so the fallback could only ever return a stale value
+    // left over from a previous session on a shared device, prefilling one
+    // customer's email into another's checkout.
+    const userEmail = user?.pri_email;
     if (userEmail) form.setValue("email", userEmail);
 
     if (isAuthenticated) {
@@ -265,6 +300,11 @@ export default function Checkout() {
       // console.log("Order Result:", result);
 
       if (result.success || result.order_id || result.id) {
+        // BEFORE clearing the cart. The empty-cart guard watches cartItems and
+        // would otherwise fire in the gap between the clear and the navigate,
+        // redirecting a customer who has just paid to /shop. See CF-29.
+        orderPlacedRef.current = true;
+
         setCartItems([]);
         localStorage.removeItem("cart");
 
@@ -314,10 +354,13 @@ export default function Checkout() {
                 )}
               />
 
-              <div className="flex items-center space-x-2">
-                <Checkbox />
-                <span className="text-sm">Keep me updated with offers</span>
-              </div>
+              {/* "Keep me updated with offers" removed. See CLAUDE.md CF-30.
+                  The Checkbox had no name, no control and no onCheckedChange —
+                  it could be ticked and nothing anywhere recorded it. Removed
+                  rather than wired up because the owner confirmed on 2026-09-03
+                  that PAI Silks sends no promotional messages at all, which the
+                  Privacy Policy now states. A consent box for messages that are
+                  never sent is a promise with no mechanism behind it. */}
 
               <h2 className="text-xl font-semibold">Delivery</h2>
 

@@ -1,26 +1,38 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Minus, Plus, Trash2 } from "lucide-react";
 
+// Matches the server's own rule — `validators.js` allows 1..100 on
+// /api/cart/update (CB-17). Duplicated here so the button disables at the
+// ceiling instead of firing a request the server will reject; the server
+// remains the authority.
+const MAX_QUANTITY = 100;
+
 function CartItem({ item, index, onQuantityChange, onRemove }) {
-  // Sync local state with props to ensure UI updates if parent changes
-  const [itemCount, setItemCount] = useState(item.quantity || 1);
+  // No local `itemCount` state. See CLAUDE.md CF-42.
+  //
+  // This component used to hold its own copy of the quantity and keep it in
+  // step with the prop through an effect — the third level of duplication for
+  // one number (context `cartItems` -> `dynamicCartItem` -> `itemCount`). The
+  // copy could disagree with its source for a render, and when a parent update
+  // was rolled back after a failed request (CF-17) the local value stayed at
+  // the rejected number, showing a quantity the server had refused.
+  //
+  // Reading the prop directly means there is nothing to fall out of sync.
+  const itemCount = item.quantity || 1;
   const imageSrc = item.image1 || item.image_url || item.image || item.product_image || "https://placehold.co/100";
-  
-  useEffect(() => {
-    setItemCount(item.quantity || 1);
-  }, [item.quantity]);
 
   const incrementOperation = () => {
-    const newCount = itemCount + 1;
-    setItemCount(newCount);
-    onQuantityChange(index, newCount);
+    // Bounded. It was unbounded, and `POST /api/cart/update` writes the value
+    // verbatim — so a customer holding the + button sent ever-larger quantities
+    // until the server's own limit refused one, with the UI meanwhile showing a
+    // number that was never accepted.
+    if (itemCount >= MAX_QUANTITY) return;
+    onQuantityChange(index, itemCount + 1);
   };
 
   const decrementOperation = () => {
     if (itemCount <= 1) return;
-    const newCount = itemCount - 1;
-    setItemCount(newCount);
-    onQuantityChange(index, newCount);
+    onQuantityChange(index, itemCount - 1);
   };
 
 
@@ -80,10 +92,16 @@ function CartItem({ item, index, onQuantityChange, onRemove }) {
 
             <button
               onClick={incrementOperation}
+              // Disabled at the ceiling rather than silently ignoring the
+              // click, so the limit is visible instead of the button appearing
+              // broken. CF-42.
+              disabled={itemCount >= MAX_QUANTITY}
+              title={itemCount >= MAX_QUANTITY ? `Maximum ${MAX_QUANTITY} per item` : undefined}
               className="
-                w-6 h-6 flex items-center justify-center 
+                w-6 h-6 flex items-center justify-center
                 rounded-full bg-white text-[#68232B] shadow-sm
-                hover:bg-[#68232B] hover:text-white 
+                hover:bg-[#68232B] hover:text-white
+                disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-[#68232B]
                 transition-all
                 cursor-pointer
               "

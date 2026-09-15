@@ -24,7 +24,7 @@ const Profile = ({ onClose }) => {
   // outlives the session cookie, so the header could greet a signed-out
   // customer by name and offer them Logout while every protected page bounced
   // them to /login. Observed exactly that on 2026-08-29. See CLAUDE.md CF-55.
-  const { isAuthenticated, signOut } = useAuth();
+  const { isAuthenticated, signOut, user } = useAuth();
   const isLoggedIn = isAuthenticated;
 
   const handleLogout = async () => {
@@ -118,9 +118,15 @@ const Profile = ({ onClose }) => {
                 identity — and is only consulted when `isLoggedIn` is already
                 true, so a leftover name can no longer imply a session that does
                 not exist. See CLAUDE.md CF-55. */}
+            {/* The name now comes from the SERVER — /api/verify-token returns
+                `user_name` — rather than from localStorage, which the visitor
+                can edit. CF-55 made the session the authority for whether
+                someone is signed in; this closes the same gap for who they
+                are. Falls back to "there" when the name is missing, so the
+                greeting still reads naturally. See CLAUDE.md CF-46. */}
             <h2 className="text-xl font-bold text-[#FFCB85] tracking-wide">
               {isLoggedIn
-                ? `Hello, ${localStorage.getItem("user_name")?.split(" ")[0] || "there"}`
+                ? `Hello, ${user?.user_name?.split(" ")[0] || "there"}`
                 : "Profile"}
             </h2>
           </div>

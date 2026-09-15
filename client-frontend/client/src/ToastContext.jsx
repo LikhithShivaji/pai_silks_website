@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from "react";
 import { Check, AlertCircle, X, Heart, ShoppingBag } from "lucide-react";
 
 const ToastContext = createContext();
@@ -8,21 +8,49 @@ export const useToast = () => useContext(ToastContext);
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
 
+  // Pending auto-dismiss timers, keyed by toast id. See CLAUDE.md CF-41.
+  //
+  // Each toast used to schedule a bare setTimeout that nothing tracked. Two
+  // consequences: dismissing a toast by hand left its timer running to fire
+  // against an id that no longer existed, and a timer still pending when the
+  // provider unmounted called setState on an unmounted component. A ref, not
+  // state — mutating it must not trigger a render.
+  const timers = useRef(new Map());
+  const idCounter = useRef(0);
+
+  const removeToast = useCallback((id) => {
+    const timer = timers.current.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      timers.current.delete(id);
+    }
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
   // Function to trigger the toast
   // Type can be: 'success', 'error', 'wishlist', 'cart'
-  const showToast = (message, type = "success") => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message, type }]);
+  const showToast = useCallback(
+    (message, type = "success") => {
+      // `Date.now()` alone collided when two toasts fired in the same
+      // millisecond — two React keys the same, and one timer overwriting the
+      // other in the map. The counter makes each id unique regardless.
+      const id = `${Date.now()}-${idCounter.current++}`;
+      setToasts((prev) => [...prev, { id, message, type }]);
 
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-      removeToast(id);
-    }, 3000);
-  };
+      const timer = setTimeout(() => removeToast(id), 3000);
+      timers.current.set(id, timer);
+    },
+    [removeToast]
+  );
 
-  const removeToast = (id) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  };
+  // Clear anything still pending when the provider goes away.
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      pending.forEach(clearTimeout);
+      pending.clear();
+    };
+  }, []);
 
   return (
     <ToastContext.Provider value={{ showToast }}>
