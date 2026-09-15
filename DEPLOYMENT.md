@@ -180,6 +180,35 @@ log would read `Server running on port 9032` the whole time.
 > Render deploy crashes on boot, check the logs for
 > `Missing required environment variable`.
 
+### Content-Security-Policy — set as a Hostinger response header, not in HTML
+
+⚠️ **Outstanding at deploy.** `AF-35` asks for a CSP on the admin panel. It is
+deliberately **not** a `<meta>` tag in `index.html`, because a meta tag is baked
+in at build time while the policy must allow the API origin — which differs
+between local development and production. A `connect-src` missing the real API
+origin does not degrade gracefully: every request is blocked and the panel stops
+working, with the cause visible only in the browser console.
+
+Set it instead as a response header where the static files are served, so it can
+differ per environment and change without a rebuild. A starting policy for both
+frontends:
+
+```
+Content-Security-Policy:
+  default-src 'self';
+  img-src 'self' data: https://res.cloudinary.com https://placehold.co;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self' https://<client-backend>.onrender.com https://<admin-backend>.onrender.com;
+  frame-ancestors 'none';
+```
+
+`img-src` must include **Cloudinary** (all product images) and `placehold.co`
+(the fallback used when an image is missing). `style-src` needs
+`'unsafe-inline'` for Tailwind's injected styles. **Test in a browser with the
+console open before committing to it** — a CSP that blocks a real request fails
+silently from the user's point of view.
+
 ### CORS_ORIGINS — exact production values
 
 Both services must allow **both** domains, because both frontends call both
