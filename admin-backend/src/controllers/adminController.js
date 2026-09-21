@@ -423,11 +423,61 @@ exports.deleteCategory = async (req, res) => {
       return res.status(400).json({ success: false, message: "Category ID is required" });
     }
 
-    await productManager.deleteCategoryById(id);
+    // Deleting a category cascades to its products. See CLAUDE.md AB-31/DB-06.
+    //
+    // `product.category` is free text duplicating `category.name`, so removing
+    // a category used to leave its products behind, still listed in the shop,
+    // pointing at a category that no longer existed. That is the drift the
+    // finding describes.
+    //
+    // Rather than normalise to a foreign key — a migration touching every
+    // product query in both services — the owner's decision (2026-09-21) is to
+    // make the consequence explicit and atomic: tell the admin exactly how many
+    // products will go, and only proceed on an informed confirmation.
+    const categoryName = await productManager.getCategoryNameById(id);
+    if (!categoryName) {
+      return res.status(404).json({
+        success: false,
+        message: `No category found with id ${id}.`,
+      });
+    }
+
+    const productCount = await productManager.countProductsInCategory(categoryName);
+
+    // The confirmation is server-checked, not merely a browser dialog.
+    // `confirmCascade` must be sent explicitly when products would be removed,
+    // so a direct API call cannot delete a populated category by accident —
+    // the browser's window.confirm protects nobody calling the endpoint
+    // directly (the same reasoning as AF-19).
+    if (productCount > 0 && req.body?.confirmCascade !== true) {
+      return res.status(409).json({
+        success: false,
+        requiresConfirmation: true,
+        productCount,
+        categoryName,
+        message:
+          `"${categoryName}" still has ${productCount} product` +
+          `${productCount === 1 ? "" : "s"}. Deleting it will also remove ` +
+          `${productCount === 1 ? "that product" : "those products"} from the shop.`,
+      });
+    }
+
+    const { productsDeleted } =
+      productCount > 0
+        ? await productManager.deleteCategoryWithProducts(id, categoryName)
+        : { productsDeleted: 0 };
+
+    if (productCount === 0) {
+      await productManager.deleteCategoryById(id);
+    }
 
     return res.status(200).json({
       success: true,
-      message: `Category with ID ${id} deleted successfully`,
+      productsDeleted,
+      message:
+        productsDeleted > 0
+          ? `Deleted "${categoryName}" and ${productsDeleted} product${productsDeleted === 1 ? "" : "s"}.`
+          : `Deleted "${categoryName}".`,
     });
   } catch (error) {
     return res.status(500).json({

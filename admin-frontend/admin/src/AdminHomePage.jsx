@@ -557,23 +557,66 @@ const AdminHomePage = () => {
   };
 
   // --- 3. NEW LOGIC: Delete from Database ---
-  const handleDelete = async (id) => {
-    // Note: The UI loop passes 'cat.id' now, not index
-    if (!window.confirm("Are you sure you want to delete this category?")) return;
-
+  /**
+   * Delete a category, cascading to its products on an informed confirmation.
+   *
+   * The old flow asked "Are you sure you want to delete this category?" and
+   * deleted only the category row — leaving its products live in the shop under
+   * a category that no longer existed. That is the drift in AB-31/DB-06, and
+   * the prompt gave the admin no way to know it was about to happen.
+   *
+   * Now the SERVER decides. It answers 409 with the real product count, and the
+   * admin is asked a question that names the consequence. The count comes from
+   * the database rather than anything the browser inferred, and the cascade
+   * itself runs in one transaction server-side — the confirmation flag is
+   * re-checked there, so this dialog is a courtesy, not the control.
+   */
+  const handleDelete = async (id, { confirmCascade = false } = {}) => {
     try {
       const res = await apiFetch(`${ADMIN_API}/api/categories/${id}`, {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(confirmCascade ? { confirmCascade: true } : {}),
       });
 
-      if (res.ok) {
-        fetchCategories(); // Refresh list
-      } else {
-        alert("Failed to delete category");
+      const body = await res.json().catch(() => ({}));
+
+      // 409 + requiresConfirmation: the category still holds products. Ask
+      // once, with the number in the question, then retry with the flag.
+      if (res.status === 409 && body.requiresConfirmation) {
+        const proceed = window.confirm(
+          `${body.message}\n\nThis cannot be undone from the admin panel. ` +
+          `Delete "${body.categoryName}" and its ${body.productCount} product` +
+          `${body.productCount === 1 ? "" : "s"}?`
+        );
+        if (!proceed) return;
+        return handleDelete(id, { confirmCascade: true });
       }
+
+      if (!res.ok || !body.success) {
+        showToast(body.message || "Failed to delete category.");
+        return;
+      }
+
+      showToast(body.message, "success");
+      fetchCategories();
+
+      // Products may have gone with it. AllProducts refetches from the server
+      // whenever a category is opened, so there is no separate product list in
+      // this component's state to invalidate.
     } catch (err) {
       console.error("Error deleting category:", err);
+      showToast("Could not reach the server. Nothing was deleted.");
     }
+  };
+
+  /**
+   * An empty category is deleted with a plain confirmation — nothing cascades,
+   * so there is no consequence to spell out.
+   */
+  const confirmDeleteCategory = (id, name) => {
+    if (!window.confirm(`Delete the category "${name}"?`)) return;
+    handleDelete(id);
   };
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -656,7 +699,10 @@ const AdminHomePage = () => {
                 className="absolute right-2 cursor-pointer flex justify-center items-center"
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDelete(cat.id); // Pass DB ID to delete
+                  // Goes through the confirming wrapper. If the category holds
+                  // products the server answers 409 and handleDelete asks a
+                  // second question naming how many would be removed with it.
+                  confirmDeleteCategory(cat.id, cat.name);
                 }}
               >
                 <Trash size={18} />

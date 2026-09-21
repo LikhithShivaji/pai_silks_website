@@ -265,7 +265,22 @@ const deleteCategoryById = async (categoryId) => {
   }
 };
 
+// --- Category deletion cascade (AB-31 / DB-06) ---------------------------
+
+const getCategoryNameById = async (categoryId) =>
+  dbCmds.getCategoryNameById(categoryId);
+
+const countProductsInCategory = async (categoryName) =>
+  dbCmds.countProductsInCategory(categoryName);
+
+/** Category + its products, soft-deleted together in one transaction. */
+const deleteCategoryWithProducts = async (categoryId, categoryName) =>
+  dbCmds.deleteCategoryWithProducts(categoryId, categoryName);
+
 module.exports = {
+    getCategoryNameById,
+    countProductsInCategory,
+    deleteCategoryWithProducts,
     createProduct,
     getCategoryWiseCount,
     getAllProductDetails,

@@ -141,6 +141,33 @@ const sqlqueries = {
         addCategory: `INSERT INTO category (name) VALUES (?);`,
         getAllCategory: `SELECT id, name FROM category WHERE is_deleted = 0 ORDER BY name ASC;`,
         deleteCategory: `UPDATE category SET is_deleted = 1 WHERE id = ?;`,
+
+        // How many live products carry this category's name.
+        //
+        // `product.category` is free text duplicating `category.name`
+        // (AB-31/DB-06), so the link is by name, not by id. Matched on
+        // LOWER(TRIM(...)) both sides because the two were populated
+        // independently and casing cannot be assumed identical.
+        countProductsInCategory: `
+            SELECT COUNT(*) AS product_count
+              FROM product
+             WHERE is_deleted = 0
+               AND LOWER(TRIM(category)) = LOWER(TRIM(?))
+        `,
+
+        // Soft-delete every live product in a category, in one statement.
+        //
+        // Soft, like deleteProduct — past orders reference product rows through
+        // order_items, and hard deletion would break order history for a
+        // customer who already bought one.
+        softDeleteProductsInCategory: `
+            UPDATE product
+               SET is_deleted = 1
+             WHERE is_deleted = 0
+               AND LOWER(TRIM(category)) = LOWER(TRIM(?))
+        `,
+
+        getCategoryNameById: `SELECT name FROM category WHERE id = ? AND is_deleted = 0`,
     },
 
     dashBoard: {

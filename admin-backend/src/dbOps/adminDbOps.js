@@ -4,6 +4,8 @@ const bcrypt = require('bcrypt');
 const sqlqueries = require('../dbOps/sqlQueries')
 const { sanitizeError } = require('../utils/safeError');
 const appDefines = require('../constants/appDefines');
+// Category deletion cascades to its products and must be all-or-nothing.
+const { withTransaction } = require('./withTransaction');
 
 /**
  * A real bcrypt hash of a value that is no admin's password. Compared against
@@ -466,15 +468,59 @@ async updateProductStockCAS(product_id, stock_qty, expected_stock_qty, conn = nu
         }
     }
 
-    async deleteCategoryById(categoryId) {
+    async deleteCategoryById(categoryId, conn = null) {
   try {
-    const [result] = await pool.query(sqlqueries.product.deleteCategory, [categoryId]);
+    const [result] = await (conn || pool).query(sqlqueries.product.deleteCategory, [categoryId]);
     return result;
   } catch (err) {
     console.error("Error in dbCmds.deleteCategoryById:", sanitizeError(err));
     throw err;
   }
 }
+
+    /** Live category name for an id, or null. */
+    async getCategoryNameById(categoryId) {
+        try {
+            const [rows] = await pool.query(sqlqueries.product.getCategoryNameById, [categoryId]);
+            return rows.length ? rows[0].name : null;
+        } catch (err) {
+            console.error("Error in getCategoryNameById:", sanitizeError(err));
+            throw err;
+        }
+    }
+
+    /** How many live products carry this category name. See CLAUDE.md AB-31. */
+    async countProductsInCategory(categoryName) {
+        try {
+            const [rows] = await pool.query(
+                sqlqueries.product.countProductsInCategory,
+                [categoryName]
+            );
+            return Number(rows[0]?.product_count ?? 0);
+        } catch (err) {
+            console.error("Error in countProductsInCategory:", sanitizeError(err));
+            throw err;
+        }
+    }
+
+    /**
+     * Soft-delete a category AND every live product in it, atomically.
+     *
+     * One transaction on purpose: deleting the category but not its products
+     * is exactly the drift AB-31/DB-06 describes — products left pointing at a
+     * category that no longer exists, still visible in the shop. A partial
+     * failure here would create precisely the state this is meant to prevent.
+     */
+    async deleteCategoryWithProducts(categoryId, categoryName) {
+        return withTransaction(async (conn) => {
+            const [productResult] = await conn.query(
+                sqlqueries.product.softDeleteProductsInCategory,
+                [categoryName]
+            );
+            await conn.query(sqlqueries.product.deleteCategory, [categoryId]);
+            return { productsDeleted: productResult.affectedRows };
+        });
+    }
 
     // Get all categories from the database
     async getAllCategories() {
