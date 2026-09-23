@@ -1,8 +1,48 @@
-import React, { useEffect, useState } from "react";
-import { Trash } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Trash, Search, X } from "lucide-react";
 import { ADMIN_API, apiFetch } from "@/config/api";
 
 import CategoryImageUpload from "./CategoryImageUpload";
+
+/**
+ * Does this product match the admin's search box?
+ *
+ * Filtered IN THE BROWSER, not on the server — and that is the right call here
+ * specifically because the whole category is already in memory. The admin has
+ * just waited for that fetch; making them wait again per keystroke to narrow a
+ * list they can already see would be slower and no more correct.
+ *
+ * (The storefront search is server-side for the opposite reason: it searches
+ * the whole catalogue, which the browser does not hold.)
+ *
+ * Per WORD, like the storefront, so "green silk" finds a green silk saree
+ * rather than needing that exact phrase. Every word must match SOMETHING —
+ * AND, not OR — because this is a filter over a list the admin is looking at,
+ * where each extra word should narrow the result. That is the opposite of the
+ * storefront, where OR keeps a partial match useful when a customer is
+ * guessing.
+ *
+ * `code` is included and matters most: it is how the shop identifies a saree
+ * off a physical label, and it is the one field an admin is most likely to type
+ * in full.
+ */
+const matchesSearch = (product, query) => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+
+  const haystack = [
+    product.name,
+    product.code,
+    product.collection,
+    product.material,
+    product.description,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return words.every((w) => haystack.includes(w));
+};
 
 const AllProducts = ({
   categoryName,
@@ -26,6 +66,26 @@ const AllProducts = ({
   // `debugLog` removed — it fed a panel headed "⚠️ Tips for Exact Matching"
   // that dumped every category name in the database onto the admin's screen.
   // Debug scaffolding shipped to production. See CLAUDE.md AF-21.
+
+  const [search, setSearch] = useState("");
+
+  // Cleared whenever the category changes. Without this, switching from a
+  // category where "silk" was typed into one with no silk shows an empty grid
+  // and a search box the admin has already forgotten about — it reads as "this
+  // category is empty" rather than "your filter matched nothing".
+  useEffect(() => {
+    setSearch("");
+  }, [categoryName]);
+
+  // useMemo so typing does not re-filter on every unrelated re-render. The list
+  // is small, but this also gives the grid a stable array identity between
+  // keystrokes that change nothing.
+  const visibleProducts = useMemo(
+    () => products.filter((p) => matchesSearch(p, search)),
+    [products, search]
+  );
+
+  const isSearching = search.trim().length > 0;
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -142,9 +202,46 @@ const AllProducts = ({
           thumbnail and both buttons were squeezed against the right edge. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-5 px-2 sm:px-0 border-b-1 border-b-white">
         <h2 className="text-lg sm:text-xl font-semibold min-w-0">
-          {categoryName} <span className="text-sm text-gray-500">({products.length})</span>
+          {categoryName}{" "}
+          {/* While filtering, show "3 of 12" rather than a bare count. A single
+              shrinking number looks like products have been deleted. */}
+          <span className="text-sm text-gray-500">
+            ({isSearching
+              ? `${visibleProducts.length} of ${products.length}`
+              : products.length})
+          </span>
         </h2>
-        <div className="flex gap-2 items-center shrink-0">
+        {/* Search within THIS category.
+            Placed before the actions rather than beside the heading: it is a
+            control over the list below it, and grouping it with Back/Add keeps
+            the row to two blocks on a phone instead of three. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 shrink-0">
+          <div className="relative w-full sm:w-56">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search in this category…"
+              aria-label={`Search products in ${categoryName || "this category"}`}
+              className="w-full pl-9 pr-9 py-2 rounded-lg border border-gray-300 bg-white text-sm placeholder:text-gray-400 focus:outline-none focus:border-[#68232B] focus:ring-2 focus:ring-[#68232B]/10 transition-all"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#68232B]"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="flex gap-2 items-center">
           {/* Category tile image (CF-35). Placed with the action buttons rather
               than in a settings screen, because it belongs to the category the
               admin is already looking at. */}
@@ -158,6 +255,7 @@ const AllProducts = ({
           )}
           <button onClick={onBack} className="flex-1 sm:flex-none whitespace-nowrap bg-gray-200 px-3 py-2 sm:py-1 rounded hover:bg-gray-300 transition-colors">← Back</button>
           <button onClick={onAddProductClick} className="flex-1 sm:flex-none whitespace-nowrap bg-[#68232B] text-white px-3 py-2 sm:py-1 rounded hover:bg-[#8B2E39] transition-colors">+ Add</button>
+          </div>
         </div>
       </div>
 
@@ -174,6 +272,27 @@ const AllProducts = ({
               : "Select a category to see its products."}
           </p>
         </div>
+      ) : visibleProducts.length === 0 ? (
+        // A DIFFERENT empty state from the one above, deliberately. "This
+        // category is empty" and "your search matched nothing" are not the same
+        // situation, and showing the first message while a filter is active
+        // would send the admin looking for products that are sitting right
+        // there behind the search box.
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16">
+          <p className="text-gray-600 font-medium">
+            No products match &ldquo;{search.trim()}&rdquo;
+          </p>
+          <p className="text-sm text-gray-400">
+            Searches name, product code, collection, material and description.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="mt-1 px-4 py-2 rounded-lg bg-[#68232B] text-white text-sm hover:bg-[#8B2E39] transition-colors"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
         // Two per row on a phone, auto-fill from 640px up.
         //
@@ -185,7 +304,7 @@ const AllProducts = ({
         <div className="grid grid-cols-2 gap-3 p-2
               sm:gap-[1.7rem] sm:p-6
               sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
-          {products.map((product) => (
+          {visibleProducts.map((product) => (
             <div key={product.id} className="p-3 sm:p-5 bg-[#F5F5F5] rounded-2xl cursor-pointer flex flex-col gap-3 sm:gap-5 hover:shadow-lg transition-all" onClick={() => onUpdateProduct(product)}>
               {/* Image ABOVE the text on a phone, beside it from `sm`.
                   Two cards across a 390px screen leaves ~175px per card; a
