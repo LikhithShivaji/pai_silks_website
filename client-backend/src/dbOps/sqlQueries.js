@@ -4,8 +4,9 @@ const sqlqueries = {
    signup: {
   insertCustomer: `
     INSERT INTO master_user
-    (user_name, pri_email, phone_number, address, pass, role_id, created, is_delete)
-    VALUES (?, ?, ?, ?, ?, ?, NOW(), 0)
+    (user_name, pri_email, phone_number, address, city, state, pincode,
+     pass, role_id, created, is_delete)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 0)
   `
 },
 
@@ -58,7 +59,11 @@ const sqlqueries = {
                    -- Added so the greeting can come from the SERVER instead of
                    -- localStorage. The join to master_user already existed, so
                    -- this costs nothing extra. See CLAUDE.md CF-46.
-                   u.user_name
+                   u.user_name,
+                   -- Also from the existing join: lets checkout prefill the
+                   -- delivery phone for a FIRST-time customer, who has no
+                   -- previous order to copy it from. See CLAUDE.md CF-09.
+                   u.phone_number
             FROM session s
             JOIN master_user u ON u.user_id = s.user_id
             WHERE s.session_id = ?
@@ -112,7 +117,8 @@ const sqlqueries = {
         // live: editing it would have changed nothing, with no error to explain
         // why. See CLAUDE.md CB-16.
         getUserById: `
-      SELECT user_id, user_name, pri_email, phone_number, address
+      SELECT user_id, user_name, pri_email, phone_number, address,
+             city, state, pincode
       FROM master_user
       WHERE user_id = ?
     `,
@@ -139,7 +145,8 @@ const sqlqueries = {
         // a usable state. The caller MUST check affectedRows and 404 on 0.
         updateUserProfile: `
       UPDATE master_user
-         SET user_name = ?, phone_number = ?, address = ?
+         SET user_name = ?, phone_number = ?, address = ?,
+             city = ?, state = ?, pincode = ?
        WHERE user_id = ? AND is_delete = 0
     `,
     },
@@ -153,10 +160,49 @@ const sqlqueries = {
       ORDER BY collection;
     `,
 
+    // Categories for the homepage strip: from the CATEGORY TABLE, with images,
+    // and only those that actually have something to show. See CF-35.
+    //
+    // The homepage tiles used to come from a hardcoded frontend file whose six
+    // names matched nothing in the catalogue — every tile returned zero
+    // products. Driving them from the table fixes that, but the table alone is
+    // not enough either: a category with no live products would render a tile
+    // leading to an empty shop, which is the same failure in a new place. The
+    // EXISTS clause is what prevents that.
+    //
+    // Joined on NAME because product.category is free text duplicating
+    // category.name (AB-31/DB-06), and LOWER(TRIM(...)) on both sides because
+    // the two columns were populated independently.
+    getCategoryTilesWithImages: `
+      SELECT c.id, c.name, c.image_url
+        FROM category c
+       WHERE c.is_deleted = 0
+         AND EXISTS (
+               SELECT 1 FROM product p
+                WHERE p.is_deleted = 0
+                  -- Explicit COLLATE, and it is REQUIRED, not defensive.
+                  --
+                  -- The two columns carry different collations —
+                  -- product.category is utf8mb4_0900_ai_ci and category.name is
+                  -- utf8mb4_unicode_ci — so comparing them raises
+                  -- ER_CANT_AGGREGATE_2COLLATIONS and the query fails outright
+                  -- rather than returning wrong rows. The tables were created
+                  -- at different times under different server defaults.
+                  --
+                  -- This only bites when comparing the two COLUMNS to each
+                  -- other; comparing either against a bound PARAMETER takes the
+                  -- connection's collation and works, which is why the category
+                  -- delete-cascade queries (AB-31) never hit it.
+                  AND LOWER(TRIM(p.category)) COLLATE utf8mb4_unicode_ci
+                    = LOWER(TRIM(c.name))    COLLATE utf8mb4_unicode_ci
+             )
+       ORDER BY c.name ASC;
+    `,
+
     getAllCategories: `
-      SELECT DISTINCT category 
-      FROM product 
-      WHERE is_deleted = 0 
+      SELECT DISTINCT category
+      FROM product
+      WHERE is_deleted = 0
       ORDER BY category;
     `,
 
@@ -207,7 +253,14 @@ const sqlqueries = {
       p.regular_price,
       p.saree_length,
       p.selling_price,
-      IFNULL(ps.stock_qty, 0) AS stock_qty,
+      -- Boolean, not the count. The other three public product endpoints were
+      -- converted to in_stock (CF-22) on the grounds that how many sarees are
+      -- in the back room is inventory data and whether one is buyable is not.
+      -- This query was missed, so the single-product page was still handing the
+      -- exact figure to every anonymous visitor.
+      -- (No backticks in this comment: one would close the JS template literal
+      --  this SQL lives inside and silently truncate the query.)
+      IFNULL(ps.stock_qty, 0) > 0 AS in_stock,
       GROUP_CONCAT(pi.image_url) AS images
   FROM product p
   LEFT JOIN product_stock ps ON p.id = ps.product_id

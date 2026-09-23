@@ -37,7 +37,10 @@ const MyProfile = () => {
     email: "",
     phone: "",
     // dob: "",
-    address: ""
+    address: "",
+    city: "",
+    state: "",
+    pincode: ""
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -66,6 +69,9 @@ const MyProfile = () => {
             email: userData.email || userData.pri_email || "",
             phone: userData.phone || userData.pri_mobile || "",
             address: userData.address || userData.shipping_address || "",
+            city: userData.city || "",
+            state: userData.state || "",
+            pincode: userData.pincode || "",
             // Handle date formatting safely
             // dob: userData.dob ? userData.dob.split("T")[0] : "", 
           });
@@ -108,6 +114,13 @@ const MyProfile = () => {
           name: user.name,
           phone: user.phone,
           address: user.address,
+          // These MUST be sent even when unchanged. The server stores an absent
+          // value as NULL (one representation for "not set"), so omitting them
+          // here would silently wipe the customer's city, state and PIN every
+          // time they edited their name.
+          city: user.city,
+          state: user.state,
+          pincode: user.pincode,
         }),
       });
 
@@ -250,7 +263,67 @@ const MyProfile = () => {
                       onChange={handleChange}
                       disabled={!isEditing}
                       className={getInputClass()}
-                      placeholder="Add address"
+                      placeholder="House / flat number, street, area"
+                    />
+                  </div>
+
+                  {/* City / State / PIN.
+                      Stored separately from the street line (migration 012) so
+                      a saved address can prefill the checkout form, which has
+                      always asked for these as distinct fields. Editable here
+                      rather than read-only: the API accepts them, and a field
+                      the customer can see but never change is worse than one
+                      that is absent. */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-4 text-gray-500 mb-2 md:mb-0">
+                      <MapPinHouse className="w-5 h-5 text-[#68232B]" />
+                      <span className="font-medium text-gray-600">City</span>
+                    </div>
+                    <input
+                      type="text"
+                      name="city"
+                      value={user.city}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      className={getInputClass()}
+                      placeholder="Add city"
+                    />
+                  </div>
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-4 text-gray-500 mb-2 md:mb-0">
+                      <MapPinHouse className="w-5 h-5 text-[#68232B]" />
+                      <span className="font-medium text-gray-600">State</span>
+                    </div>
+                    <input
+                      type="text"
+                      name="state"
+                      value={user.state}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      className={getInputClass()}
+                      placeholder="Add state"
+                    />
+                  </div>
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-4 text-gray-500 mb-2 md:mb-0">
+                      <MapPinHouse className="w-5 h-5 text-[#68232B]" />
+                      <span className="font-medium text-gray-600">PIN Code</span>
+                    </div>
+                    {/* Not type="number": a PIN is an identifier, not a
+                        quantity — a spinner and thousands separators are both
+                        wrong for it. */}
+                    <input
+                      type="text"
+                      name="pincode"
+                      value={user.pincode}
+                      onChange={handleChange}
+                      disabled={!isEditing}
+                      inputMode="numeric"
+                      maxLength={6}
+                      className={getInputClass()}
+                      placeholder="Add PIN code"
                     />
                   </div>
 

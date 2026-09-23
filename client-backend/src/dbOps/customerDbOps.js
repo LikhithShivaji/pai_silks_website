@@ -31,6 +31,9 @@ async insertCustomerUser(userData) {
       pri_email,
       phone_number,
       address,
+      city,
+      state,
+      pincode,
       hashedPassword
     } = userData;
 
@@ -41,6 +44,13 @@ async insertCustomerUser(userData) {
         pri_email,
         phone_number,
         address,
+        // `?? null` on each: these columns are nullable, and an absent value
+        // must be stored as NULL, not the string "undefined". Passing an
+        // `undefined` through pool.query escapes to the literal NULL anyway,
+        // but relying on that is how CB-23 silently overrode column DEFAULTs.
+        city ?? null,
+        state ?? null,
+        pincode ?? null,
         hashedPassword,
         2 // CUSTOMER role_id
       ]
@@ -152,11 +162,11 @@ async getUserById(user_id) {
   // saving without editing anything matches the row but changes nothing, which
   // is a valid no-op. changedRows would report that as "user not found". Same
   // distinction as the admin-side stock CAS.
-  async updateUserProfile(user_id, { user_name, phone_number, address }) {
+  async updateUserProfile(user_id, { user_name, phone_number, address, city, state, pincode }) {
     try {
       const [result] = await pool.query(
         sqlqueries.login.updateUserProfile,
-        [user_name, phone_number, address, user_id]
+        [user_name, phone_number, address, city, state, pincode, user_id]
       );
       return result.affectedRows;
     } catch (err) {
@@ -262,6 +272,23 @@ async getUserById(user_id) {
   
 
   // Get all categories
+/**
+ * Categories for the homepage tiles: real names, their images, and only those
+ * that actually have products. See CLAUDE.md CF-35.
+ *
+ * Separate from getAllCategories below, which returns DISTINCT
+ * product.category for filtering and has no image to offer.
+ */
+async getCategoryTiles() {
+    try {
+        const [rows] = await pool.query(sqlqueries.product.getCategoryTilesWithImages);
+        return rows;
+    } catch (err) {
+        console.error("Error in getCategoryTiles:", sanitizeError(err));
+        throw err;
+    }
+}
+
 async getAllCategories() {
   try {
     const [rows] = await pool.query(sqlqueries.product.getAllCategories);

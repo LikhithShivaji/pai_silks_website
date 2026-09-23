@@ -19,9 +19,16 @@ exports.customerSignup = async (req, res) => {
     // "Password is required." 400 with a correct password. Standardised on
     // `passwd`: it was already 2 of the 3 auth endpoints and it matches the
     // abbreviated `pri_email` convention used throughout. See CLAUDE.md CB-40.
-    const { user_name, pri_email, phone_number, address, passwd } = req.body;
+    const { user_name, pri_email, phone_number, address, city, state, pincode, passwd } =
+      req.body;
 
-    if (!user_name || !pri_email || !passwd || !phone_number) {
+    // Address is now required, and so are the three parts that make it
+    // deliverable. It used to be optional, so an account could exist with no
+    // address at all — and then checkout had nothing to prefill and the
+    // customer retyped it on every order. A saree cannot be posted to a street
+    // name alone: a courier needs city, state and PIN.
+    if (!user_name || !pri_email || !passwd || !phone_number ||
+        !address || !city || !state || !pincode) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields',
@@ -55,6 +62,9 @@ exports.customerSignup = async (req, res) => {
       pri_email,
       phone_number,
       address,
+      city,
+      state,
+      pincode,
       hashedPassword,
     });
 
@@ -194,7 +204,13 @@ exports.getUserDetails = async (req, res) => {
         name: userData.user_name || "",
         email: userData.pri_email || "",
         phone: userData.phone_number || "", // Changed from pri_mobile to phone_number
-        address: userData.address || ""
+        address: userData.address || "",
+        // Same shape as the PUT response below — the two must agree, or the
+        // profile page renders different fields depending on whether it just
+        // loaded or just saved.
+        city: userData.city || "",
+        state: userData.state || "",
+        pincode: userData.pincode || ""
       }
     });
 
@@ -217,14 +233,20 @@ exports.getUserDetails = async (req, res) => {
 exports.updateUserProfile = async (req, res) => {
   try {
     const user_id = req.user.user_id;
-    const { name, phone, address } = req.body;
+    const { name, phone, address, city, state, pincode } = req.body;
+
+    // Every nullable column follows the same rule: an empty value is stored as
+    // NULL, never as "". Otherwise "no city" has two representations and every
+    // downstream check has to test for both.
+    const orNull = (v) => (v ? v : null);
 
     const updated = await customerLoginManager.updateUserProfile(user_id, {
       user_name: name,
       phone_number: phone,
-      // The column is nullable, so an empty address is stored as NULL rather
-      // than an empty string — otherwise "no address" has two representations.
-      address: address ? address : null,
+      address: orNull(address),
+      city: orNull(city),
+      state: orNull(state),
+      pincode: orNull(pincode),
     });
 
     // Echo the saved row back in the same shape GET /api/me returns, so the
@@ -237,7 +259,10 @@ exports.updateUserProfile = async (req, res) => {
         name: updated.user_name || "",
         email: updated.pri_email || "",
         phone: updated.phone_number || "",
-        address: updated.address || ""
+        address: updated.address || "",
+        city: updated.city || "",
+        state: updated.state || "",
+        pincode: updated.pincode || ""
       }
     });
   } catch (error) {
@@ -291,6 +316,31 @@ exports.getBestSellers = async (req, res) => {
 };
 
 // ---------------------- GET ALL CATEGORIES ----------------------
+/**
+ * Categories for the homepage tile strip. See CLAUDE.md CF-35.
+ *
+ * Distinct from getAllCategories below: this returns the real category rows
+ * with their images, and only those holding at least one live product — a tile
+ * leading to an empty shop is the failure being fixed, not a smaller version
+ * of it.
+ */
+exports.getCategoryTiles = async (req, res) => {
+  try {
+    const categories = await productManager.getCategoryTiles();
+    return res.status(200).json({
+      success: true,
+      data: categories,
+      message: "Category tiles fetched successfully",
+    });
+  } catch (error) {
+    console.error("Error in getCategoryTiles Controller:", sanitizeError(error));
+    return res.status(500).json({
+      success: false,
+      message: "Something went wrong. Please try again.",
+    });
+  }
+};
+
 exports.getAllCategories = async (req, res) => {
   try {
     const categories = await productManager.getAllCategories();
@@ -980,6 +1030,9 @@ exports.verifyToken = async (req, res) => {
       // identity keys alive after CF-55 had already made the session the
       // authority for everything else. See CLAUDE.md CF-46.
       user_name: req.user.user_name ?? null,
+      // Stored in E.164 (`+919812345678`). The checkout splits it back into
+      // country + national parts with fromE164 before filling the form.
+      phone_number: req.user.phone_number ?? null,
     },
   });
 };

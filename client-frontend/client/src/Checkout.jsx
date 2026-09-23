@@ -32,6 +32,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
+/**
+ * Split one stored name into the two fields this form shows.
+ *
+ * The database holds a single `user_name` / `customer_name`; the checkout asks
+ * for First and Last separately. Everything before the first space is the first
+ * name, everything after it is the surname — so "Likhith Shivaji Kumar" gives
+ * "Likhith" + "Shivaji Kumar" rather than dropping the middle part, and a
+ * one-word name fills First and leaves Last empty instead of inventing one.
+ */
+const splitFullName = (fullName) => {
+  const parts = String(fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
 const checkoutSchema = z.object({
   email: z.string().email("Enter a valid email address"),
   firstName: z.string().min(1, "First Name is required"),
@@ -165,6 +182,40 @@ export default function Checkout() {
     const userEmail = user?.pri_email;
     if (userEmail) form.setValue("email", userEmail);
 
+    // Prefill the delivery phone from the ACCOUNT.
+    //
+    // Only the last order's phone was used, so a first-time customer — who by
+    // definition has no previous order — typed a number the shop already had.
+    // Set before the orders request below, deliberately: if a previous order
+    // exists its delivery number wins, because that is the number the customer
+    // last chose for a parcel and may differ from the account holder's (an
+    // order sent as a gift, for instance).
+    //
+    // Stored E.164, split back into the country + national parts the form uses.
+    if (user?.phone_number) {
+      const { countryCode, nationalNumber } = fromE164(user.phone_number);
+      if (countryCode) form.setValue("countryCode", countryCode);
+      if (nationalNumber) form.setValue("phoneNumber", nationalNumber);
+    }
+
+    // Prefill the name from the ACCOUNT, for the same reason as the phone above.
+    //
+    // The only thing that ever filled these two fields was `customer_name` off
+    // the last order — so a first-time customer got nothing, and the account
+    // name the shop already holds went unused. The last-order block below still
+    // overrides this when a previous order exists, because that is the name the
+    // customer last chose to put on a parcel.
+    //
+    // `user_name` is one column, the form is two fields: everything before the
+    // first space is the first name, the remainder is the surname. A single-word
+    // name therefore fills First Name and leaves Last Name empty rather than
+    // guessing at one.
+    if (user?.user_name) {
+      const { firstName, lastName } = splitFullName(user.user_name);
+      if (firstName) form.setValue("firstName", firstName);
+      if (lastName) form.setValue("lastName", lastName);
+    }
+
     if (isAuthenticated) {
       apiFetch(
         `${CLIENT_API}/api/orders/mine`
@@ -181,10 +232,7 @@ export default function Checkout() {
 
           const lastOrder = orders[0];
 
-          const fullName = (lastOrder.customer_name || "").trim();
-          const nameParts = fullName ? fullName.split(" ") : [];
-          const firstName = nameParts[0] || "";
-          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+          const { firstName, lastName } = splitFullName(lastOrder.customer_name);
 
           if (lastOrder.email || userEmail) {
             form.setValue("email", lastOrder.email || userEmail);
@@ -219,7 +267,7 @@ export default function Checkout() {
     //
     // These two values settle once per session, so this re-runs at most once
     // more — it cannot loop.
-  }, [form, isAuthenticated, user?.pri_email]);
+  }, [form, isAuthenticated, user?.pri_email, user?.phone_number, user?.user_name]);
 
   const onSubmit = async (data) => {
     // The guard runs BEFORE setIsSubmitting.

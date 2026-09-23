@@ -36,6 +36,9 @@ const SignupPage = () => {
     countryCode: DEFAULT_COUNTRY,
     phone_number: "",
     address: "",
+    city: "",
+    state: "",
+    pincode: "",
   });
 
   // Per-field messages. The form previously relied on `required` and a bare
@@ -78,8 +81,25 @@ const SignupPage = () => {
     else if (new Blob([formData.password]).size > 72)
       next.password = "Password is too long (maximum 72 bytes)";
 
-    if (formData.address && formData.address.length > 500)
-      next.address = "Address is too long";
+    // Address is now required, along with the three parts that make it
+    // deliverable. Mirrors validators.signup on the server — this is feedback,
+    // the server is the boundary.
+    const address = formData.address.trim();
+    if (!address) next.address = "Address is required";
+    else if (address.length > 500) next.address = "Address is too long";
+
+    const city = formData.city.trim();
+    if (!city) next.city = "City is required";
+    else if (city.length > 100) next.city = "City is too long";
+
+    const state = formData.state.trim();
+    if (!state) next.state = "State is required";
+    else if (state.length > 100) next.state = "State is too long";
+
+    const pincode = formData.pincode.trim();
+    if (!pincode) next.pincode = "PIN code is required";
+    else if (!/^[1-9][0-9]{5}$/.test(pincode))
+      next.pincode = "Enter a valid 6-digit PIN code";
 
     return next;
   };
@@ -207,9 +227,16 @@ const SignupPage = () => {
                 <p className="text-xs text-red-600 ml-1">{errors.user_name}</p>
               )}
 
-          {/* Email & Phone (Grid) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
+          {/* Email and Phone each get their own full-width row.
+              These were a 2-column grid, which squeezed the phone field — the
+              country dropdown plus the number left almost no room for the
+              number itself, so the placeholder was cut off mid-word.
+
+              The email error node below was ALSO misplaced: it sat outside its
+              field's wrapper but inside the grid, so an invalid email created a
+              third grid cell and shunted the phone field onto the next row. */}
+          <div className="flex flex-col gap-4">
+
             {/* Email */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-[#68232B] uppercase tracking-wider ml-1">
@@ -234,10 +261,10 @@ const SignupPage = () => {
                   "
                 />
               </div>
-            </div>
               {errors.pri_email && (
                 <p className="text-xs text-red-600 ml-1">{errors.pri_email}</p>
               )}
+            </div>
 
             {/* Phone */}
             <div className="space-y-1">
@@ -336,7 +363,13 @@ const SignupPage = () => {
                 <p className="text-xs text-red-600 ml-1">{errors.password}</p>
               )}
 
-          {/* Address */}
+          {/* Address.
+              Street, city, state and PIN are captured SEPARATELY rather than as
+              one free-text blob. Checkout has always asked for them as separate
+              fields, so storing one string here meant the saved address could
+              never prefill that form — there is no reliable way to split a
+              typed line back into four parts, and guessing wrong puts a PIN in
+              the state box. See migration 012. */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-[#68232B] uppercase tracking-wider ml-1">
               Address
@@ -349,8 +382,9 @@ const SignupPage = () => {
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
-                placeholder="Enter your full shipping address..."
+                placeholder="House / flat number, street, area..."
                 required
+                aria-invalid={Boolean(errors.address)}
                 className="
                   w-full pl-12 pr-4 py-3 h-24 bg-white/50 border border-[#68232B]/10 rounded-2xl
                   text-[#68232B] placeholder:text-[#68232B]/30 resize-none
@@ -359,10 +393,92 @@ const SignupPage = () => {
                 "
               />
             </div>
+            {errors.address && (
+              <p className="text-xs text-red-600 ml-1">{errors.address}</p>
+            )}
           </div>
-              {errors.address && (
-                <p className="text-xs text-red-600 ml-1">{errors.address}</p>
+
+          {/* City and State side by side, PIN on its own row — PIN is six
+              characters and does not need half the form's width. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#68232B] uppercase tracking-wider ml-1">
+                City
+              </label>
+              <input
+                type="text"
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                placeholder="Hassan"
+                required
+                aria-invalid={Boolean(errors.city)}
+                className="
+                  w-full px-4 py-3 bg-white/50 border border-[#68232B]/10 rounded-2xl
+                  text-[#68232B] placeholder:text-[#68232B]/30
+                  focus:outline-none focus:border-[#68232B]/30 focus:ring-4 focus:ring-[#68232B]/5
+                  transition-all duration-300
+                "
+              />
+              {errors.city && (
+                <p className="text-xs text-red-600 ml-1">{errors.city}</p>
               )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#68232B] uppercase tracking-wider ml-1">
+                State
+              </label>
+              <input
+                type="text"
+                name="state"
+                value={formData.state}
+                onChange={handleChange}
+                placeholder="Karnataka"
+                required
+                aria-invalid={Boolean(errors.state)}
+                className="
+                  w-full px-4 py-3 bg-white/50 border border-[#68232B]/10 rounded-2xl
+                  text-[#68232B] placeholder:text-[#68232B]/30
+                  focus:outline-none focus:border-[#68232B]/30 focus:ring-4 focus:ring-[#68232B]/5
+                  transition-all duration-300
+                "
+              />
+              {errors.state && (
+                <p className="text-xs text-red-600 ml-1">{errors.state}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#68232B] uppercase tracking-wider ml-1">
+              PIN Code
+            </label>
+            {/* inputMode="numeric" brings up the number pad on a phone without
+                making this type="number", which would let the browser strip a
+                leading digit and attach a spinner to something that is not a
+                quantity. maxLength stops the typo rather than reporting it. */}
+            <input
+              type="text"
+              name="pincode"
+              value={formData.pincode}
+              onChange={handleChange}
+              placeholder="573201"
+              inputMode="numeric"
+              maxLength={6}
+              required
+              aria-invalid={Boolean(errors.pincode)}
+              className="
+                w-full sm:w-48 px-4 py-3 bg-white/50 border border-[#68232B]/10 rounded-2xl
+                text-[#68232B] placeholder:text-[#68232B]/30
+                focus:outline-none focus:border-[#68232B]/30 focus:ring-4 focus:ring-[#68232B]/5
+                transition-all duration-300
+              "
+            />
+            {errors.pincode && (
+              <p className="text-xs text-red-600 ml-1">{errors.pincode}</p>
+            )}
+          </div>
 
           {/* Submit Button */}
           <button

@@ -68,10 +68,38 @@ const signup = [
     .custom(isAcceptedPhone)
     .withMessage('Enter a valid India (+91) or USA (+1) phone number.'),
 
+  // Address is REQUIRED at signup, and so are the three parts that make it
+  // deliverable. It was `optional`, so accounts could exist with no address —
+  // and then checkout had nothing to prefill and the customer retyped the whole
+  // thing on every order. A courier cannot deliver to a street name alone.
+  //
+  // Existing rows are unaffected: this governs new signups only, which is
+  // exactly why the columns are nullable in migration 012. Backfilling 22
+  // customers with data nobody holds is not possible, and inventing it is worse
+  // than leaving it absent.
   body('address')
-    .optional({ values: 'falsy' })
     .trim()
+    .notEmpty().withMessage('Address is required.')
     .isLength({ max: 500 }).withMessage('Address is too long.'),
+
+  body('city')
+    .trim()
+    .notEmpty().withMessage('City is required.')
+    .isLength({ max: 100 }).withMessage('City is too long.'),
+
+  body('state')
+    .trim()
+    .notEmpty().withMessage('State is required.')
+    .isLength({ max: 100 }).withMessage('State is too long.'),
+
+  // Exactly six digits, not starting with 0 — the Indian PIN format. Kept as a
+  // STRING all the way down: leading digits are significant and arithmetic on a
+  // PIN is meaningless, so the column is VARCHAR and so is this.
+  body('pincode')
+    .trim()
+    .notEmpty().withMessage('PIN code is required.')
+    .matches(/^[1-9][0-9]{5}$/)
+    .withMessage('Enter a valid 6-digit PIN code.'),
 
   // Length is enforced here AND in the handler. The handler check stays because
   // it guards bcrypt's silent 72-byte truncation, which is a correctness issue
@@ -189,10 +217,32 @@ const updateProfile = [
 
   // Optional because address is nullable, and a customer who has not set one
   // must still be able to save a name or phone change.
+  //
+  // Note this differs DELIBERATELY from signup, where all four are required:
+  // signup governs new rows, this governs the 22 existing customers who predate
+  // migration 012 and hold none of these values. Forcing them here would lock
+  // every one of them out of editing their own name until they filled in an
+  // address they may not want to give.
   body('address')
     .optional({ values: 'falsy' })
     .trim()
     .isLength({ max: 500 }).withMessage('Address is too long.'),
+
+  body('city')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 100 }).withMessage('City is too long.'),
+
+  body('state')
+    .optional({ values: 'falsy' })
+    .trim()
+    .isLength({ max: 100 }).withMessage('State is too long.'),
+
+  body('pincode')
+    .optional({ values: 'falsy' })
+    .trim()
+    .matches(/^[1-9][0-9]{5}$/)
+    .withMessage('Enter a valid 6-digit PIN code.'),
 ];
 
 const wishlistCheck = [
