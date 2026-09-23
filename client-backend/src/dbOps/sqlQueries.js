@@ -319,6 +319,90 @@ getProductsByCategory: `
     // One row per image, grouped into an images[] array by the manager — same
     // shape as getProductsByCategory so both feed the same normaliser.
     // ORDER BY puts the primary image first, so images[0] is the card image.
+    // Product search for the storefront header — PER WORD, with relevance
+    // ranking.
+    //
+    // ⚠️ This is a FUNCTION, not a string, and it is the only query in either
+    // backend that is assembled rather than written out. The reason is that the
+    // number of search words is not known ahead of time.
+    //
+    // What varies is ONLY the number of repetitions of two fixed fragments.
+    // No user input is ever concatenated into the SQL — every value is still a
+    // bound `?` parameter, exactly as everywhere else. `tokenCount` comes from
+    // an array length the caller has already capped, never from a request body.
+    // Read `grep '\${'` on this file as still meaning "no interpolated data".
+    //
+    // WHY PER WORD. The first version matched the whole phrase as one LIKE, so
+    // "green sarees" only found a product containing that exact string —
+    // useless, because no saree is named "green sarees". Now each word is
+    // matched independently and the results are RANKED by how well they match.
+    //
+    // WHY OR ACROSS WORDS, NOT AND. Requiring every word would make one stray
+    // or misspelt word empty the whole result set, and "green sareee" would
+    // find nothing at all. With OR plus relevance, a product matching both
+    // words outranks one matching only "green", which in turn outranks a
+    // product matching only "saree" — so the best answers come first and a
+    // partial match still returns something useful.
+    //
+    // WHY DESCRIPTION IS NOW INCLUDED. It was deliberately excluded before, on
+    // the CF-32 reasoning that prose matches drown out real ones — a saree
+    // merely *described* as "perfect for party wear" would rank alongside the
+    // actual Party Wear collection. That concern was right, but the fix is
+    // WEIGHTING, not exclusion: a description hit scores 1 while a name hit
+    // scores 8, so it can surface a saree nothing else would find without ever
+    // outranking a genuine name or collection match. Excluding it meant "green"
+    // could not find a saree whose colour lives only in its description.
+    //
+    // Weights: name 8, category 4, collection 4, material 2, description 1.
+    //
+    // One correlated subquery for the primary image rather than a LEFT JOIN to
+    // product_images: a join multiplies the row per image (the AB-16
+    // double-count), and a search dropdown must show each saree exactly once.
+    //
+    // The caller MUST pass each word already escaped for LIKE and wrapped in %
+    // — see escapeLike in customerDbOps. A bare % or _ from the customer would
+    // otherwise be a wildcard and match the whole catalogue.
+    //
+    // Parameter order: all RELEVANCE params (5 per word, in word order), then
+    // all WHERE params (5 per word, in word order), then the LIMIT.
+    searchProducts: (tokenCount) => {
+      const relevanceFor = () => `(
+        CASE WHEN p.name        LIKE ? THEN 8 ELSE 0 END +
+        CASE WHEN p.category    LIKE ? THEN 4 ELSE 0 END +
+        CASE WHEN p.collection  LIKE ? THEN 4 ELSE 0 END +
+        CASE WHEN p.material    LIKE ? THEN 2 ELSE 0 END +
+        CASE WHEN p.description LIKE ? THEN 1 ELSE 0 END
+      )`;
+
+      const matchFor = () =>
+        `(p.name LIKE ? OR p.category LIKE ? OR p.collection LIKE ? OR p.material LIKE ? OR p.description LIKE ?)`;
+
+      const relevance = Array.from({ length: tokenCount }, relevanceFor).join(' + ');
+      const match = Array.from({ length: tokenCount }, matchFor).join(' OR ');
+
+      return `
+      SELECT
+          p.id,
+          p.name,
+          p.category,
+          p.collection,
+          p.selling_price,
+          p.regular_price,
+          IFNULL(ps.stock_qty, 0) > 0 AS in_stock,
+          (SELECT pi.image_url
+             FROM product_images pi
+            WHERE pi.product_id = p.id AND pi.is_primary_image = 1
+            LIMIT 1) AS image_url,
+          ${relevance} AS relevance
+      FROM product p
+      LEFT JOIN product_stock ps ON ps.product_id = p.id
+      WHERE p.is_deleted = 0
+        AND (${match})
+      ORDER BY relevance DESC, p.name ASC
+      LIMIT ?;
+      `;
+    },
+
     getAllProducts: `
       SELECT
           p.id,

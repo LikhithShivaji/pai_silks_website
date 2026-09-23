@@ -426,6 +426,42 @@ exports.getProductsByCategory = async (req, res) => {
 // the storefront's call to the ADMIN backend's get-all-product-details, which
 // Phase 2 put behind admin auth — leaving customers with a 401 and an empty
 // shop. See CLAUDE.md CF-22 and CONSTRAINT 5.
+/**
+ * GET /api/products/search?q=...
+ *
+ * Public, like the rest of the catalogue. Returns a short, ranked list shaped
+ * for the header dropdown — id, name, category, price, stock flag and ONE
+ * image. Deliberately not the full product row: this feeds a list of
+ * suggestions, and the product page fetches the rest when one is opened.
+ *
+ * A blank or whitespace-only term returns an EMPTY list rather than the whole
+ * catalogue. "No query" and "query matched nothing" must not look different to
+ * the client, and the alternative — treating empty as "match everything" — is
+ * how a search box becomes an accidental full-table dump.
+ */
+exports.searchProducts = async (req, res) => {
+  try {
+    const term = String(req.query.q ?? '').trim();
+    if (!term) {
+      return res.status(200).json({ success: true, data: [], message: 'No query' });
+    }
+
+    const products = await productManager.searchProducts(term);
+
+    return res.status(200).json({
+      success: true,
+      data: products,
+      message: 'Search results'
+    });
+  } catch (error) {
+    console.error("Error in searchProducts Controller:", sanitizeError(error));
+    return res.status(500).json({
+      success: false,
+      message: 'Something went wrong. Please try again.'
+    });
+  }
+};
+
 exports.getAllProducts = async (req, res) => {
   try {
     const products = await productManager.getAllProducts();

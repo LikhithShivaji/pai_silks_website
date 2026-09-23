@@ -19,6 +19,86 @@ const appDefines = require('../constants/appDefines');
  */
 const DUMMY_HASH = '$2b$12$I4dTwYOh1APoqQm65IJMjO/iIGlWTHMrZhPkyxdAWe8LGXRFBA.KW';
 
+/**
+ * Escape the LIKE metacharacters in a customer-supplied search term.
+ *
+ * `%` and `_` are WILDCARDS inside LIKE, not literals. Without this, searching
+ * for "%" matches the entire catalogue and "_" matches every single-character
+ * position — so the search box would quietly behave as a "show me everything"
+ * control, and a customer looking for a saree code containing an underscore
+ * would get nonsense.
+ *
+ * The backslash must be escaped FIRST, otherwise escaping % and _ would then
+ * have their own added backslashes re-escaped.
+ */
+const escapeLike = (term) =>
+  String(term ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_');
+
+/**
+ * Words the search should ignore.
+ *
+ * "saree" and "sarees" are in here because EVERY product is a saree: as a
+ * search word it matches the whole catalogue and contributes nothing but noise
+ * to the ranking. A customer typing "green saree" means "green" — the second
+ * word is how people speak, not a filter. Dropping it is what makes that query
+ * return green sarees instead of the entire shop with the green ones nudged to
+ * the top.
+ *
+ * Kept deliberately SHORT. A long stop-word list starts removing words that
+ * carry meaning in a specific catalogue, and the damage is invisible: the
+ * customer just sees worse results with no indication why.
+ */
+const SEARCH_STOP_WORDS = new Set([
+  'saree', 'sarees', 'sari', 'saris',
+  'a', 'an', 'the', 'and', 'or', 'for', 'with', 'in', 'of', 'me', 'my',
+  'show', 'find', 'want', 'need', 'buy',
+]);
+
+/** Longest query we will tokenise. Bounds the generated SQL and the parameter
+ *  list — 6 words is far more than any real product search. */
+const MAX_SEARCH_TOKENS = 6;
+
+/**
+ * Break a search phrase into the words worth matching.
+ *
+ * Steps, in order, and each one earns its place:
+ *
+ *   1. lowercase + split on anything that is not a letter or digit, so
+ *      "green,silk" and "green silk" behave the same.
+ *   2. drop stop words (see above).
+ *   3. drop single characters — "s" matches almost every product and ranks
+ *      nothing usefully.
+ *   4. strip ONE trailing "s" from words longer than 3 characters. This is the
+ *      plural fix and it only works in this direction: LIKE '%saree%' already
+ *      matches "sarees" because it is a substring, but LIKE '%sarees%' does NOT
+ *      match "Saree". Stemming the WORD rather than the column means "georgettes"
+ *      finds "Georgette" without touching the data.
+ *   5. de-duplicate, so "silk silk saree" is not scored twice for one word.
+ *
+ * If every word is filtered out — "the sarees" — the caller returns an empty
+ * list. That is honest: we cannot tell what they were looking for.
+ */
+const tokenizeSearch = (term) => {
+  const words = String(term ?? '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+  const kept = [];
+  for (const word of words) {
+    if (SEARCH_STOP_WORDS.has(word)) continue;
+    if (word.length < 2) continue;
+
+    const stem = word.length > 3 && word.endsWith('s') ? word.slice(0, -1) : word;
+    if (!kept.includes(stem)) kept.push(stem);
+    if (kept.length === MAX_SEARCH_TOKENS) break;
+  }
+  return kept;
+};
+
 class CustomerCmds {
 
   // ---------------------- CUSTOMER SIGN UP ----------------------
@@ -349,6 +429,41 @@ async checkWishlist(user_id, product_id) {
 // Full live catalogue for the storefront's /shop page.
 // Returns FLAT rows — one per image — which the manager groups into products
 // with an images[] array, same as getProductsByCategory. See CLAUDE.md CF-22.
+async searchProducts(term, limit = 12) {
+  try {
+    const tokens = tokenizeSearch(term);
+
+    // Every word was punctuation or a stop word. Return nothing rather than
+    // running a query with zero conditions, which would produce `WHERE ... AND ()`
+    // — a syntax error — or, if written defensively, the whole catalogue.
+    if (tokens.length === 0) return [];
+
+    // Each word becomes a %contains% pattern, repeated once per searched
+    // column. The relevance params come first, then the WHERE params, then the
+    // LIMIT — matching the placeholder order the query builder emits. Getting
+    // this order wrong would not error; it would silently rank by the wrong
+    // column, which is why the two are built from the SAME token list here
+    // rather than assembled separately.
+    const patterns = tokens.map((t) => `%${escapeLike(t)}%`);
+    const perToken = (p) => [p, p, p, p, p]; // name, category, collection, material, description
+
+    const params = [
+      ...patterns.flatMap(perToken), // relevance (SELECT)
+      ...patterns.flatMap(perToken), // match (WHERE)
+      limit,
+    ];
+
+    const [rows] = await pool.query(
+      sqlqueries.product.searchProducts(tokens.length),
+      params
+    );
+    return rows;
+  } catch (err) {
+    console.error("Error in searchProducts:", sanitizeError(err));
+    throw err;
+  }
+}
+
 async getAllProducts() {
   try {
     const [rows] = await pool.query(sqlqueries.product.getAllProducts);

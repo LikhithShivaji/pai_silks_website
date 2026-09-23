@@ -99,6 +99,12 @@ router.get('/:productId', v.productIdParam, validate, customerController.getProd
 // ===========================================================================
 
 router.get('/products/new-releases', customerController.getNewReleaseProducts);
+// ⚠️ MUST stay above /products/:category. Express matches in registration
+// order, so if this were declared after it, "search" would be captured as a
+// CATEGORY NAME and the endpoint would silently return an empty product list
+// instead of search results — exactly the trap documented at /:productId
+// below (CB-39), one level deeper in the path.
+router.get('/products/search', v.productSearch, validate, customerController.searchProducts);
 router.get('/products/:category', v.categoryParam, validate, customerController.getProductsByCategory);
 
 // ===========================================================================

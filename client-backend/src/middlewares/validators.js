@@ -245,6 +245,17 @@ const updateProfile = [
     .withMessage('Enter a valid 6-digit PIN code.'),
 ];
 
+// Header product search. `q` is optional — the controller answers an empty
+// term with an empty list rather than an error, because a customer clearing the
+// box is not a fault. The cap matches the column widths being searched; a
+// 500-character "search term" is not a search.
+const productSearch = [
+  query('q')
+    .optional({ values: 'falsy' })
+    .isLength({ max: 100 }).withMessage('Search term is too long.')
+    .trim(),
+];
+
 const wishlistCheck = [
   query('product_id')
     .isInt({ min: 1 }).withMessage('Invalid product.').toInt(),
@@ -260,5 +271,6 @@ module.exports = {
   productIdParam,
   categoryParam,
   wishlistCheck,
+  productSearch,
   updateProfile,
 };

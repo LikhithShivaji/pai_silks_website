@@ -126,6 +126,19 @@ const groupProductRows = (rows) => {
  * instead — which Phase 2 put behind admin auth, so customers would have got
  * 401 and an empty shop. See CLAUDE.md CF-22 and CONSTRAINT 5.
  */
+// Header search. Returns rows AS-IS, not grouped: the query already produces
+// one row per product (the primary image comes from a correlated subquery, not
+// a join), so there is nothing to group and running it through groupProductRows
+// would only reshape a list the dropdown already expects flat.
+const searchProducts = async (term, limit) => {
+  try {
+    return await dbCmds.searchProducts(term, limit);
+  } catch (err) {
+    console.error("Error in searchProducts:", sanitizeError(err));
+    throw err;
+  }
+};
+
 const getAllProducts = async () => {
   try {
     return groupProductRows(await dbCmds.getAllProducts());
@@ -405,6 +418,7 @@ module.exports = {
   getOrderItems,
   getOrdersByUser,
   getAllProducts,
+  searchProducts,
   getNewReleaseProducts,
   logoutSession
 };
