@@ -60,6 +60,9 @@ router.get('/products', customerController.getAllProducts);
 router.get('/collections', customerController.getAllCollections);
 router.get('/bestsellers', customerController.getBestSellers);
 router.get('/categories', customerController.getAllCategories);
+// Homepage tile strip — real categories with images (CF-35). Declared above the
+// `/:productId` catch-all further down, like every other named GET here (CB-39).
+router.get('/category-tiles', customerController.getCategoryTiles);
 
 // ===========================================================================
 // PROTECTED — single-segment, MUST stay above /:productId
