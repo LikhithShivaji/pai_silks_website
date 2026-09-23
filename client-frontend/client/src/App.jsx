@@ -78,6 +78,18 @@ const App = () => {
       // Clear state history so refresh doesn't stick
       window.history.replaceState({}, document.title);
     }
+
+    // Category tiles on the homepage arrive the same way (CF-35). Applied as a
+    // checked filter rather than a separate mode, so the customer can see which
+    // category is active in the filter panel and clear it there — a hidden
+    // filter they cannot see or undo is worse than no filter.
+    if (location.state && location.state.selectedCategory) {
+      setFilters((prev) => ({
+        ...prev,
+        categories: [location.state.selectedCategory],
+      }));
+      window.history.replaceState({}, document.title);
+    }
   }, [location]);
 
   /* ---------------- NORMALIZE DATA ---------------- */

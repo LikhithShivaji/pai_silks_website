@@ -112,6 +112,11 @@ function ViewProductPage() {
             wash_and_care: p.product_wash_care,
             main_price: p.regular_price,
             discounted_price: p.selling_price,
+            // `!== false` rather than a plain truthiness check: MySQL returns
+            // this as 1/0, and an endpoint that omits the field entirely must
+            // default to IN stock — hiding a buyable saree because a payload
+            // was incomplete is the worse failure of the two.
+            in_stock: p.in_stock !== false && p.in_stock !== 0,
             image1: images[0],
             image2: images[1] || images[0],
             image3: images[2] || images[0],
@@ -243,6 +248,28 @@ function ViewProductPage() {
     }
   };
 
+  // 4. Notify Me — shown instead of Add to Cart when the saree is sold out.
+  //
+  // ⚠️ There is no notification channel yet, so this does NOT promise to send
+  // anything. It saves the saree to the wishlist — a real, persisted record the
+  // shop can act on — and says so plainly. The moment the deferred WhatsApp
+  // Business work lands (see CLAUDE.md Deferred work), this becomes a genuine
+  // back-in-stock alert against the same wishlist rows, with no change here.
+  //
+  // Saying "we'll text you" today would be the same dishonesty as the removed
+  // "Subscribe" form that subscribed nobody.
+  const onNotifyMe = () => {
+    if (!product) return;
+    const prodId = product.id || product.product_id;
+
+    if (isWishlisted) {
+      showToast("Already saved — we'll restock this soon", "wishlist");
+      return;
+    }
+    handleAddToWishList({ ...product, id: prodId });
+    showToast("Saved to your wishlist — we'll restock this soon", "wishlist");
+  };
+
   if (loading) return <PeacockLoader />;
 
   if (!product)
@@ -329,6 +356,14 @@ function ViewProductPage() {
                 {product.description}
               </p>
 
+              {/* State the reason, don't leave the customer to infer it from a
+                  changed button label. */}
+              {!product.in_stock && (
+                <span className="inline-flex w-fit items-center rounded-full bg-[#68232B] px-4 py-1.5 text-sm font-bold tracking-wide text-white uppercase">
+                  Sold Out
+                </span>
+              )}
+
               <div className="flex items-baseline gap-4 mt-2">
                 <h2 className="text-4xl md:text-5xl font-bold text-white">
                   ₹ {product.discounted_price}
@@ -353,18 +388,34 @@ function ViewProductPage() {
                 >
                   {isWishlisted ? "Wishlisted" : "Add to Wishlist"}
                 </button>
-                <button
-                  onClick={onCartToggle}
-                  className={` flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white  shadow-lg border-2 border-[#FEDB87]  cursor-pointer active:scale-95 transition-all duration-200
+                {/* Sold out replaces Add to Cart with Notify Me rather than
+                    disabling it. A greyed-out button is a dead end; this keeps
+                    the customer's interest in a saree they cannot buy today,
+                    which is the whole reason they opened the page.
+
+                    Add to Wishlist above is deliberately left alone — saving an
+                    out-of-stock saree is exactly what a wishlist is for. */}
+                {product.in_stock ? (
+                  <button
+                    onClick={onCartToggle}
+                    className={` flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white  shadow-lg border-2 border-[#FEDB87]  cursor-pointer active:scale-95 transition-all duration-200
                     ${
                       isInCart
                         ? "bg-linear-to-r from-[#FEDB87] to-[#BD7923] brightness-110" // Active (Filled)
                         : "bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]" // Default (Outline)
                     }
                   `}
-                >
-                  {isInCart ? "Added" : "Add to Cart"}
-                </button>
+                  >
+                    {isInCart ? "Added" : "Add to Cart"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={onNotifyMe}
+                    className="flex-1 py-4 px-6 rounded-full font-bold text-lg md:text-xl text-white shadow-lg border-2 border-[#FEDB87]/60 cursor-pointer active:scale-95 transition-all duration-200 bg-transparent hover:bg-linear-to-r hover:from-[#FEDB87] hover:to-[#BD7923]"
+                  >
+                    Notify Me
+                  </button>
+                )}
               </div>
             </div>
           </div>

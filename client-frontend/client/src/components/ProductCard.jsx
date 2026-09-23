@@ -63,6 +63,7 @@ function ProductCard({
       {/* IMAGE */}
       <div
         className="
+          relative
           w-full
           aspect-3/4
           overflow-hidden
@@ -71,6 +72,21 @@ function ProductCard({
           bg-white/10
         "
       >
+        {/* SOLD OUT. The Add to Cart button was already disabled at zero stock
+            (CF-20), but nothing SAID so — the customer saw an ordinary card
+            with a button that ignored them, which reads as the site being
+            broken rather than the saree being gone. The overlay also stops
+            them getting as far as the product page before finding out.
+            `in_stock` is a boolean, not a count: exact inventory is not
+            customer data (CB-22). */}
+        {!in_stock && (
+          <>
+            <div className="absolute inset-0 z-10 bg-white/60" />
+            <span className="absolute top-3 left-3 z-20 rounded-full bg-[#68232B] px-3 py-1 text-xs font-bold uppercase tracking-wide text-[#FFCB85] shadow">
+              Sold Out
+            </span>
+          </>
+        )}
         <img
           src={image1 || "/placeholder.png"}
           alt={name}
