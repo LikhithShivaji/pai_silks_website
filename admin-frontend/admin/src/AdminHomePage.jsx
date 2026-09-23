@@ -11,6 +11,8 @@ import AllProducts from "./components/AllProducts";
 import OrderList from "./components/OrderList";
 import AddProduct from "./components/AddProduct";
 import DisplayOrderPage from "./components/DisplayOrderPage";
+import BestSellers from "./components/BestSellers";
+import { normalizeBestSellers } from "@/utils/normalizeBestSellers";
 import UpdateProduct from "./components/UpdateProduct";
 import { Menu, X, Trash, Bell } from "lucide-react";
 // CLIENT_API is no longer imported here: this page's last cross-service call
@@ -19,6 +21,9 @@ import { Menu, X, Trash, Bell } from "lucide-react";
 // CLAUDE.md, scheduled after the phases.
 import { ADMIN_API, apiFetch } from "@/config/api";
 import { useToast } from "@/ToastContext";
+// Destructive confirmations. Replaces window.confirm for category deletion so
+// the consequence can be given real emphasis rather than a line of prompt text.
+import ConfirmDialog from "./components/ConfirmDialog";
 
 const AdminHomePage = () => {
   const { showToast } = useToast();
@@ -82,28 +87,129 @@ const AdminHomePage = () => {
     }
   };
 
+  /**
+   * Navigation — the URL hash IS the location.
+   *
+   * This panel renders views by swapping component state, not by routing, and
+   * that had two consequences. Every "← Back" button had a HARDCODED
+   * destination, wrong whenever the admin did not arrive from there; and the
+   * BROWSER's back button (or a mouse's back button) left the panel entirely,
+   * because nothing the admin did inside it ever created a history entry.
+   *
+   * An in-app stack fixed the first problem and could never fix the second: the
+   * browser does not know about it. So the state now lives in the hash —
+   *
+   *   #view=dashboard
+   *   #view=allProducts&category=Art%20Silk%20Sarees
+   *   #view=displayOrderPage&order=56
+   *
+   * — and every navigation pushes a real history entry. Back then works from
+   * the browser button, the mouse button, the keyboard and the in-app button
+   * alike, because `goBack` simply calls `history.back()`. ONE mechanism, not
+   * two that can disagree.
+   *
+   * Walking back out of the panel lands on the login page, which is the correct
+   * end of the chain: those entries precede the panel in the same tab's history.
+   *
+   * The hash rather than the path deliberately — the app is served at a single
+   * route, and a path change would need a server rewrite rule to survive a
+   * refresh. A hash never reaches the server.
+   */
+  const VIEW_PARAM_KEYS = { allProducts: "category", addProduct: "category", displayOrderPage: "order" };
+
+  const buildHash = (view, param) => {
+    const key = VIEW_PARAM_KEYS[view];
+    const params = new URLSearchParams({ view });
+    if (key && param != null && param !== "") params.set(key, String(param));
+    return `#${params.toString()}`;
+  };
+
+  const go = (view, param, { replace = false } = {}) => {
+    const hash = buildHash(view, param);
+    if (replace) window.history.replaceState({ view }, "", hash);
+    else window.history.pushState({ view }, "", hash);
+  };
+
+  /** Restore the view the hash describes. Sets state only — never pushes. */
+  const applyHash = React.useCallback((hash) => {
+    const params = new URLSearchParams((hash || "").replace(/^#/, ""));
+    const view = params.get("view") || "dashboard";
+    const category = params.get("category");
+    const order = params.get("order");
+
+    if (category) setSelectedCategory(category);
+    if (order) setSelectedOrderId(order);
+
+    // `updateProduct` is deliberately NOT restorable. It needs the full product
+    // object, which is passed in memory and is not in the URL; restoring the
+    // view without it would render an edit form with every field blank and a
+    // Save button that would wipe the product. Land on the product list
+    // instead — the screen the admin would have used to get there anyway.
+    const restorable = view === "updateProduct" ? "allProducts" : view;
+
+    setCurrentView(restorable);
+    if (restorable === "dashboard") setActiveView("dashboard");
+    else if (restorable === "orderList" || restorable === "displayOrderPage") setActiveView("orders");
+    else if (category) setActiveView(category);
+  }, []);
+
+  // Seed the first history entry, and follow the browser from then on.
+  //
+  // replaceState on mount, not pushState: pushing would leave the entry the
+  // admin arrived on (the login page) one step further back than it looks, so
+  // the first Back would appear to do nothing.
+  useEffect(() => {
+    if (window.location.hash) applyHash(window.location.hash);
+    else window.history.replaceState({ view: "dashboard" }, "", buildHash("dashboard"));
+
+    const onPopState = () => applyHash(window.location.hash);
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyHash]);
+
+  const goBack = () => window.history.back();
+
+  // Sidebar destinations. These push like everything else — the admin asked for
+  // category → dashboard → login to be walkable, so a sidebar click is a step
+  // in the journey, not a reset of it.
   const handleGoToDashBoardPage = () => {
     setCurrentView("dashboard");
     setActiveView("dashboard");
+    go("dashboard");
   };
 
-  const handleGoToAllProductsPage = () => setCurrentView("allProducts");
+  const handleGoToAllProductsPage = (categoryName) => {
+    setCurrentView("allProducts");
+    go("allProducts", categoryName ?? selectedCategory);
+  };
 
   const handleOrderList = () => {
     setCurrentView("orderList");
     setActiveView("orders");
+    go("orderList");
   };
 
-  const handleAddProductPage = () => setCurrentView("addProduct");
+  const handleAddProductPage = () => {
+    setCurrentView("addProduct");
+    go("addProduct", selectedCategory);
+  };
 
   const handleUpdateProductPage = (product) => {
     setUpdateProductDetails(product);
     setCurrentView("updateProduct");
+    go("updateProduct");
   };
 
   const displayOrderPage = (order) => {
     setSelectedOrderId(order.id);
     setCurrentView("displayOrderPage");
+    go("displayOrderPage", order.id);
+  };
+
+  const handleViewAllBestSellers = () => {
+    setCurrentView("bestSellers");
+    go("bestSellers");
   };
 
   const selectedOrder = orders.find(
@@ -151,18 +257,9 @@ const AdminHomePage = () => {
         const data = await res.json();
 
         if (data.success && Array.isArray(data.data)) {
-          const cleanData = data.data.map((p) => ({
-            id: p.id,
-            name: p.name,
-            image: p.primary_image || "https://placehold.co/100",
-            totalSold: Number(p.total_sold) || 0,
-            // Server-computed. total_revenue is a DECIMAL, which mysql2 returns
-            // as a string to protect precision — Number() it once here rather
-            // than letting a string reach Intl.NumberFormat.
-            revenue: Number(p.total_revenue) || 0,
-          }));
-
-          setBestSellers(cleanData);
+          // Shared with the full "View All" screen so the two renderings of the
+          // same numbers cannot drift apart.
+          setBestSellers(normalizeBestSellers(data.data));
         }
       })
       .catch((err) => {
@@ -261,6 +358,15 @@ const AdminHomePage = () => {
       address: o.shipping_address,
       paymentMethod: o.payment_method,
       paymentStatus: o.payment_status,
+      // Carried through so a despatched order still shows its tracking after a
+      // reload. The server has always returned both (migration 009), but this
+      // mapper dropped them, so DispatchEntry rendered EMPTY for an order whose
+      // consignment number was already saved — and the printed invoice said
+      // "not yet despatched" for a parcel already on its way. They only ever
+      // appeared because changeOrderStatus writes them back into this object
+      // after a successful save, which lasted until the next refresh.
+      carrier: o.carrier ?? null,
+      consignment_number: o.consignment_number ?? null,
       // `?? []` — an order with no product_list must not take down the whole
       // list. This was `o.product_list.map(...)` unguarded: one such order threw
       // inside normalizeOrders, the surrounding .catch swallowed it, and the
@@ -442,13 +548,30 @@ const AdminHomePage = () => {
           ordersLoading={ordersLoading}
           ordersError={ordersError}
           onRetryOrders={loadOrders}
+          onViewAllBestSellers={handleViewAllBestSellers}
         />;
 
       case "allProducts":
         return (
           <AllProducts
             categoryName={selectedCategory}
-            onBack={() => setCurrentView("dashboard")}
+            // The category row, looked up by name — `selectedCategory` is the
+            // name string, and the upload needs the id. CF-35.
+            categoryId={
+              categories.find((c) => c.name === selectedCategory)?.id ?? null
+            }
+            categoryImageUrl={
+              categories.find((c) => c.name === selectedCategory)?.image_url ?? null
+            }
+            // Update in place rather than refetching: the server has already
+            // confirmed the new URL, so a round trip would only risk showing a
+            // stale thumbnail if it raced.
+            onCategoryImageUploaded={(id, url) =>
+              setCategories((prev) =>
+                prev.map((c) => (c.id === id ? { ...c, image_url: url } : c))
+              )
+            }
+            onBack={goBack}
             onAddProductClick={handleAddProductPage}
             onUpdateProduct={handleUpdateProductPage}
           />
@@ -458,7 +581,7 @@ const AdminHomePage = () => {
         return (
           <DisplayOrderPage
             order={selectedOrder}
-            onBack={handleOrderList}
+            onBack={goBack}
             onChangeStatus={(status) =>
               changeOrderStatus(selectedOrderId, status)
             }
@@ -481,6 +604,9 @@ const AdminHomePage = () => {
           />
         );
 
+      case "bestSellers":
+        return <BestSellers onBack={goBack} />;
+
       case "orderList":
         return (
           <OrderList orders={orders} displayOrderPage={displayOrderPage} />
@@ -492,7 +618,7 @@ const AdminHomePage = () => {
             // Map objects back to strings for child component compatibility
             categories={categories.map(c => c.name)}
             categoryName={selectedCategory}
-            onBack={() => setCurrentView("allProducts")}
+            onBack={goBack}
           />
         );
 
@@ -500,7 +626,7 @@ const AdminHomePage = () => {
         return (
           <UpdateProduct
             categoryName={selectedCategory}
-            onBack={() => setCurrentView("allProducts")}
+            onBack={goBack}
             updateProductDetails={updateProductDetails}
           />
         );
@@ -517,6 +643,7 @@ const AdminHomePage = () => {
           ordersLoading={ordersLoading}
           ordersError={ordersError}
           onRetryOrders={loadOrders}
+          onViewAllBestSellers={handleViewAllBestSellers}
         />;
     }
   };
@@ -581,16 +708,18 @@ const AdminHomePage = () => {
 
       const body = await res.json().catch(() => ({}));
 
-      // 409 + requiresConfirmation: the category still holds products. Ask
-      // once, with the number in the question, then retry with the flag.
+      // 409 + requiresConfirmation means the category still holds products and
+      // the cascade flag was missing. The dialog asks before we ever get here,
+      // so reaching this is a genuine disagreement — the count changed between
+      // the list loading and the click, or the request was made outside the UI.
+      // Re-ask rather than silently forcing it through.
       if (res.status === 409 && body.requiresConfirmation) {
-        const proceed = window.confirm(
-          `${body.message}\n\nThis cannot be undone from the admin panel. ` +
-          `Delete "${body.categoryName}" and its ${body.productCount} product` +
-          `${body.productCount === 1 ? "" : "s"}?`
-        );
-        if (!proceed) return;
-        return handleDelete(id, { confirmCascade: true });
+        setDeleteTarget({
+          id,
+          name: body.categoryName,
+          productCount: body.productCount,
+        });
+        return;
       }
 
       if (!res.ok || !body.success) {
@@ -611,13 +740,27 @@ const AdminHomePage = () => {
   };
 
   /**
-   * An empty category is deleted with a plain confirmation — nothing cascades,
-   * so there is no consequence to spell out.
+   * Open the delete dialog for a category.
+   *
+   * The product count comes from the category list, which the server now
+   * returns it with — so the dialog can state the consequence in its FIRST
+   * question rather than asking twice. The server still enforces the cascade
+   * flag independently; this is the explanation, not the gate.
    */
-  const confirmDeleteCategory = (id, name) => {
-    if (!window.confirm(`Delete the category "${name}"?`)) return;
-    handleDelete(id);
+  const confirmDeleteCategory = (cat) => {
+    setDeleteTarget({
+      id: cat.id,
+      name: cat.name,
+      productCount: Number(cat.product_count) || 0,
+    });
   };
+
+  // The category awaiting delete confirmation: { id, name, productCount }, or
+  // null when the dialog is closed. `deleteBusy` keeps the dialog open and its
+  // buttons disabled during the request, so a slow response cannot be
+  // double-submitted by an impatient second click.
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -688,7 +831,11 @@ const AdminHomePage = () => {
               onClick={() => {
                 setSelectedCategory(cat.name); // Pass name string
                 setActiveView(cat.name);
-                handleGoToAllProductsPage();
+                // Passed explicitly rather than relying on the setState above:
+                // `selectedCategory` still holds the OLD value in this closure,
+                // so the hash would have recorded the previously-open category
+                // and Back would return to the wrong one.
+                handleGoToAllProductsPage(cat.name);
                 setIsMobileMenuOpen(false);
               }}
             >
@@ -702,7 +849,7 @@ const AdminHomePage = () => {
                   // Goes through the confirming wrapper. If the category holds
                   // products the server answers 409 and handleDelete asks a
                   // second question naming how many would be removed with it.
-                  confirmDeleteCategory(cat.id, cat.name);
+                  confirmDeleteCategory(cat);
                 }}
               >
                 <Trash size={18} />
@@ -750,8 +897,63 @@ const AdminHomePage = () => {
 
   return (
     <div className="bg-[#FAFAFA] flex h-screen w-full relative">
-      
-      <div className="h-full w-[20%] hidden xl:flex border-r border-gray-200">
+
+      {/* Category delete confirmation. Replaces window.confirm — see
+          ConfirmDialog for why. Rendered at the top level so it overlays the
+          whole panel rather than being clipped by the sidebar's overflow. */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={`Delete "${deleteTarget?.name}"?`}
+        message={
+          `Are you sure you want to delete the "${deleteTarget?.name}" category?`
+        }
+        // Stated only when something actually cascades. A warning shown for an
+        // empty category would be false, and a warning that is sometimes false
+        // stops being read.
+        consequence={
+          deleteTarget?.productCount > 0
+            ? `Deleting it will also delete all ${deleteTarget.productCount} ` +
+              `product${deleteTarget.productCount === 1 ? "" : "s"} in it. ` +
+              `This action cannot be reversed.`
+            : null
+        }
+        confirmLabel={
+          deleteTarget?.productCount > 0
+            ? `Delete category and ${deleteTarget.productCount} product${deleteTarget.productCount === 1 ? "" : "s"}`
+            : "Delete category"
+        }
+        busy={deleteBusy}
+        onCancel={() => {
+          if (!deleteBusy) setDeleteTarget(null);
+        }}
+        onConfirm={async () => {
+          const target = deleteTarget;
+          if (!target) return;
+          setDeleteBusy(true);
+          try {
+            // The cascade flag is sent only when products are involved, so an
+            // empty category is never deleted under a confirmation the admin
+            // was not actually shown.
+            await handleDelete(target.id, {
+              confirmCascade: target.productCount > 0,
+            });
+          } finally {
+            setDeleteBusy(false);
+            setDeleteTarget(null);
+          }
+        }}
+      />
+
+      {/* Sidebar: a FIXED width that does not shrink.
+          It was `w-[20%]`, a percentage of a flex row whose other child grows
+          with its content — so the sidebar's real width changed depending on
+          how wide the table inside the content area happened to be. Switching
+          between Order List and a category visibly resized it.
+          `shrink-0` is the other half: without it flex compresses the sidebar
+          to make room for a wide table, which is the same symptom by a
+          different route. Steps up on larger screens rather than scaling
+          continuously, so the width is predictable at any size. */}
+      <div className="h-full w-60 2xl:w-72 shrink-0 hidden xl:flex border-r border-gray-200">
         {renderSidebarContent()}
       </div>
       {isMobileMenuOpen && (
@@ -766,7 +968,14 @@ const AdminHomePage = () => {
          {renderSidebarContent()}
       </div>
 
-      <div className="h-full flex-1 flex flex-col w-full">
+      {/* `min-w-0` is THE fix, and it is not cosmetic.
+          A flex item defaults to `min-width: auto`, meaning it refuses to
+          shrink below its own content. So a wide table did not get clipped —
+          it forced this panel wider, pushing the whole row past the viewport
+          and squeezing the sidebar. `min-w-0` lets the panel be narrower than
+          its content, which is what allows the cells to truncate instead.
+          `w-full` removed: it fought `flex-1` for control of the width. */}
+      <div className="h-full flex-1 min-w-0 flex flex-col">
         <div className="h-[10%] p-3 px-5 md:px-10 flex items-center justify-between border-b">
             <div className="flex items-center gap-4">
                 <button 
@@ -804,7 +1013,11 @@ const AdminHomePage = () => {
         </div>
         <div
           ref={containerRef}
-          className="h-[90%] w-full bg-[#FFE9CC] overflow-y-auto scrollbar-hide p-5"
+          // Tighter side padding on a phone. `p-5` (20px) each side costs 40px
+          // of a 390px screen — a tenth of the width — which is what squeezed
+          // the order table and the product cards. 8px is enough to keep cards
+          // off the edge without pretending a phone has desktop margins.
+          className="h-[90%] w-full bg-[#FFE9CC] overflow-y-auto scrollbar-hide p-0 sm:p-5"
         >
           <div className="w-full h-full">{renderView()}</div>
         </div>

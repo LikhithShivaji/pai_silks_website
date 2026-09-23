@@ -59,7 +59,12 @@ export default function RecentOrders({ orders, displayOrderPage }) {
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {/* --- Filter tabs --- */}
-          <div className="flex flex-wrap gap-1 rounded-xl bg-gray-100 p-1">
+          {/* A 2×2 grid on small screens, a single row from `sm` up.
+              `flex-wrap` produced the ragged "three on one line, one orphaned
+              underneath" layout — the break point depended on the label widths,
+              so it looked accidental rather than designed. A grid puts the four
+              filters on a fixed, even footprint at every width. */}
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 sm:flex sm:flex-nowrap">
             {ORDER_FILTERS.map((f) => {
               const isActive = f.key === filterKey
               const count = filterOrdersByKey(orders, f.key).length
@@ -69,7 +74,7 @@ export default function RecentOrders({ orders, displayOrderPage }) {
                   type="button"
                   onClick={() => setFilterKey(f.key)}
                   aria-pressed={isActive}
-                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors whitespace-nowrap ${
                     isActive
                       ? "bg-[#68232B] text-white"
                       : "text-gray-600 hover:bg-white hover:text-[#68232B]"

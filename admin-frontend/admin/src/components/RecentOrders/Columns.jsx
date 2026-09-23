@@ -5,6 +5,11 @@ import { ArrowUpDown } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 
 import { Button } from "../ui/button"
+// Long values are cut with an ellipsis and revealed on hover, so the table
+// keeps its shape instead of overflowing. See TruncatedCell for why native
+// `title` is used rather than a tooltip component.
+import TruncatedCell from "./TruncatedCell"
+import { formatDateShort } from "@/utils/formatDate"
 
 import {
   DropdownMenu,
@@ -127,13 +132,46 @@ export const columns = [
       const firstName = products[0]?.name || "Unknown Product";
       const remainingCount = products.length - 1;
 
+      // QUANTITY. The column showed a product name and the row showed a total
+      // that covered every unit, with nothing connecting the two — an order of
+      // ten sarees for ₹19,990 read as one saree costing ₹19,990, and the admin
+      // had no way to tell how many to pack. `qty` was already being mapped
+      // through from product_list; it was simply never rendered.
+      //
+      // `× N` only when N > 1: printing "× 1" on every single-item row is noise
+      // that makes the multi-unit rows harder to spot, which is the opposite of
+      // the point.
+      const firstQty = Number(products[0]?.qty) || 1;
+
+      // Total units across the whole order, for the "+N others" case — the
+      // admin packing a parcel needs the number of PIECES, not the number of
+      // distinct product lines.
+      const totalUnits = products.reduce(
+        (sum, p) => sum + (Number(p?.qty) || 1),
+        0
+      );
+
+      // The tooltip lists EVERY line with its quantity, so the hover answers
+      // "what is actually in this parcel" rather than just repeating the
+      // truncated first name.
+      const fullList = products
+        .map((p) => `${p?.name || "Unknown Product"} × ${Number(p?.qty) || 1}`)
+        .join("\n");
+
       return (
         <div className="flex flex-col items-center text-center">
-          <span className="font-medium">{firstName}</span>
-          
+          <TruncatedCell text={fullList} threshold={0} className="font-medium">
+            {firstName}
+            {firstQty > 1 && (
+              <span className="ml-1 text-[#68232B] font-bold">× {firstQty}</span>
+            )}
+          </TruncatedCell>
+
           {remainingCount > 0 && (
             <span className="text-xs text-[#68232B] font-bold">
-              +{remainingCount} others
+              +{remainingCount} other{remainingCount === 1 ? "" : "s"}
+              {" · "}
+              {totalUnits} item{totalUnits === 1 ? "" : "s"} total
             </span>
           )}
         </div>
@@ -173,6 +211,15 @@ export const columns = [
         </div>
       )
     },
+    // The date column had NO cell renderer, so every row printed the raw API
+    // value — `2026-08-29T10:54:34.090Z`. Unreadable, and wide enough to crowd
+    // the columns next to it. The short form is used here; the order detail
+    // page keeps the full one, where there is room.
+    cell: ({ row }) => (
+      <div className="text-center whitespace-nowrap">
+        {formatDateShort(row.original.date)}
+      </div>
+    ),
   },
   {
     accessorKey: "customerName",
@@ -189,6 +236,15 @@ export const columns = [
         </div>
       )
     },
+    // Customer names had no cell renderer, so a long one stretched the column
+    // and pushed the rest of the row off. Truncated with the full name on hover.
+    cell: ({ row }) => (
+      <TruncatedCell
+        text={row.original.customerName}
+        maxWidthClass="max-w-[140px]"
+        className="text-center"
+      />
+    ),
   },
 
   {

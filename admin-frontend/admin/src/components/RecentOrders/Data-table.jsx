@@ -129,8 +129,31 @@ export function DataTable({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="overflow-hidden rounded-md">
-        <Table>
+      {/* Two things here.
+
+          PADDING: the shadcn primitives use `px-2` / `p-2` on cells, so the
+          first and last columns sat flush against the container border — the
+          row looked clipped rather than laid out. Applied with child selectors
+          rather than by editing components/ui/table.jsx, which is vendored and
+          shared by every other table in the panel.
+
+          TRUNCATION, not scrolling: a long product or customer name is cut off
+          with an ellipsis and the full value is on hover, so the table keeps
+          its shape instead of growing a horizontal scrollbar.
+
+          ⚠️ AUTO layout, deliberately NOT `table-fixed`. Fixed layout splits the
+          width equally across all eight columns regardless of content, so every
+          cell must then truncate or it spills into its neighbour — the columns
+          visibly overlapped, headers included. Auto layout lets each column take
+          what it needs, and the long ones are capped individually with
+          max-width on the cell instead. Constrain the few that can be long;
+          leave the rest alone. */}
+      <div
+        className="overflow-hidden rounded-md
+          [&_th:first-child]:pl-6 [&_td:first-child]:pl-6
+          [&_th:last-child]:pr-6  [&_td:last-child]:pr-6"
+      >
+        <Table className="w-full">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
