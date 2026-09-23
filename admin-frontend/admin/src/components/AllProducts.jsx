@@ -2,7 +2,17 @@ import React, { useEffect, useState } from "react";
 import { Trash } from "lucide-react";
 import { ADMIN_API, apiFetch } from "@/config/api";
 
-const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct }) => {
+import CategoryImageUpload from "./CategoryImageUpload";
+
+const AllProducts = ({
+  categoryName,
+  categoryId,
+  categoryImageUrl,
+  onCategoryImageUploaded,
+  onBack,
+  onAddProductClick,
+  onUpdateProduct,
+}) => {
   const [products, setProducts] = useState([]);
   // `loading` starts FALSE, not true.
   //
@@ -127,13 +137,27 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
 
   return (
     <div className="w-full flex flex-col gap-4 h-full rounded-xl">
-      <div className="flex justify-between items-center py-5 border-b-1 border-b-white">
-        <h2 className="text-xl font-semibold">
+      {/* Stacks on a phone. Side by side, a long category name ("Art Silk
+          Sarees") wrapped and pushed the count onto its own line while the
+          thumbnail and both buttons were squeezed against the right edge. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center py-4 sm:py-5 px-2 sm:px-0 border-b-1 border-b-white">
+        <h2 className="text-lg sm:text-xl font-semibold min-w-0">
           {categoryName} <span className="text-sm text-gray-500">({products.length})</span>
         </h2>
-        <div className="flex gap-2">
-          <button onClick={onBack} className="bg-gray-200 px-3 py-1 rounded">← Back</button>
-          <button onClick={onAddProductClick} className="bg-[#68232B] text-white px-3 py-1 rounded">+ Add</button>
+        <div className="flex gap-2 items-center shrink-0">
+          {/* Category tile image (CF-35). Placed with the action buttons rather
+              than in a settings screen, because it belongs to the category the
+              admin is already looking at. */}
+          {categoryId && (
+            <CategoryImageUpload
+              categoryId={categoryId}
+              categoryName={categoryName}
+              imageUrl={categoryImageUrl}
+              onUploaded={onCategoryImageUploaded}
+            />
+          )}
+          <button onClick={onBack} className="flex-1 sm:flex-none whitespace-nowrap bg-gray-200 px-3 py-2 sm:py-1 rounded hover:bg-gray-300 transition-colors">← Back</button>
+          <button onClick={onAddProductClick} className="flex-1 sm:flex-none whitespace-nowrap bg-[#68232B] text-white px-3 py-2 sm:py-1 rounded hover:bg-[#8B2E39] transition-colors">+ Add</button>
         </div>
       </div>
 
@@ -151,26 +175,76 @@ const AllProducts = ({ categoryName, onBack, onAddProductClick, onUpdateProduct 
           </p>
         </div>
       ) : (
-        <div className="grid gap-[1.7rem] p-6
-              grid-cols-[repeat(auto-fill,minmax(300px,1fr))]
-              max-[600px]:gap-4 max-[600px]:p-4
-              max-[600px]:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]
-              max-[380px]:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+        // Two per row on a phone, auto-fill from 640px up.
+        //
+        // Every breakpoint used to specify `minmax(300px,1fr)`, including the
+        // two that exist to handle SMALL screens — so on a 390px phone exactly
+        // one 300px column ever fit and the three media queries were
+        // decorative. An explicit 2-column grid below `sm` is what actually
+        // produces two cards per row.
+        <div className="grid grid-cols-2 gap-3 p-2
+              sm:gap-[1.7rem] sm:p-6
+              sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
           {products.map((product) => (
-            <div key={product.id} className="p-5 bg-[#F5F5F5] rounded-2xl cursor-pointer flex flex-col gap-5 hover:shadow-lg transition-all" onClick={() => onUpdateProduct(product)}>
-              <div className="w-full flex items-center gap-3">
-                <div className="w-24 h-24 flex-shrink-0 border bg-white rounded-xl overflow-hidden">
+            <div key={product.id} className="p-3 sm:p-5 bg-[#F5F5F5] rounded-2xl cursor-pointer flex flex-col gap-3 sm:gap-5 hover:shadow-lg transition-all" onClick={() => onUpdateProduct(product)}>
+              {/* Image ABOVE the text on a phone, beside it from `sm`.
+                  Two cards across a 390px screen leaves ~175px per card; a
+                  96px image beside the text would leave ~70px for a saree name
+                  and a price, which is unreadable. Stacked, the image gets the
+                  full card width and the text gets a real line length. */}
+              <div className="w-full flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <div className="w-full h-28 sm:w-24 sm:h-24 flex-shrink-0 border bg-white rounded-xl overflow-hidden">
                     <img src={product.images[0] || "https://placehold.co/100"} alt="" className="w-full h-full object-cover object-center"/>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <p className="font-semibold line-clamp-1">{product.name}</p>
-                  <p className="text-xs text-gray-500">{product.category}</p>
-                  <p className="font-bold text-[#68232B]">₹{product.discountedPrice}</p>
+                <div className="flex flex-col gap-1 min-w-0">
+                  {/* Two lines on a phone: a saree name rarely fits one line at
+                      this width, and a single clamped line turns most of the
+                      catalogue into indistinguishable truncations. */}
+                  <p className="font-semibold text-sm sm:text-base line-clamp-2 sm:line-clamp-1">{product.name}</p>
+                  <p className="text-xs text-gray-500 truncate">{product.category}</p>
+                  <p className="font-bold text-sm sm:text-base text-[#68232B]">₹{product.discountedPrice}</p>
+
+                  {/* Stock. The admin card showed name, category, price and
+                      description and NOTHING about stock — so the one person
+                      who can actually restock a saree had to open the edit form
+                      to discover it had sold out. Zero is called out in red
+                      because it is the state that needs action; a low count is
+                      amber as an early warning; anything healthy is quiet, so
+                      the colour means something.
+                      `stockQty` may legitimately be 0, so `??` not `||` — the
+                      latter would turn a real 0 into "—". */}
+                  {(() => {
+                    const qty = Number(product.stockQty ?? NaN);
+                    if (!Number.isFinite(qty)) {
+                      return <p className="text-xs text-gray-400">Stock unknown</p>;
+                    }
+                    if (qty === 0) {
+                      return (
+                        <span className="w-fit rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-red-700">
+                          Sold Out
+                        </span>
+                      );
+                    }
+                    if (qty <= 3) {
+                      return (
+                        <span className="w-fit rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                          Only {qty} left
+                        </span>
+                      );
+                    }
+                    return <p className="text-xs text-gray-500">In stock: {qty}</p>;
+                  })()}
                 </div>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t mt-auto">
-                  <p className="text-xs text-gray-500 truncate w-3/4">{product.description}</p>
-                  <button className="text-red-400 hover:text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
+              <div className="flex justify-between items-center gap-2 pt-2 border-t mt-auto">
+                  {/* Hidden below `sm`: at ~175px wide the description was
+                      truncated to three or four words, which carried no
+                      information and only stole room from the delete control. */}
+                  <p className="hidden sm:block text-xs text-gray-500 truncate w-3/4">{product.description}</p>
+                  {/* ml-auto: with the description hidden on a phone this is
+                      the row's only child, so justify-between leaves it pinned
+                      left where it reads as an orphan. */}
+                  <button className="ml-auto text-red-400 hover:text-red-600" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
                     <Trash size={18} />
                   </button>
               </div>

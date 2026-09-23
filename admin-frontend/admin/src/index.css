@@ -136,4 +136,30 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Hand cursor on anything clickable.
+   *
+   * Tailwind v4's preflight sets `cursor: default` on buttons — that is a
+   * deliberate upstream choice, but it means every button in this panel shows
+   * an arrow unless someone remembers `cursor-pointer` on it, and most did not.
+   * Back, Add, the tab filters and the pagination controls all read as
+   * non-interactive.
+   *
+   * Fixed once, here, rather than by adding the class to each button: a
+   * per-button fix is only ever as complete as the last sweep, and the next
+   * button added would start wrong again.
+   *
+   * Disabled controls deliberately get `not-allowed` instead — a hand cursor on
+   * a button that will not respond is a worse lie than an arrow. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
 }

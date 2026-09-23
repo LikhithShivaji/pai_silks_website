@@ -306,22 +306,22 @@ const AddProduct = ({
       onSubmit={handleSubmit}
       className="w-full flex flex-col gap-3"
     >
-      <div className="flex justify-between w-full">
-        <div className="flex flex-col gap-3">
-          <p className="text-3xl">Product Details</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between w-full">
+        <div className="flex flex-col gap-2 sm:gap-3">
+          <p className="text-2xl sm:text-3xl">Product Details</p>
           <p>Home {" > "} Add Products</p>
         </div>
         <button
           type="button"
           onClick={onBack}
-          className="border-1 cursor-pointer bg-[#68232B] text-white h-fit px-10 py-3 rounded-xl"
+          className="border-1 cursor-pointer bg-[#68232B] text-white h-fit px-6 sm:px-10 py-3 rounded-xl hover:bg-[#8B2E39] transition-colors"
         >
           Back
         </button>
       </div>
 
-      <div className="h-full bg-white rounded-2xl flex flex-col xl:flex-row gap-10 p-5">
-        <div className="w-full p-2 flex flex-col gap-5">
+      <div className="h-full bg-white rounded-2xl flex flex-col xl:flex-row gap-5 xl:gap-10 p-3 sm:p-5">
+        <div className="w-full min-w-0 p-0 sm:p-2 flex flex-col gap-4 sm:gap-5">
           <label className="font-bold">Product Name</label>
           <Input
             name="name"
@@ -492,8 +492,10 @@ const AddProduct = ({
             </div>
           </div>
 
-          <div className="w-full flex gap-5">
-            <div className="w-full flex flex-col gap-3">
+          {/* Matches UpdateProduct: two number fields plus their labels do
+              not fit side by side on a phone. */}
+          <div className="w-full flex flex-col sm:flex-row gap-3 sm:gap-5">
+            <div className="w-full min-w-0 flex flex-col gap-3">
               <p>Regular Price</p>
               <Input
                 name="regularPrice"
@@ -533,7 +535,7 @@ const AddProduct = ({
         </div>
 
         {/* RIGHT: images & actions */}
-        <div className="h-full w-full py-3 px-10 flex flex-col gap-5">
+        <div className="h-full w-full min-w-0 py-3 px-0 sm:px-4 xl:px-10 flex flex-col gap-5">
           <div className="w-full aspect-square gap-3 mt-3 bg-gray-300 p-5 rounded-xl flex justify-center items-center">
             {previewUrls.length === 0 ? (
               <div>Add images here</div>

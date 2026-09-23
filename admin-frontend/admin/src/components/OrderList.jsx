@@ -11,7 +11,10 @@ const OrderList = ({ orders, displayOrderPage }) => {
         <p className="text-xl">Home &gt; OrderList</p>
       </div>
 
-      <div className="my-5 w-full bg-white rounded-2xl ">
+      {/* `p-6` matches the dashboard's wrapper around this same component. It
+          was missing here, so the identical table sat flush against the panel
+          edge on this screen and inset on the other. */}
+      <div className="my-5 w-full bg-white rounded-2xl p-4 sm:p-6">
         <RecentOrders
           orders={orders}
           displayOrderPage={displayOrderPage}

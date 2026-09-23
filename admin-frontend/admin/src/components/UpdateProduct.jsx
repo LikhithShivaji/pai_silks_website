@@ -241,10 +241,10 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full p-5 flex flex-col gap-3">
+    <form onSubmit={handleSubmit} className="w-full p-3 sm:p-5 flex flex-col gap-3">
       {/* Header */}
-      <div className="flex justify-between w-full">
-        <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between w-full">
+        <div className="flex flex-col gap-2 sm:gap-3">
           <p className="text-3xl"> Update Product Details</p>
           <p>Products {" > "} Update Products</p>
         </div>
@@ -253,9 +253,16 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
         </button>
       </div>
 
-      <div className="h-full bg-white rounded-2xl flex flex-row gap-10 p-5">
+      {/* ⚠️ This was `flex flex-row` with NO responsive variant, so the form
+          and the image panel stayed side by side at every width. Two `w-full`
+          children plus a 40px gap cannot fit a 390px screen, so the page simply
+          overflowed: the image grid ran off the right edge, the upload box was
+          cut in half, and the whole layout scrolled sideways under the header.
+          Stacks below `lg`; `min-w-0` on the children is what actually lets
+          them shrink, since a flex item will not go under its content width. */}
+      <div className="h-full bg-white rounded-2xl flex flex-col lg:flex-row gap-5 lg:gap-10 p-3 sm:p-5">
         {/* LEFT FORM */}
-        <div className="w-full p-2 flex flex-col gap-5">
+        <div className="w-full min-w-0 p-0 sm:p-2 flex flex-col gap-4 sm:gap-5">
           <label className="font-bold">Product Name</label>
           <Input value={newProduct.name ?? ""} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} required />
 
@@ -280,8 +287,8 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
           <label className="font-bold">Wash Care</label>
           <Input value={newProduct.washCare ?? ""} onChange={(e) => setNewProduct({ ...newProduct, washCare: e.target.value })} />
 
-          <div className="flex items-center justify-between gap-5">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-5">
+            <div className="flex-1 min-w-0">
               <label className="font-bold block mb-2">Stock Quantity</label>
               <Input
                 name="quantity"
@@ -302,12 +309,14 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
             </div>
           </div>
 
-          <div className="w-full flex gap-5">
-            <div className="w-full flex flex-col gap-3">
+          {/* Prices stack on a phone: two number fields sharing ~175px each
+              left no room for the label above them. */}
+          <div className="w-full flex flex-col sm:flex-row gap-3 sm:gap-5">
+            <div className="w-full min-w-0 flex flex-col gap-3">
                  <p>Regular Price</p>
                  <Input value={newProduct.regularPrice ?? ""} onChange={(e) => setNewProduct({ ...newProduct, regularPrice: e.target.value })} placeholder="Regular Price" />
             </div>
-            <div className="w-full flex flex-col gap-3">
+            <div className="w-full min-w-0 flex flex-col gap-3">
                  <p>Discounted Price</p>
                  <Input value={newProduct.discountedPrice ?? ""} onChange={(e) => setNewProduct({ ...newProduct, discountedPrice: e.target.value })} placeholder="Discounted Price" />
             </div>
@@ -315,8 +324,8 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
         </div>
 
         {/* RIGHT IMAGE SECTION */}
-        <div className="h-full w-full py-3 px-10 flex flex-col gap-5">
-          <div className="w-full aspect-square gap-3 mt-3 bg-gray-300 p-5 rounded-xl flex justify-center items-center">
+        <div className="h-full w-full min-w-0 py-3 px-0 sm:px-4 lg:px-10 flex flex-col gap-5">
+          <div className="w-full aspect-square gap-3 mt-3 bg-gray-300 p-3 sm:p-5 rounded-xl flex justify-center items-center">
             {previewUrls.length === 0 ? <div>No images</div> : (
               <div className="w-full aspect-square grid grid-cols-2 grid-rows-2 gap-3 bg-gray-300 rounded-xl overflow-hidden">
                 {previewUrls.slice(0, 4).map((src, idx) => (
@@ -330,7 +339,7 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
 
           <div className="flex flex-col gap-5">
             <p className="font-semibold">Add More Images</p>
-            <div className="border-2 border-dashed border-gray-400 p-5 w-full rounded-2xl flex flex-col justify-center items-center gap-5">
+            <div className="border-2 border-dashed border-gray-400 p-4 sm:p-5 w-full rounded-2xl flex flex-col justify-center items-center gap-4 sm:gap-5 text-center">
               <ImageIcon height={50} />
               <div className="flex flex-col justify-center items-center">
                 <p className="text-[#7a7a7a]">Drop your image here, or browse</p>
@@ -343,7 +352,7 @@ const UpdateProduct = ({ categoryName, onBack, updateProductDetails }) => {
             ))}
           </div>
 
-          <div className="flex gap-5 w-full">
+          <div className="flex gap-3 sm:gap-5 w-full">
             <button type="button" onClick={onBack} disabled={loading} className="border-1 rounded-xl p-3 flex justify-center items-center cursor-pointer w-full bg-red-300">Cancel</button>
             <button type="submit" disabled={loading} className="border-1 rounded-xl p-3 flex justify-center items-center cursor-pointer w-full bg-green-400 text-white">{loading ? "Updating..." : "Update"}</button>
           </div>
