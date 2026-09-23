@@ -61,9 +61,25 @@ const DELETE = process.argv.includes('--delete');
     cursor = page.next_cursor;
   } while (cursor);
 
-  const [rows] = await pool.query('SELECT image_url FROM product_images');
+  // EVERY table that owns a Cloudinary URL must be listed here.
+  //
+  // ⚠️ This scanned only `product_images`, and category tile images (CF-35) are
+  // uploaded through the same middleware into the same `products/` prefix — so
+  // with `--delete` this script would have destroyed every category image on
+  // the site, and the homepage tiles would have silently fallen back to the
+  // default pictures with no error anywhere.
+  //
+  // Anything that stores a Cloudinary URL in future must be added here BEFORE
+  // it ships, or this script deletes it.
+  const [productRows] = await pool.query('SELECT image_url FROM product_images');
+  const [categoryRows] = await pool.query(
+    'SELECT image_url FROM category WHERE image_url IS NOT NULL'
+  );
+
   const referenced = new Set(
-    rows.map((r) => publicIdFromUrl(r.image_url)).filter(Boolean)
+    [...productRows, ...categoryRows]
+      .map((r) => publicIdFromUrl(r.image_url))
+      .filter(Boolean)
   );
 
   const orphans = assets.filter((a) => !referenced.has(a.public_id));

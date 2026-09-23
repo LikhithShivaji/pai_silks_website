@@ -1,7 +1,15 @@
-export default function CategoryCard({ name, image }) {
+// `onClick` added so the tiles actually go somewhere. They had a hover effect
+// and no handler — six tiles that looked interactive and ignored every click.
+// Rendered as a <button> when clickable so keyboard focus and Enter/Space work
+// without extra handlers. See CLAUDE.md CF-35.
+export default function CategoryCard({ name, image, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div
-      className="
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      aria-label={onClick ? `Shop ${name}` : undefined}
+      className={`
         relative
         flex items-center justify-center
         overflow-hidden
@@ -12,7 +20,8 @@ export default function CategoryCard({ name, image }) {
         h-[clamp(170px,20vw,250px)]
         bg-center bg-cover
         group
-      "
+        ${onClick ? "cursor-pointer hover:scale-105" : ""}
+      `}
       style={{ backgroundImage: `url(${image})` }}
     >
       {/* Overlay ( ::before equivalent ) */}
@@ -39,6 +48,6 @@ export default function CategoryCard({ name, image }) {
           {name}
         </h2>
       </div>
-    </div>
+    </Tag>
   );
 }

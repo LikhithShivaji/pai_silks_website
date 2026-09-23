@@ -478,6 +478,34 @@ async updateProductStockCAS(product_id, stock_qty, expected_stock_qty, conn = nu
   }
 }
 
+    /**
+     * Set a category's tile image, returning the URL it replaced.
+     *
+     * The previous URL is read inside the same call so the caller can destroy
+     * the old Cloudinary asset AFTER the database commits. Without that, every
+     * re-upload strands a paid asset — the AB-10 failure, which had left 111
+     * unreferenced images before it was fixed for products.
+     */
+    async updateCategoryImage(categoryId, imageUrl) {
+        try {
+            const [prev] = await pool.query(
+                sqlqueries.product.getCategoryImageById,
+                [categoryId]
+            );
+            const [result] = await pool.query(
+                sqlqueries.product.updateCategoryImage,
+                [imageUrl, categoryId]
+            );
+            return {
+                affectedRows: result.affectedRows,
+                previousUrl: prev.length ? prev[0].image_url : null,
+            };
+        } catch (err) {
+            console.error("Error in updateCategoryImage:", sanitizeError(err));
+            throw err;
+        }
+    }
+
     /** Live category name for an id, or null. */
     async getCategoryNameById(categoryId) {
         try {

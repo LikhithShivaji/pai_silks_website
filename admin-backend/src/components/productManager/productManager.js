@@ -277,10 +277,15 @@ const countProductsInCategory = async (categoryName) =>
 const deleteCategoryWithProducts = async (categoryId, categoryName) =>
   dbCmds.deleteCategoryWithProducts(categoryId, categoryName);
 
+/** Set a category's tile image; returns { affectedRows, previousUrl }. CF-35. */
+const updateCategoryImage = async (categoryId, imageUrl) =>
+  dbCmds.updateCategoryImage(categoryId, imageUrl);
+
 module.exports = {
     getCategoryNameById,
     countProductsInCategory,
     deleteCategoryWithProducts,
+    updateCategoryImage,
     createProduct,
     getCategoryWiseCount,
     getAllProductDetails,

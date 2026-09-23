@@ -23,6 +23,16 @@ const getBestSellers = async () => {
   }
 };
 
+/** Real categories with images, holding at least one product. CF-35. */
+const getCategoryTiles = async () => {
+  try {
+    return await dbCmds.getCategoryTiles();
+  } catch (err) {
+    console.error("Error in productManager.getCategoryTiles:", sanitizeError(err));
+    throw err;
+  }
+};
+
 const getAllCategories = async () => {
   try {
     // 1. Await the database operation and store the result in a variable
@@ -373,6 +383,7 @@ module.exports = {
   getAllCollections,
   getBestSellers,
   getAllCategories,
+  getCategoryTiles,
   getProductById,
   getProductsByCategory,
   addToWishlist,

@@ -9,7 +9,25 @@ import { useNavigate } from "react-router-dom";
 import { CLIENT_API, apiFetch } from "@/config/api";
 import frame from "./assets/heroframe.svg";
 import finisher from "./assets/finisher.svg";
-import { categories } from "./categoryData";
+// `categoryData.js` is gone — six hardcoded category names that matched nothing
+// in the catalogue (CF-35). Its four images survive as the fallback for a
+// category whose admin-uploaded image is still NULL, so no tile ever renders
+// blank while the client works through uploading real ones.
+import categoryFallback1 from "./assets/Rectangle.png";
+import categoryFallback2 from "./assets/saree_image2.svg";
+import categoryFallback3 from "./assets/saree_image3.svg";
+import categoryFallback4 from "./assets/saree_image4.svg";
+
+const CATEGORY_FALLBACK_IMAGES = [
+  categoryFallback1,
+  categoryFallback2,
+  categoryFallback3,
+  categoryFallback4,
+];
+
+// Cycles the four, so adjacent tiles without images do not all look identical.
+const categoryFallbackImage = (index) =>
+  CATEGORY_FALLBACK_IMAGES[index % CATEGORY_FALLBACK_IMAGES.length];
 import reviews from "./reviews.js";
 import React, { useEffect, useState, useContext } from "react";
 import { CartContext } from "./CartContext.jsx";
@@ -53,6 +71,11 @@ function Homepage() {
   const [collections, setCollections] = useState([]);
   const [loadingCollections, setLoadingCollections] = useState(true);
   const [loadingBestSellers, setLoadingBestSellers] = useState(true);
+  // Real categories for the homepage strip (CF-35), and whether the marquee is
+  // paused because the pointer is over it.
+  const [categoryTiles, setCategoryTiles] = useState([]);
+  const [categoryScrollPaused, setCategoryScrollPaused] = useState(false);
+
   const [bestSellers, setBestSellers] = useState([]);
   const [currentBestIndex, setCurrentBestIndex] = useState(0);
   const currentProduct = bestSellers[currentBestIndex];
@@ -135,6 +158,14 @@ function Homepage() {
       .then((data) => data.success && setCollections(data.data))
       .catch((err) => console.error("Failed to load collections:", err))
       .finally(() => setLoadingCollections(false));
+  }, []);
+
+  /* Category tiles — the real categories, from the server. CF-35. */
+  useEffect(() => {
+    apiFetch(`${CLIENT_API}/api/category-tiles`)
+      .then((res) => res.json())
+      .then((data) => data.success && setCategoryTiles(data.data || []))
+      .catch((err) => console.error("Failed to load category tiles:", err));
   }, []);
 
   /* Best sellers */
@@ -562,19 +593,51 @@ function Homepage() {
         </section>
       )}
 
-      {/* CATEGORIES SCROLL */}
-      <section className="text-center text-[#68232B] py-4">
-        <h1 className="text-xl md:text-5xl">
-          <u>Our Categories</u>
-        </h1>
-        <div className="overflow-hidden">
-          <div className="flex gap-4 animate-[scrollLeft_25s_linear_infinite] w-max">
-            {[...categories, ...categories].map((cat, i) => (
-              <CategoryCard key={i} {...cat} />
-            ))}
+      {/* CATEGORIES SCROLL
+          Driven by /api/category-tiles — the REAL categories, each holding at
+          least one product. It previously rendered six names hardcoded in
+          src/categoryData.js which matched nothing in the catalogue: every one
+          returned zero products, and the tiles were not clickable. Invented
+          data presented as real, the same class as CF-21. See CLAUDE.md CF-35.
+
+          Hidden entirely while loading or if none come back, rather than
+          showing an empty heading with a blank strip under it. */}
+      {categoryTiles.length > 0 && (
+        <section className="text-center text-[#68232B] py-4">
+          <h1 className="text-xl md:text-5xl">
+            <u>Our Categories</u>
+          </h1>
+          <div
+            className="overflow-hidden"
+            // Pause on hover so a customer can actually read and click a tile
+            // instead of chasing it across the screen. Done with a CSS class on
+            // the moving element rather than JS, so it costs no re-render.
+            onMouseEnter={() => setCategoryScrollPaused(true)}
+            onMouseLeave={() => setCategoryScrollPaused(false)}
+          >
+            <div
+              className="flex gap-4 animate-[scrollLeft_25s_linear_infinite] w-max"
+              style={{ animationPlayState: categoryScrollPaused ? "paused" : "running" }}
+            >
+              {/* Doubled so the marquee loops seamlessly. The key carries the
+                  copy index because the same category id appears twice — React
+                  keys must be unique within the list. */}
+              {[...categoryTiles, ...categoryTiles].map((cat, i) => (
+                <CategoryCard
+                  key={`${cat.id}-${i < categoryTiles.length ? "a" : "b"}`}
+                  name={cat.name}
+                  image={cat.image_url || categoryFallbackImage(i)}
+                  onClick={() =>
+                    // Mirrors the collections tiles above: /shop reads this off
+                    // location.state and applies it as a filter.
+                    navigate("/shop", { state: { selectedCategory: cat.name } })
+                  }
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* REVIEWS */}
       <section className="py-[1vw]">
