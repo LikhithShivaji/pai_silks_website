@@ -32,6 +32,38 @@ const authMiddleware = async (req, res, next) => {
 
     const payload = utils.verifyToken(token);
     if (!payload) {
+      // Diagnostics first. A bare 401 with no log is what made the
+      // cross-service logout impossible to diagnose: the server looked healthy
+      // while every request failed.
+      //
+      // The cookie NAMES are listed because the failure is usually about which
+      // cookie arrived, not what was in it. Names only — never values: these
+      // are session tokens, and logging one would put a live credential in a
+      // log file.
+      const names = Object.keys(req.cookies || {});
+      console.warn(
+        `[auth] 401 on ${req.method} ${req.originalUrl}\n` +
+        `       cookies received: ${names.length ? names.join(', ') : '(none)'}\n` +
+        `       expected token cookie: ${CookiesKey.token}\n` +
+        `       reason: ${utils.describeTokenFailure(token)}`
+      );
+
+      // A token THIS service cannot verify is useless to it — and if it is left
+      // in the browser it is re-sent on every single request, failing
+      // identically, until it expires days later.
+      //
+      // That is exactly what kept the storefront logged out after the admin
+      // cookies were renamed: the browser still held a `token` cookie holding
+      // an ADMIN JWT from before the rename. Nothing overwrote it (admin now
+      // writes `admin_token`) and nothing cleared it, so it poisoned every
+      // storefront request indefinitely. Clearing it here makes that
+      // self-healing for every user instead of requiring them to clear their
+      // browser data by hand.
+      //
+      // Safe for the ordinary expired-session case too: the cookie is spent,
+      // and the user is being sent to log in again regardless.
+      if (token) utils.clearAuthCookies(res);
+
       return res.status(401).json({
         success: false,
         message: 'Authentication required. Please log in.',
@@ -88,6 +120,8 @@ const authMiddleware = async (req, res, next) => {
       // the customer from the SERVER's answer instead of an editable
       // localStorage string. See CLAUDE.md CF-46.
       user_name: session.user_name,
+      // Account phone, for prefilling the checkout delivery number.
+      phone_number: session.phone_number,
     };
 
     return next();

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const appDefines = require('../constants/appDefines');
+const CookiesKey = require('../constants/cookieKeys');
 
 /**
  * Fail fast at startup rather than signing tokens with `undefined`, which
@@ -117,12 +118,74 @@ class Utils {
      *
      * Never throws — callers treat null as "not authenticated".
      */
+    /**
+     * Remove this service's auth cookies, with the SAME attributes they were
+     * set with — a mismatch on path or sameSite leaves the browser holding the
+     * cookie it was told to drop.
+     *
+     * Also clears the LEGACY names this service used before the admin/client
+     * cookie split. That is the whole point: a browser holding a stale `token`
+     * from the shared-name era re-sends it on every request forever, and
+     * nothing else ever removes it.
+     */
+    clearAuthCookies(res) {
+        const isProduction = process.env.NODE_ENV === 'production';
+        const opts = {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'none' : 'lax',
+            path: '/',
+        };
+        // ⚠️ ONLY this service's OWN cookie names.
+        //
+        // The admin's legacy names include plain `token` and `session_id` —
+        // which now belong to the STOREFRONT. Clearing those from here would
+        // log a customer out of the shop whenever an admin request failed, on
+        // any host where the two share a cookie jar. That is the original bug
+        // in reverse, and it is why the legacy list is deliberately NOT used
+        // here.
+        //
+        // The stale shared-name cookie still gets cleaned up, by the service
+        // that actually owns that name: the storefront receives the leftover
+        // `token`, cannot verify it, and clears it on the first request.
+        [CookiesKey.token, CookiesKey.session_id]
+            .forEach((name) => res.clearCookie(name, opts));
+    }
+
     verifyToken(token) {
         if (!token) return null;
         try {
             return jwt.verify(token, JWT_SECRET);
         } catch {
             return null;
+        }
+    }
+
+    /**
+     * Why a token failed, for logging only.
+     *
+     * verifyToken() returns null for every failure, which is correct for the
+     * auth decision — a caller must never branch on the reason — but it meant
+     * the logs could not distinguish an EXPIRED session (normal, the user waits
+     * a week) from an INVALID SIGNATURE (a token issued by a different service,
+     * i.e. a cookie-name collision). Those two need completely different
+     * responses and looked identical.
+     *
+     * Never send this to a client: "invalid signature" vs "expired" is exactly
+     * the kind of detail that helps someone probing the API.
+     */
+    describeTokenFailure(token) {
+        if (!token) return 'no token';
+        try {
+            jwt.verify(token, JWT_SECRET);
+            return 'valid';
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') return `expired at ${err.expiredAt?.toISOString?.() ?? 'unknown'}`;
+            if (err.name === 'NotBeforeError') return 'not active yet';
+            // 'invalid signature' is the one that matters: the token is
+            // well-formed but was signed with ANOTHER secret — almost always a
+            // token minted by the other service under a colliding cookie name.
+            return `${err.name}: ${err.message}`;
         }
     }
 
