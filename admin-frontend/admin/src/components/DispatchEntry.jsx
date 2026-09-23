@@ -109,8 +109,15 @@ export default function DispatchEntry({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Package size={16} className="text-[#68232B] shrink-0" />
+      {/* Stacked and full-width on a phone, one row from `sm` up.
+          `flex-wrap` put the carrier select, a 224px-fixed number field and the
+          Save button onto three ragged lines of different widths, each sized by
+          its own content — which read as three unrelated controls rather than
+          one form. Below `sm` every control now spans the full width, so they
+          line up and are comfortably tappable. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex items-center gap-2">
+          <Package size={16} className="text-[#68232B] shrink-0" />
 
         {/* Carrier FIRST — see the note at the top of this file. */}
         <select
@@ -121,7 +128,7 @@ export default function DispatchEntry({
           }}
           disabled={disabled || saving}
           aria-label="Carrier"
-          className="border border-[#68232B]/30 rounded px-2 py-1 text-sm bg-white disabled:opacity-50"
+          className="flex-1 sm:flex-none border border-[#68232B]/30 rounded px-2 py-2 sm:py-1 text-sm bg-white disabled:opacity-50"
         >
           <option value="">Carrier…</option>
           {CARRIERS.map((c) => (
@@ -130,6 +137,7 @@ export default function DispatchEntry({
             </option>
           ))}
         </select>
+        </div>
 
         <input
           ref={inputRef}
@@ -148,14 +156,14 @@ export default function DispatchEntry({
           autoCorrect="off"
           autoCapitalize="characters"
           spellCheck={false}
-          className="border border-[#68232B]/30 rounded px-2 py-1 text-sm font-mono w-56 bg-white disabled:opacity-50"
+          className="w-full sm:w-56 border border-[#68232B]/30 rounded px-2 py-2 sm:py-1 text-sm font-mono bg-white disabled:opacity-50"
         />
 
         <button
           type="button"
           onClick={submit}
           disabled={disabled || saving || !carrier || !consignment.trim()}
-          className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-[#68232B] text-white disabled:opacity-40"
+          className="w-full sm:w-auto flex items-center justify-center gap-1 px-3 py-2 sm:py-1 rounded text-sm bg-[#68232B] text-white disabled:opacity-40"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : "Save"}
         </button>

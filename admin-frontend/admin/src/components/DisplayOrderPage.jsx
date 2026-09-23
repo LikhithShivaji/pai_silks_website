@@ -1,6 +1,9 @@
 import React, { useEffect } from "react";
 import { SelectComponent } from "./ui/SelectComponent";
 import DispatchEntry from "./DispatchEntry";
+import { formatDate } from "@/utils/formatDate";
+import { Printer } from "lucide-react";
+import { printInvoice } from "./printInvoice";
 
 import {
 
@@ -33,23 +36,10 @@ import {
 //
 // `en-IN` inserts " at " between date and time and lower-cases the meridiem, so
 // both are normalised afterwards.
-const formatDate = (value) => {
-  if (value === null || value === undefined || value === "") return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-
-  return d
-    .toLocaleString("en-IN", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    })
-    .replace(" at ", " ")
-    .replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
-};
+// Moved to utils/formatDate.js and imported at the top of this file. The orders
+// TABLE had no formatter at all and was printing raw ISO strings; rather than
+// copy this one, both now share it — a second copy is how the two would drift
+// into showing the same order's date two different ways.
 
 const formatMoney = (value) => {
   const n = Number(value);
@@ -78,24 +68,46 @@ export default function DisplayOrderPage({
   }
 
   return (
-    <div className="p-6">
-      <div className="flex w-full justify-between">
-        <div className="flex flex-col gap-3">
-          <p className="text-2xl font-bold">OrderDetails2</p>
+    <div className="p-3 sm:p-6">
+      {/* Stacks on a phone. Side by side, the title wrapped to three lines
+          while the two buttons squeezed into narrow columns that wrapped their
+          own labels ("Back / to / orders"). Full-width buttons below the title
+          read as buttons and are comfortably tappable. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:w-full sm:justify-between">
+        <div className="flex flex-col gap-2 sm:gap-3">
+          {/* Was the literal "OrderDetails2" — a developer's working title left
+              on screen, which told the admin nothing about WHICH order they had
+              opened. */}
+          <p className="text-2xl font-bold">
+            Order #{order.orderId ?? order.id} Details
+          </p>
           <p className="text-sm">
             Home {">"} Order List {">"} Order Details
           </p>
         </div>
-        <button
-          onClick={onBack}
-          className="text-sm text-white cursor-pointer bg-[#68232B] p-4 rounded-xl "
-        >
-          ← Back to orders
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Packing invoice. Opens a self-contained print document rather than
+              printing this page — printing the panel would carry the sidebar,
+              the status dropdown and the despatch form onto the paper. */}
+          <button
+            onClick={() => printInvoice(order)}
+            title="Print the invoice for this order"
+            className="flex flex-1 sm:flex-none items-center justify-center gap-2 whitespace-nowrap text-sm text-[#68232B] cursor-pointer border border-[#68232B] bg-white px-4 py-3 sm:p-4 rounded-xl hover:bg-[#68232B] hover:text-white transition-colors"
+          >
+            <Printer size={16} />
+            Print invoice
+          </button>
+          <button
+            onClick={onBack}
+            className="flex-1 sm:flex-none whitespace-nowrap text-sm text-white cursor-pointer bg-[#68232B] px-4 py-3 sm:p-4 rounded-xl hover:bg-[#8B2E39] transition-colors"
+          >
+            ← Back to orders
+          </button>
+        </div>
       </div>
 
       <div className="my-5">
-        <div className="bg-white rounded-lg shadow p-6 space-y-4">
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-semibold">
@@ -122,12 +134,17 @@ export default function DisplayOrderPage({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          {/* One column on a phone. At `grid-cols-2` on a 390px screen each
+              column is ~170px, so the email and the ISO date below overflowed
+              their cells and printed ON TOP of each other. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div>
               <h3 className="font-medium">Customer</h3>
               <p className="font-semibold">{order.customerName ?? "-"}</p>
               {order.email && (
-                <p className="text-sm text-gray-500">{order.email}</p>
+                // break-words: an address with no spaces cannot wrap otherwise
+                // and simply runs past the edge of its column.
+                <p className="text-sm text-gray-500 break-words">{order.email}</p>
               )}
               {order.contactNumber && (
                 <p className="text-sm text-gray-500">
@@ -140,7 +157,11 @@ export default function DisplayOrderPage({
               <h3 className="font-medium">Order Meta</h3>
               <div className="text-sm text-gray-600">
                 <p>Order ID: {order.orderId ?? order.id}</p>
-                <p>Date: {order.date ?? "-"}</p>
+                {/* Was `{order.date}` raw, printing the unformatted
+                    "2026-09-21T16:33:40.000Z" straight from the API while the
+                    identical date three lines above was already formatted.
+                    Same helper as everywhere else. */}
+                <p>Date: {formatDate(order.date)}</p>
               </div>
             </div>
           </div>
@@ -156,7 +177,7 @@ export default function DisplayOrderPage({
                     className="flex gap-3 items-center p-2 border rounded mb-2"
                   >
                     {it.image && (
-                      <div className="w-12 h-12 overflow-hidden rounded">
+                      <div className="w-12 h-12 shrink-0 overflow-hidden rounded">
                         <img
                           src={it.image}
                           alt={it.name}
@@ -164,12 +185,19 @@ export default function DisplayOrderPage({
                         />
                       </div>
                     )}
-                    <div className="flex-1">
-                      <div className="flex justify-between">
-                        <div className="font-semibold">
+                    {/* min-w-0 lets the name column actually shrink, and the
+                        price gets shrink-0 + whitespace-nowrap so it keeps its
+                        own line instead of being pushed into the wrapping
+                        product name — which is what made "₹4999.00" sit on top
+                        of "Royal Crimson Kanchipuram Silk". Aligned to the top
+                        so the price lines up with the FIRST line of the name,
+                        not the middle of a three-line block. */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="font-semibold min-w-0 break-words">
                           {it.name || it.title || it.product || "Product"}
                         </div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-gray-600 shrink-0 whitespace-nowrap">
                           {formatMoney(it.price ?? it.amount)}
                         </div>
                       </div>
@@ -190,7 +218,7 @@ export default function DisplayOrderPage({
           {/* Actions */}
         </div>
       </div>
-      <div className="w-full bg-white rounded-xl p-5 flex flex-col gap-10 my-5">
+      <div className="w-full bg-white rounded-xl p-4 sm:p-5 flex flex-col gap-6 sm:gap-10 my-5">
         <div className="flex gap-5 items-center">
           <h2 className="font-semibold text-xl">
             Order ID: #{order.orderId ?? order.id}
@@ -234,7 +262,7 @@ export default function DisplayOrderPage({
           </p>
         </div>
       </div>
-      <div className="w-full bg-white rounded-xl p-5 flex flex-col gap-10 my-5">
+      <div className="w-full bg-white rounded-xl p-4 sm:p-5 flex flex-col gap-6 sm:gap-10 my-5">
         <Table>
           <TableCaption>A list of your recent invoices.</TableCaption>
           <TableHeader>
