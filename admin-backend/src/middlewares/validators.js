@@ -1,4 +1,4 @@
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const appDefines = require('../constants/appDefines');
 
 /**
@@ -222,6 +222,25 @@ const insertImage = [
     .isInt({ min: 1 }).withMessage('Invalid product id.').toInt(),
 ];
 
+/**
+ * Optional `?limit=` on the dashboard list endpoints.
+ *
+ * The dashboard shows a short preview; "View All" asks the same endpoint for a
+ * longer list. Bounded rather than unbounded on purpose — `LIMIT` was added to
+ * these queries in the first place because "best sellers" was returning the
+ * entire delivered catalogue (AB-17), and an unchecked `?limit=` would hand
+ * that back through the front door.
+ */
+const dashboardLimit = [
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: appDefines.DASHBOARD_LIMITS.MAX_LIST })
+    .withMessage(
+      `limit must be a whole number between 1 and ${appDefines.DASHBOARD_LIMITS.MAX_LIST}.`
+    )
+    .toInt(),
+];
+
 module.exports = {
   createProduct,
   updateProduct,
@@ -229,4 +248,5 @@ module.exports = {
   addCategory,
   idParam,
   insertImage,
+  dashboardLimit,
 };

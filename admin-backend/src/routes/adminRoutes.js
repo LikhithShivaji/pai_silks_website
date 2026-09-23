@@ -5,6 +5,7 @@ const upload = require('../middlewares/cloudinaryUpload')
 const authMiddleware = require('../middlewares/authMiddleware');
 const requireAdmin = require('../middlewares/requireAdmin');
 const { validate, rejectNonScalarBody } = require('../middlewares/validate');
+const { pageLoadLimiter } = require('../middlewares/rateLimiters');
 const v = require('../middlewares/validators');
 
 /**
@@ -36,7 +37,18 @@ router.use(authMiddleware, requireAdmin);
 
 // Lets the panel ask the server whether the session is real, rather than
 // trusting localStorage.admin_auth — which anyone can set in DevTools (AF-02).
-router.get('/verify-token', adminController.verifyToken);
+//
+// `pageLoadLimiter` is mounted HERE and nowhere else. ProtectedAdminRoute calls
+// this endpoint exactly once per page load, so limiting it counts page loads
+// directly — the owner's "10 refreshes an hour" rule, expressed as the thing it
+// actually is rather than inferred from a total request budget.
+//
+// Placed AFTER authMiddleware deliberately (it inherits the router.use above),
+// so only AUTHENTICATED calls are counted. Were it in front of auth, anyone who
+// could reach the endpoint could burn the admin's budget from the outside and
+// lock the real admin out of their own panel — turning a safety measure into a
+// denial-of-service against its owner.
+router.get('/verify-token', pageLoadLimiter, adminController.verifyToken);
 
 router.post('/create-product', v.createProduct, validate, adminController.createProduct);
 
@@ -51,7 +63,14 @@ router.put(
 
 router.get('/get-order-stats', adminController.getOrderStats);
 
-router.get('/get-bestSeller-list', adminController.getBestSellerList);
+// Optional ?limit= — the dashboard preview omits it and gets the default 10;
+// the "View All" screen asks for more, bounded by DASHBOARD_LIMITS.MAX_LIST.
+router.get(
+  '/get-bestSeller-list',
+  v.dashboardLimit,
+  validate,
+  adminController.getBestSellerList
+);
 
 router.get('/get-recent-orders', adminController.getRecentOrders);
 
@@ -88,6 +107,18 @@ upload.array("images", 5), // frontend key = "images" — runs first so multipar
   v.insertImage,
   validate,
   adminController.insertImage
+);
+
+// Category tile image — ONE file, not an array. See CLAUDE.md CF-35.
+//
+// `upload.single` runs before validation for the same reason as /insert-image:
+// multer must parse the multipart body before any field is readable, and
+// `:id` needs validating either way.
+router.put("/categories/:id/image",
+  upload.single("image"),
+  v.idParam,
+  validate,
+  adminController.updateCategoryImage
 );
 
 router.delete('/delete-product/:id', v.idParam, validate, adminController.deleteProduct);

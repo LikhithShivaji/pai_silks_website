@@ -8,6 +8,9 @@ const appDefines = require('../constants/appDefines');
 const CookiesKey = require('../constants/cookieKeys');
 const admindb = require('../dbOps/adminDbOps'); // adjust path if needed
 const { sanitizeError, describeDuplicate } = require('../utils/safeError');
+// Old category tile images are destroyed after a replacement commits (CF-35),
+// the same discipline product images follow (AB-10).
+const { destroyImagesByUrl } = require('../utils/cloudinaryAssets');
 
 // adminController.js
 
@@ -104,6 +107,55 @@ exports.adminLogin = async (req, res, next) => {
 };
 
 
+/**
+ * Set a category's homepage tile image. See CLAUDE.md CF-35.
+ *
+ * Single file, unlike product images. The upload middleware has already put it
+ * on Cloudinary by the time this runs, so `req.file.path` is the secure_url.
+ */
+exports.updateCategoryImage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file?.path) {
+      return res.status(400).json({
+        success: false,
+        message: "No image was uploaded.",
+      });
+    }
+
+    const { affectedRows, previousUrl } =
+      await productManager.updateCategoryImage(id, req.file.path);
+
+    if (affectedRows === 0) {
+      // The category vanished between the upload and the write. The asset is
+      // already on Cloudinary, so remove it rather than strand it.
+      await destroyImagesByUrl([req.file.path]);
+      return res.status(404).json({
+        success: false,
+        message: `No category found with id ${id}.`,
+      });
+    }
+
+    // AFTER the database commit, never before. If the delete ran first and the
+    // update then failed, the category would point at an asset that no longer
+    // exists — a broken tile. Stranding an unused asset is the cheaper
+    // mistake, and destroyImagesByUrl never throws. See AB-10.
+    if (previousUrl && previousUrl !== req.file.path) {
+      await destroyImagesByUrl([previousUrl]);
+    }
+
+    return res.status(200).json({
+      success: true,
+      id: Number(id),
+      image_url: req.file.path,
+      message: "Category image updated.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 exports.insertImage = async (req, res) => {
   try {
     const { product_id } = req.body;
@@ -182,7 +234,9 @@ exports.getOrderStats = async (req, res) => {
 
 exports.getBestSellerList = async (req, res) => {
   try {
-    const result = await dashBoardManager.getBestSellers();
+    // Validated and coerced to a number by v.dashboardLimit; undefined when the
+    // caller does not ask, in which case the dbOp applies the dashboard default.
+    const result = await dashBoardManager.getBestSellers(req.query.limit);
     return utils.sendResponse(res, result);
   } catch (error) {
     console.error("Error in getBestSellerList:", sanitizeError(error));
@@ -521,8 +575,23 @@ exports.logout = async (req, res, next) => {
       sameSite: isProduction ? 'none' : 'lax',
       path: '/',
     };
-    [CookiesKey.token, CookiesKey.session_id, CookiesKey.role_id, CookiesKey.pri_email]
-      .forEach((key) => res.clearCookie(key, clearOpts));
+    // ⚠️ This service's OWN names only — the legacy list is deliberately NOT
+    // spread in here.
+    //
+    // Those legacy names are plain `token` and `session_id`, which now belong
+    // to the STOREFRONT. Clearing them on admin logout would sign the customer
+    // out of the shop at the same time, on any host where the two share a
+    // cookie jar — which on localhost is always, because a cookie's scope
+    // ignores the port. That is the cross-service logout bug in reverse.
+    //
+    // A leftover shared-name cookie is cleaned up by the service that owns that
+    // name: the storefront cannot verify it and clears it on the next request.
+    [
+      CookiesKey.token,
+      CookiesKey.session_id,
+      CookiesKey.role_id,
+      CookiesKey.pri_email,
+    ].forEach((key) => res.clearCookie(key, clearOpts));
 
     return res.status(200).json({ success: true, message: 'Logged out.' });
   } catch (err) {

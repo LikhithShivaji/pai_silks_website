@@ -12,6 +12,7 @@ const DashBoard = ({
   ordersLoading = false,
   ordersError = null,
   onRetryOrders = null,
+  onViewAllBestSellers = () => {},
 }) => {
   // Stats come from the SERVER when available (GET /api/get-order-stats), with
   // the local count as a fallback for the first render and for any fetch
@@ -44,49 +45,55 @@ const DashBoard = ({
       </div>
 
       {/* --- STATS CARDS --- */}
-      <div className="flex flex-col lg:flex-row w-full gap-5 lg:gap-10 my-5">
+      {/* Always a row. These were `flex-col lg:flex-row`, so on a phone the
+          three numbers stacked into a full screen of scrolling — the one view
+          that should be readable at a glance was the one that needed scrolling.
+          They fit side by side once the padding and type scale down with the
+          viewport; `min-w-0` on each card is what lets them actually shrink,
+          since a flex item refuses to go below its content width by default. */}
+      <div className="flex flex-row w-full gap-2 sm:gap-5 lg:gap-10 my-5">
         {/* Total Orders */}
-        <div className="bg-white rounded-2xl p-5 px-10 w-full flex flex-col gap-3">
+        <div className="bg-white rounded-2xl p-3 sm:p-5 sm:px-10 w-full min-w-0 flex flex-col gap-2 sm:gap-3">
           <div className="flex justify-between items-center">
-            <p className="font-semibold">Total Orders</p>
-            <ThreeDotts className="cursor-pointer" />
+            <p className="font-semibold text-xs sm:text-base truncate">Total Orders</p>
+            <ThreeDotts className="cursor-pointer shrink-0" />
           </div>
-          <div className="flex justify-center gap-6 items-center">
-            <div className="bg-[#68232B] p-3 rounded-xl">
+          <div className="flex justify-center gap-2 sm:gap-6 items-center">
+            <div className="bg-[#68232B] p-2 sm:p-3 rounded-xl">
               <OrderBag />
             </div>
             {/* 🔥 Fixed: Shows Real Number */}
-            <p className="font-semibold text-2xl">{stats.total}</p>
+            <p className="font-semibold text-lg sm:text-2xl">{stats.total}</p>
           </div>
         </div>
 
         {/* Active Orders */}
-        <div className="bg-white rounded-2xl p-5 px-10 w-full flex flex-col gap-3">
+        <div className="bg-white rounded-2xl p-3 sm:p-5 sm:px-10 w-full min-w-0 flex flex-col gap-2 sm:gap-3">
           <div className="flex justify-between items-center">
-            <p className="font-semibold">Active Orders</p>
-            <ThreeDotts className="cursor-pointer" />
+            <p className="font-semibold text-xs sm:text-base truncate">Active Orders</p>
+            <ThreeDotts className="cursor-pointer shrink-0" />
           </div>
-          <div className="flex justify-center gap-6 items-center">
-            <div className="bg-[#68232B] p-3 rounded-xl">
+          <div className="flex justify-center gap-2 sm:gap-6 items-center">
+            <div className="bg-[#68232B] p-2 sm:p-3 rounded-xl">
               <OrderBag />
             </div>
             {/* 🔥 Fixed: Shows Real Number */}
-            <p className="font-semibold text-2xl">{stats.active}</p>
+            <p className="font-semibold text-lg sm:text-2xl">{stats.active}</p>
           </div>
         </div>
 
         {/* Completed Orders */}
-        <div className="bg-white rounded-2xl p-5 px-10 w-full flex flex-col gap-3">
+        <div className="bg-white rounded-2xl p-3 sm:p-5 sm:px-10 w-full min-w-0 flex flex-col gap-2 sm:gap-3">
           <div className="flex justify-between items-center">
-            <p className="font-semibold">Completed Orders</p>
-            <ThreeDotts className="cursor-pointer" />
+            <p className="font-semibold text-xs sm:text-base truncate">Completed Orders</p>
+            <ThreeDotts className="cursor-pointer shrink-0" />
           </div>
-          <div className="flex justify-center gap-6 items-center">
-            <div className="bg-[#68232B] p-3 rounded-xl">
+          <div className="flex justify-center gap-2 sm:gap-6 items-center">
+            <div className="bg-[#68232B] p-2 sm:p-3 rounded-xl">
               <OrderBag />
             </div>
             {/* 🔥 Fixed: Shows Real Number */}
-            <p className="font-semibold text-2xl">{stats.completed}</p>
+            <p className="font-semibold text-lg sm:text-2xl">{stats.completed}</p>
           </div>
         </div>
       </div>
@@ -97,7 +104,7 @@ const DashBoard = ({
           <p className="font-semibold text-2xl border-b-1 w-full">
             Best Sellers
           </p>
-          <ThreeDotts className="cursor-pointer" />
+          <ThreeDotts className="cursor-pointer shrink-0" />
         </div>
 
         {bestSellers.length === 0 ? (
@@ -150,9 +157,16 @@ const DashBoard = ({
           ))
         )}
 
-        <div className="bg-[#68232B] max-w-fit text-white px-5 py-2 rounded-xl text-sm font-medium cursor-pointer mt-2 hover:bg-[#8B2E39] transition-colors">
+        {/* A real <button>, not a styled <div>. It carried `cursor-pointer` and
+            no handler at all — it looked clickable, was keyboard-unreachable,
+            and did nothing. See CLAUDE.md AF-30. */}
+        <button
+          type="button"
+          onClick={onViewAllBestSellers}
+          className="bg-[#68232B] max-w-fit text-white px-5 py-2 rounded-xl text-sm font-medium cursor-pointer mt-2 hover:bg-[#8B2E39] transition-colors"
+        >
           View All
-        </div>
+        </button>
       </div>
 
       {/* --- RECENT ORDERS TABLE --- */}

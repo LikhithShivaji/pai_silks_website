@@ -10,9 +10,12 @@ async function getOrderStats() {
     }
 }
 
-async function getBestSellers() {
+async function getBestSellers(limit) {
     try {
-        return await dashboardDbOps.getBestSellers();
+        // Passed through, not defaulted here — `undefined` lets the dbOp's own
+        // default parameter apply, so the dashboard limit is defined in exactly
+        // one place rather than being restated at every layer.
+        return await dashboardDbOps.getBestSellers(limit);
     } catch (error) {
         error.httpCode = error.httpCode || appConstants.HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR;
         throw error;

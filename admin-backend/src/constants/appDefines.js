@@ -175,6 +175,12 @@ module.exports = {
     // catalogue and every order ever placed. See CLAUDE.md AB-17 (b)(c).
     DASHBOARD_LIMITS: {
         BEST_SELLERS: 10,
-        RECENT_ORDERS: 10
+        RECENT_ORDERS: 10,
+        // Ceiling for an explicit ?limit= on these endpoints. The dashboard
+        // preview uses the numbers above; the "View All" screen asks for more.
+        // A ceiling rather than no cap: these queries were unbounded once and
+        // returned the whole catalogue (AB-17), and accepting any limit the
+        // caller names would restore exactly that.
+        MAX_LIST: 200
     }
 };

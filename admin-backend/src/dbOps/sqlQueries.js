@@ -139,7 +139,43 @@ const sqlqueries = {
         `,
         deleteProduct: `UPDATE product SET is_deleted = 1 WHERE id = ?`,
         addCategory: `INSERT INTO category (name) VALUES (?);`,
-        getAllCategory: `SELECT id, name FROM category WHERE is_deleted = 0 ORDER BY name ASC;`,
+        // Includes a live product count per category.
+        //
+        // The delete confirmation has to state how many products would go with
+        // the category BEFORE the admin commits to it, and asking the server
+        // for that only after they have clicked delete means either a second
+        // dialog or a round trip mid-decision. The sidebar already loads this
+        // list, so the count rides along.
+        //
+        // ⚠️ Explicit COLLATE, and it is required rather than defensive:
+        // product.category and category.name were created with different
+        // collations, so comparing the two COLUMNS raises
+        // ER_CANT_AGGREGATE_2COLLATIONS and the query fails outright. Migration
+        // 011 aligns them, but this must keep working on a database where 011
+        // has not been applied yet — production can lag the code.
+        getAllCategory: `
+            SELECT c.id,
+                   c.name,
+                   c.image_url,
+                   (SELECT COUNT(*)
+                      FROM product p
+                     WHERE p.is_deleted = 0
+                       AND LOWER(TRIM(p.category)) COLLATE utf8mb4_unicode_ci
+                         = LOWER(TRIM(c.name))     COLLATE utf8mb4_unicode_ci
+                   ) AS product_count
+              FROM category c
+             WHERE c.is_deleted = 0
+             ORDER BY c.name ASC;
+        `,
+
+        // Set or replace a category's tile image. See CLAUDE.md CF-35.
+        updateCategoryImage: `UPDATE category SET image_url = ? WHERE id = ? AND is_deleted = 0`,
+
+        // Read the current image before replacing it, so the OLD Cloudinary
+        // asset can be destroyed after the database commits. Without this every
+        // re-upload orphans a paid asset — the AB-10 failure, which left 111
+        // unreferenced assets before it was fixed for products.
+        getCategoryImageById: `SELECT image_url FROM category WHERE id = ?`,
         deleteCategory: `UPDATE category SET is_deleted = 1 WHERE id = ?;`,
 
         // How many live products carry this category's name.
