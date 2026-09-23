@@ -70,6 +70,14 @@ app.use(
       return callback(null, false);
     },
     credentials: true, // required for the cookie-based sessions added in Phase 2
+    // Response headers a cross-origin caller is allowed to READ.
+    //
+    // Without this the browser hides them: the headers arrive on the wire, and
+    // `res.headers.get('ratelimit-reset')` still returns null. The rate-limit
+    // page would then say "try again in an hour" no matter how little time was
+    // actually left — a silent degradation with no error anywhere, which is the
+    // kind that survives testing.
+    exposedHeaders: ['RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset', 'Retry-After'],
   })
 );
 
